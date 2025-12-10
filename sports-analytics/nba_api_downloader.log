@@ -1,0 +1,48 @@
+2025-12-04 12:37:32,809 - INFO - Fetching all players
+2025-12-04 12:37:32,810 - INFO - Retrieved 5103 players
+2025-12-04 12:37:32,810 - INFO - Fetching all teams
+2025-12-04 12:37:32,810 - INFO - Retrieved 30 teams
+2025-12-04 12:37:32,830 - INFO - Data saved to nba_api_data/players/all_players.json
+2025-12-04 12:37:32,830 - INFO - Data saved to nba_api_data/teams/all_teams.json
+2025-12-04 12:37:32,830 - INFO - Searching for player: LeBron James
+2025-12-04 12:37:32,844 - INFO - Found 1 matches
+2025-12-04 12:37:32,844 - INFO - Fetching career stats for player ID: 2544
+2025-12-04 12:37:33,691 - INFO - Retrieved career stats
+2025-12-04 12:37:33,697 - INFO - Data saved to nba_api_data/players/lebron_james_career_season_totals_regular_season.csv
+2025-12-04 12:37:33,697 - INFO - Data saved to nba_api_data/players/lebron_james_career_career_totals_regular_season.csv
+2025-12-04 12:37:33,698 - INFO - Data saved to nba_api_data/players/lebron_james_career_season_totals_post_season.csv
+2025-12-04 12:37:33,698 - INFO - Data saved to nba_api_data/players/lebron_james_career_career_totals_post_season.csv
+2025-12-04 12:37:33,698 - INFO - Fetching game log for player ID: 2544, season: 2024-25
+2025-12-04 12:37:34,415 - INFO - Retrieved 70 games
+2025-12-04 12:37:34,416 - INFO - Fetching league leaders for PTS in 2024-25
+2025-12-04 12:37:35,187 - INFO - Retrieved stats for 569 players
+2025-12-04 12:37:35,199 - INFO - Fetching league standings for 2024-25
+2025-12-04 12:37:35,914 - INFO - Retrieved standings for 30 teams
+2025-12-04 12:37:35,916 - INFO - Fetching roster for team ID: 1610612747, season: 2024-25
+2025-12-04 12:37:36,637 - INFO - Retrieved 17 players
+2025-12-04 12:37:36,639 - INFO - Fetching games from 11/01/2024 to 11/30/2024
+2025-12-04 12:37:43,652 - INFO - Retrieved 444 game records
+2025-12-04 12:38:52,447 - INFO - Fetching all players
+2025-12-04 12:38:52,448 - INFO - Retrieved 5103 players
+2025-12-04 12:38:52,448 - INFO - Fetching all teams
+2025-12-04 12:38:52,448 - INFO - Retrieved 30 teams
+2025-12-04 12:38:52,466 - INFO - Data saved to nba_api_data/players/all_players.json
+2025-12-04 12:38:52,467 - INFO - Data saved to nba_api_data/teams/all_teams.json
+2025-12-04 12:38:52,467 - INFO - Searching for player: LeBron James
+2025-12-04 12:38:52,481 - INFO - Found 1 matches
+2025-12-04 12:38:52,481 - INFO - Fetching career stats for player ID: 2544
+2025-12-04 12:38:53,223 - INFO - Retrieved career stats
+2025-12-04 12:38:53,227 - INFO - Data saved to nba_api_data/players/lebron_james_career_season_totals_regular_season.csv
+2025-12-04 12:38:53,227 - INFO - Data saved to nba_api_data/players/lebron_james_career_career_totals_regular_season.csv
+2025-12-04 12:38:53,228 - INFO - Data saved to nba_api_data/players/lebron_james_career_season_totals_post_season.csv
+2025-12-04 12:38:53,228 - INFO - Data saved to nba_api_data/players/lebron_james_career_career_totals_post_season.csv
+2025-12-04 12:38:53,228 - INFO - Fetching game log for player ID: 2544, season: 2024-25
+2025-12-04 12:38:54,016 - INFO - Retrieved 70 games
+2025-12-04 12:38:54,019 - INFO - Fetching league leaders for PTS in 2024-25
+2025-12-04 12:38:54,850 - INFO - Retrieved stats for 569 players
+2025-12-04 12:38:54,861 - INFO - Fetching league standings for 2024-25
+2025-12-04 12:38:55,603 - INFO - Retrieved standings for 30 teams
+2025-12-04 12:38:55,606 - INFO - Fetching roster for team ID: 1610612747, season: 2024-25
+2025-12-04 12:38:56,332 - INFO - Retrieved 17 players
+2025-12-04 12:38:56,334 - INFO - Fetching games from 11/01/2024 to 11/30/2024
+2025-12-04 12:38:56,983 - INFO - Retrieved 444 game records
