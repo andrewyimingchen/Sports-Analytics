@@ -105,4 +105,13 @@ Measured on the same 1,071-game 2025-26 holdout:
   inference the outcome tab has a "who's out?" picker (Dončić out moves
   LAL from 58% to 53% at home). A live injury-report *feed* (know who's
   out without asking the user) is still bead 1nn — re-probe in season.
-- **#9–#10 unchanged** — odds benchmark needs a key; play-by-play deferred.
+- **#10 play-by-play — phase 1 built; garbage-time result negative.**
+  Full PBP ingest + resumable season backfill shipped (4 seasons cached,
+  ~4,900 games). The first hypothesis — garbage-time-filtered net rating —
+  was tested on the 69.2% holdout and **did not move log loss** (0.5878 →
+  0.5881; the +0.5pp accuracy bump is ~5 games, noise). Season-to-date
+  form already averages blowouts out. Per the decision rule the feature
+  was not shipped. The PBP corpus stays: it's the foundation for
+  stint/lineup-level modeling (the phase where GT filtering should
+  actually matter, since stints are short windows).
+- **#9 unchanged** — odds benchmark needs a key.
