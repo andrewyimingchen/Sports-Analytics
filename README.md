@@ -43,6 +43,25 @@ functions over DataFrames — fully testable without a connection.
 - Empty API responses are never cached, so a transient glitch can't get pinned
   for a whole TTL.
 
+## Predictions (ML)
+
+Three models power the app's Predictions page. Train them once (fetches three
+past seasons through the cache, ~a minute cold):
+
+```bash
+uv run python -m nba_insights.ml.train
+```
+
+| Model | Approach | Holdout result (2025-26) |
+|---|---|---|
+| Game outcome | Logistic regression on last-10-games form differentials + home court | 65% accuracy (55% baseline: always pick home) |
+| Player points | Ridge regression on recent scoring/minutes/volume, venue, rest, opponent form | MAE 4.69 (4.72 baseline: 10-game average) |
+| Starting five | Players' per-36 plus-minus mapped through a fitted win curve | proxy only — ignores lineup synergy |
+
+Evaluation is a true temporal holdout: trained on 2022-25, scored on the
+current season. Retrain whenever you want fresher form; artifacts live in
+`data/models/` (never committed).
+
 ## JSON API & share cards
 
 The same data is exposed as a FastAPI service:

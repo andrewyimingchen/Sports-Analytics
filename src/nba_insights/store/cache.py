@@ -29,6 +29,10 @@ CREATE TABLE IF NOT EXISTS cache_entries (
 )
 """
 
+# Bump when the payload format changes: keys are namespaced by version, so
+# entries written by an older format are orphaned rather than misread.
+_FORMAT_VERSION = "v2"
+
 
 class Cache:
     def __init__(
@@ -59,7 +63,7 @@ class Cache:
         with self._connect() as conn:
             conn.execute(
                 "INSERT OR REPLACE INTO cache_entries (key, fetched_at, payload) VALUES (?, ?, ?)",
-                (key, self._now().isoformat(), _serialize(df)),
+                (f"{_FORMAT_VERSION}:{key}", self._now().isoformat(), _serialize(df)),
             )
 
     def get_or_fetch(
@@ -93,7 +97,8 @@ class Cache:
     def _read(self, key: str) -> tuple[datetime, str] | None:
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT fetched_at, payload FROM cache_entries WHERE key = ?", (key,)
+                "SELECT fetched_at, payload FROM cache_entries WHERE key = ?",
+                (f"{_FORMAT_VERSION}:{key}",),
             ).fetchone()
         if row is None:
             return None
@@ -101,8 +106,10 @@ class Cache:
 
 
 def _serialize(df: pd.DataFrame) -> str:
-    return df.to_json(orient="split", date_format="iso")
+    # orient="table" embeds a schema, so dtypes survive the round trip —
+    # notably ID columns like "0022401187" stay strings with leading zeros.
+    return df.to_json(orient="table", date_format="iso")
 
 
 def _deserialize(payload: str) -> pd.DataFrame:
-    return pd.read_json(StringIO(payload), orient="split")
+    return pd.read_json(StringIO(payload), orient="table").reset_index(drop=True)

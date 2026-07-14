@@ -8,6 +8,13 @@ from pathlib import Path
 
 DATA_DIR = Path(os.environ.get("NBA_INSIGHTS_DATA_DIR", "data"))
 CACHE_DB = DATA_DIR / "cache.sqlite3"
+MODELS_DIR = DATA_DIR / "models"
+
+
+def past_seasons(n: int, today: date | None = None) -> list[str]:
+    """The *n* completed seasons before the current one, oldest first."""
+    current_start = int(current_season(today)[:4])
+    return [f"{y}-{(y + 1) % 100:02d}" for y in range(current_start - n, current_start)]
 
 
 def current_season(today: date | None = None) -> str:

@@ -15,6 +15,7 @@ from datetime import timedelta
 import pandas as pd
 from nba_api.stats.endpoints import (
     leaguedashplayerstats,
+    leaguegamefinder,
     leaguestandings,
     playercareerstats,
     playergamelog,
@@ -119,6 +120,26 @@ class NBAClient:
                 player_id=player_id,
                 season_nullable=season,
                 context_measure_simple="FGA",
+            ).get_data_frames()[0],
+            ttl=self._season_ttl(season),
+        )
+
+    def team_games(self, season: str | None = None) -> pd.DataFrame:
+        """League-wide team-game rows for a season (two rows per game)."""
+        return self._game_finder("T", season or current_season())
+
+    def player_games(self, season: str | None = None) -> pd.DataFrame:
+        """League-wide player-game rows for a season (~26k rows)."""
+        return self._game_finder("P", season or current_season())
+
+    def _game_finder(self, mode: str, season: str) -> pd.DataFrame:
+        return self._cached(
+            f"game_finder/{mode}/{season}",
+            lambda: leaguegamefinder.LeagueGameFinder(
+                season_nullable=season,
+                season_type_nullable="Regular Season",
+                league_id_nullable="00",
+                player_or_team_abbreviation=mode,
             ).get_data_frames()[0],
             ttl=self._season_ttl(season),
         )
