@@ -1,2 +1,0 @@
-basketball-reference-web-scraper>=4.13.0
-pandas>=1.5.0

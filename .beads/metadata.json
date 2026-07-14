@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "Sports_Analytics",
+  "project_id": "1f039bff-ef26-45b8-924a-9eff3bd074f1"
+}

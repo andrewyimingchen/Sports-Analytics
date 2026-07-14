@@ -1,0 +1,35 @@
+[project]
+name = "nba-insights"
+version = "0.1.0"
+description = "NBA player intelligence: live player profiles, form trends, shot charts, and comparisons built on nba_api"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "nba_api>=1.7",
+    "pandas>=2.0",
+    "plotly>=5.20",
+    "streamlit>=1.35",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/nba_insights"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests", "app"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
