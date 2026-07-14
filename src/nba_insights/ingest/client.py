@@ -18,6 +18,7 @@ from nba_api.stats.endpoints import (
     leaguedashplayerstats,
     leaguegamefinder,
     leaguestandings,
+    playbyplayv3,
     playercareerstats,
     playergamelog,
     playergamelogs,
@@ -153,6 +154,35 @@ class NBAClient:
             lambda: leaguestandings.LeagueStandings(season=season).get_data_frames()[0],
             ttl=self._season_ttl(season),
         )
+
+    # columns kept from PlayByPlayV3: enough for score-timeline analysis
+    # (garbage time, clutch) and future stint work, without the bulky
+    # description/coordinate columns (shot x/y already comes via shot_chart)
+    _PBP_COLS = [
+        "gameId",
+        "actionNumber",
+        "period",
+        "clock",
+        "teamId",
+        "personId",
+        "actionType",
+        "subType",
+        "scoreHome",
+        "scoreAway",
+        "isFieldGoal",
+    ]
+
+    def play_by_play(self, game_id: str) -> pd.DataFrame:
+        """Trimmed event log for one completed game. Immutable once played."""
+        return self._cached(
+            f"pbp/v3/{game_id}",
+            lambda: self._fetch_pbp(game_id),
+            ttl=None,  # only fetched for finished games; the log never changes
+        )
+
+    def _fetch_pbp(self, game_id: str) -> pd.DataFrame:
+        df = playbyplayv3.PlayByPlayV3(game_id=game_id).get_data_frames()[0]
+        return df[[c for c in self._PBP_COLS if c in df.columns]]
 
     def schedule(self, season: str | None = None) -> pd.DataFrame:
         """Full season schedule (all games with dates, tricodes, status)."""
