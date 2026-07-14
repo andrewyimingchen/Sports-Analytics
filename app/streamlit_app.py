@@ -17,6 +17,13 @@ from nba_insights.analysis import (
 )
 from nba_insights.config import current_season
 from nba_insights.ingest import NBAClient
+from nba_insights.ml import GameOutcomeModel, PlayerPointsModel, WinCurve, lineup_net_estimate
+from nba_insights.ml.features import (
+    matchup_features,
+    player_next_game_features,
+    team_form_snapshot,
+)
+from nba_insights.ml.train import OUTCOME_PATH, POINTS_PATH, WIN_CURVE_PATH
 from nba_insights.viz import half_court_trace
 
 HEADSHOT_URL = "https://cdn.nba.com/headshots/nba/latest/1040x760/{player_id}.png"
@@ -335,19 +342,123 @@ def compare_page(client: NBAClient) -> None:
         st.error(f"Could not load career comparison: {e}")
 
 
+@st.cache_resource
+def load_models() -> dict | None:
+    if not (OUTCOME_PATH.exists() and POINTS_PATH.exists() and WIN_CURVE_PATH.exists()):
+        return None
+    return {
+        "outcome": GameOutcomeModel.load(OUTCOME_PATH),
+        "points": PlayerPointsModel.load(POINTS_PATH),
+        "curve": WinCurve.load(WIN_CURVE_PATH),
+    }
+
+
+def outcome_tab(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> None:
+    teams = sorted(snapshot.index)
+    cols = st.columns(2)
+    home = cols[0].selectbox("Home team", teams, index=teams.index("LAL") if "LAL" in teams else 0)
+    away = cols[1].selectbox("Away team", [t for t in teams if t != home])
+    x = matchup_features(snapshot, home, away)
+    prob = float(models["outcome"].predict_proba(x).iloc[0])
+    m = st.columns(2)
+    m[0].metric(f"{home} win probability (home)", f"{prob:.0%}")
+    m[1].metric(f"{away} win probability (away)", f"{1 - prob:.0%}")
+    st.caption(
+        "Logistic regression on each team's last-10-games form (win%, net rating, "
+        "scoring) plus home court. Holdout accuracy on the current season: ~65% "
+        "(always-pick-home scores ~55%)."
+    )
+    with st.expander("Current form (last 10 games)"):
+        st.dataframe(snapshot.loc[[home, away]].round(2), width="stretch")
+
+
+def points_tab(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> None:
+    player = pick_player(client, "Player", "pred_player")
+    if not player:
+        st.info("Pick a player to project their next game.")
+        return
+    cols = st.columns(2)
+    teams = sorted(snapshot.index)
+    opponent = cols[0].selectbox("Opponent", teams)
+    venue = cols[1].radio("Venue", ["Home", "Away"], horizontal=True)
+
+    season_games = client.player_games()
+    rows = season_games[season_games["PLAYER_ID"] == player["id"]]
+    if rows.empty:
+        st.warning("No games for this player in the current season.")
+        return
+    x = player_next_game_features(
+        rows, home=venue == "Home", opp_form_net=float(snapshot.loc[opponent, "form_net"])
+    )
+    pred = float(models["points"].predict(x).iloc[0])
+    m = st.columns(3)
+    m[0].metric("Projected points", f"{pred:.1f}")
+    m[1].metric("Last 5 games", f"{x['pts_r5'].iloc[0]:.1f}")
+    m[2].metric("Last 10 games", f"{x['pts_r10'].iloc[0]:.1f}")
+    st.caption(
+        "Ridge regression on recent scoring, minutes, and shot volume, venue, rest, "
+        "and opponent form — trained on three seasons of league-wide player games."
+    )
+
+
+def lineup_tab(client: NBAClient, models: dict) -> None:
+    league = client.league_player_stats()
+    teams = sorted(league["TEAM_ABBREVIATION"].dropna().unique())
+    team = st.selectbox("Team", teams, index=teams.index("LAL") if "LAL" in teams else 0)
+    roster = league[league["TEAM_ABBREVIATION"] == team].sort_values("MIN", ascending=False)
+    default_five = list(roster["PLAYER_NAME"].head(5))
+    five = st.multiselect(
+        "Starting five", list(roster["PLAYER_NAME"]), default=default_five, max_selections=5
+    )
+    if len(five) != 5:
+        st.info("Select exactly five players.")
+        return
+    net = lineup_net_estimate(league, five)
+    prob = models["curve"].win_probability(net)
+    m = st.columns(2)
+    m[0].metric("Estimated net rating", f"{net:+.1f} per 36")
+    m[1].metric("Win probability vs average opponent", f"{prob:.0%}")
+    st.caption(
+        "Proxy estimate: the mean of the five players' per-36 plus-minus, mapped "
+        "through a win curve fitted on three seasons of team results (~2.8% win "
+        "probability per net point). It ignores lineup fit and synergy — treat it "
+        "as a conversation starter, not a projection."
+    )
+
+
+def predictions_page(client: NBAClient) -> None:
+    models = load_models()
+    if models is None:
+        st.info(
+            "Models not trained yet. Run `uv run python -m nba_insights.ml.train` "
+            "and reload this page."
+        )
+        return
+    snapshot = team_form_snapshot(client.team_games())
+    tabs = st.tabs(["Game outcome", "Player points", "Starting five"])
+    with tabs[0]:
+        outcome_tab(client, models, snapshot)
+    with tabs[1]:
+        points_tab(client, models, snapshot)
+    with tabs[2]:
+        lineup_tab(client, models)
+
+
 def main() -> None:
     PAL.update(theme_palette())
     st.title("🏀 NBA Insights")
     client = get_client()
-    page = st.sidebar.radio("View", ["Player profile", "Compare players"])
+    page = st.sidebar.radio("View", ["Player profile", "Compare players", "Predictions"])
     st.sidebar.caption(
         "Data: stats.nba.com via nba_api. Responses are cached locally; "
         "current-season data refreshes daily."
     )
     if page == "Player profile":
         profile_page(client)
-    else:
+    elif page == "Compare players":
         compare_page(client)
+    else:
+        predictions_page(client)
 
 
 main()

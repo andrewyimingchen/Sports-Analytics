@@ -32,6 +32,15 @@ def test_round_trip(tmp_path, df):
     pd.testing.assert_frame_equal(cache.get("k"), df)
 
 
+def test_round_trip_preserves_string_ids(tmp_path):
+    # numeric-looking IDs must stay strings (leading zeros are meaningful)
+    df = pd.DataFrame({"GAME_ID": ["0022401187", "0022401196"], "PTS": [93, 100]})
+    cache = make_cache(tmp_path)
+    cache.put("k", df)
+    out = cache.get("k")
+    assert out["GAME_ID"].tolist() == ["0022401187", "0022401196"]
+
+
 def test_miss_returns_none(tmp_path):
     assert make_cache(tmp_path).get("nope") is None
 

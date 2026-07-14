@@ -1,0 +1,84 @@
+"""Train all models and report holdout metrics.
+
+    uv run python -m nba_insights.ml.train [--train-seasons 3]
+
+Trains on the N completed seasons before the current one, evaluates on the
+current season (a true temporal holdout), then refits nothing — the shipped
+models are the ones whose numbers were printed. Artifacts land in
+data/models/ and are loaded by the app's Predictions page.
+"""
+
+from __future__ import annotations
+
+import argparse
+import logging
+
+import pandas as pd
+
+from nba_insights.config import MODELS_DIR, current_season, past_seasons
+from nba_insights.ingest import NBAClient
+from nba_insights.ml import GameOutcomeModel, PlayerPointsModel, WinCurve
+from nba_insights.ml.features import (
+    game_matchup_frame,
+    player_game_features,
+    team_form_features,
+)
+
+logger = logging.getLogger(__name__)
+
+OUTCOME_PATH = MODELS_DIR / "outcome.joblib"
+POINTS_PATH = MODELS_DIR / "points.joblib"
+WIN_CURVE_PATH = MODELS_DIR / "win_curve.joblib"
+
+
+def build_matchups(client: NBAClient, seasons: list[str]) -> pd.DataFrame:
+    frames = [game_matchup_frame(team_form_features(client.team_games(s))) for s in seasons]
+    return pd.concat(frames, ignore_index=True)
+
+
+def build_player_frames(client: NBAClient, seasons: list[str]) -> pd.DataFrame:
+    frames = [
+        player_game_features(client.player_games(s), team_form_features(client.team_games(s)))
+        for s in seasons
+    ]
+    return pd.concat(frames, ignore_index=True)
+
+
+def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+    parser = argparse.ArgumentParser(description="Train NBA Insights models")
+    parser.add_argument("--train-seasons", type=int, default=3)
+    args = parser.parse_args()
+
+    client = NBAClient()
+    train_seasons = past_seasons(args.train_seasons)
+    test_season = current_season()
+    logger.info("training on %s, evaluating on %s", train_seasons, test_season)
+
+    logger.info("building game matchup frames…")
+    train_matchups = build_matchups(client, train_seasons)
+    test_matchups = build_matchups(client, [test_season])
+    outcome = GameOutcomeModel().fit(train_matchups)
+    metrics = outcome.evaluate(test_matchups)
+    logger.info("game outcome (holdout %s): %s", test_season, metrics)
+    outcome.save(OUTCOME_PATH)
+
+    logger.info("building player-game frames…")
+    train_players = build_player_frames(client, train_seasons)
+    test_players = build_player_frames(client, [test_season])
+    points = PlayerPointsModel().fit(train_players)
+    metrics = points.evaluate(test_players)
+    logger.info("player points (holdout %s): %s", test_season, metrics)
+    points.save(POINTS_PATH)
+
+    curve = WinCurve().fit(
+        pd.concat([client.team_games(s) for s in train_seasons], ignore_index=True)
+    )
+    logger.info("win curve slope: %.4f win%% per net point", curve.slope)
+    curve.save(WIN_CURVE_PATH)
+
+    logger.info("models saved to %s", MODELS_DIR)
+
+
+if __name__ == "__main__":
+    main()
