@@ -60,18 +60,26 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 
 ## Build & Test
 
-_Add your build and test commands here_
-
 ```bash
-# Example:
-# npm install
-# npm test
+uv sync              # install deps + editable package
+uv run pytest        # tests (no network needed)
+uv run ruff check .  # lint
+uv run streamlit run app/streamlit_app.py  # run the app
 ```
 
 ## Architecture Overview
 
-_Add a brief overview of your project architecture_
+`src/nba_insights/` is a layered package: `ingest/` (NBAClient — the only code
+that touches the network; rate-limited nba_api wrapper), `store/` (SQLite
+DataFrame cache with per-endpoint TTLs; empty responses never cached), and
+`analysis/` (pure pandas functions — no I/O). `app/streamlit_app.py` is the UI.
+See README.md for details.
 
 ## Conventions & Patterns
 
-_Add your project-specific conventions here_
+- Analysis functions are pure: DataFrames in, DataFrames out, raise KeyError on
+  missing players/columns. Keep them network-free so tests stay offline.
+- All remote fetches go through `Cache.get_or_fetch`; never call nba_api
+  endpoints directly from the app layer.
+- Column names follow stats.nba.com conventions (PTS, GP, SEASON_ID, ...).
+- Do not add Basketball-Reference scraping — their ToS prohibits it.
