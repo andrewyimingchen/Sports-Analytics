@@ -17,6 +17,7 @@ from nba_insights.analysis import (
 )
 from nba_insights.config import current_season
 from nba_insights.ingest import NBAClient
+from nba_insights.viz import half_court_trace
 
 # Reference dataviz palette: categorical slots in fixed order, chrome inks.
 SERIES = ["#2a78d6", "#1baf7a", "#eda100", "#008300", "#4a3aa7", "#e34948"]
@@ -80,6 +81,7 @@ def form_chart(form: pd.DataFrame, stat: str, window: int) -> go.Figure:
 
 def shot_chart_fig(shots: pd.DataFrame) -> go.Figure:
     fig = go.Figure()
+    fig.add_trace(half_court_trace(color=GRIDLINE))
     for made, label, color, symbol in [
         (0, "Missed", INK_MUTED, "circle-open"),
         (1, "Made", SERIES[0], "circle"),
@@ -95,10 +97,10 @@ def shot_chart_fig(shots: pd.DataFrame) -> go.Figure:
                 hovertext=subset.get("SHOT_ZONE_BASIC"),
             )
         )
-    fig = base_layout(fig, "Shot chart (half court, basket at origin)")
+    fig = base_layout(fig, "Shot chart")
     fig.update_layout(hovermode="closest", height=560)
     fig.update_xaxes(range=[-260, 260], visible=False)
-    fig.update_yaxes(range=[-60, 430], visible=False, scaleanchor="x", scaleratio=1)
+    fig.update_yaxes(range=[-60, 435], visible=False, scaleanchor="x", scaleratio=1)
     return fig
 
 
