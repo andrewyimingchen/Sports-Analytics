@@ -72,3 +72,28 @@ Each step is measured the same way the current models were: temporal holdout
 on the current season, reported against the existing number. Anything that
 doesn't move the holdout metric gets reverted — more data is not the goal,
 better predictions are.
+
+## Status update (2026-07-14, same day): Tier 1 + partial Tier 2 built
+
+Measured on the same 1,071-game 2025-26 holdout:
+
+- **#1–#3 (four factors, ratings, fatigue) — shipped.** With the original
+  last-10 window the new features moved nothing (65.2% vs 65.1% — the
+  roadmap's revert rule nearly fired). The window itself was the
+  bottleneck: switching all form features to **season-to-date** lifted
+  accuracy to **68.3%** (log loss 0.615 → 0.603). Lesson recorded: recency
+  windows were adding noise, not signal.
+- **#3 schedule — shipped.** Fatigue flags (B2B, 3-in-4) are model inputs;
+  the Predictions page now lists the next slate of real games with win
+  probabilities (offseason-aware). Travel/time-zone features deferred.
+- **#4 lineups — shipped.** Observed 5-man net ratings blended with the
+  proxy, weighted MIN/(MIN+200); minutes-together shown as the confidence
+  signal in the UI.
+- **#5–#7 partial:** opponent DRtg/pace added to the points model —
+  **no holdout gain** (MAE 4.70 vs 4.69). Kept (harmless, better inference
+  context), but the honest read is that next-game points is noise-bound
+  near the rolling-average baseline. Tracking/hustle/positional defense
+  remain unbuilt; revisit only with per-game (not season-aggregate) data,
+  which is what avoids leakage.
+- **#8–#10 unchanged** — injury reports still the biggest missing signal;
+  re-probe in season (bead 1nn).

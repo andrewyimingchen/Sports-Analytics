@@ -14,6 +14,7 @@ from datetime import timedelta
 
 import pandas as pd
 from nba_api.stats.endpoints import (
+    leaguedashlineups,
     leaguedashplayerstats,
     leaguegamefinder,
     leaguestandings,
@@ -21,6 +22,7 @@ from nba_api.stats.endpoints import (
     playergamelog,
     playergamelogs,
     playerprofilev2,
+    scheduleleaguev2,
     shotchartdetail,
 )
 from nba_api.stats.static import players
@@ -149,6 +151,29 @@ class NBAClient:
         return self._cached(
             f"standings/{season}",
             lambda: leaguestandings.LeagueStandings(season=season).get_data_frames()[0],
+            ttl=self._season_ttl(season),
+        )
+
+    def schedule(self, season: str | None = None) -> pd.DataFrame:
+        """Full season schedule (all games with dates, tricodes, status)."""
+        season = season or current_season()
+        return self._cached(
+            f"schedule/{season}",
+            lambda: scheduleleaguev2.ScheduleLeagueV2(season=season).get_data_frames()[0],
+            ttl=self._season_ttl(season),
+        )
+
+    def lineups(self, season: str | None = None) -> pd.DataFrame:
+        """5-man lineup advanced stats (total minutes, net rating) for a season."""
+        season = season or current_season()
+        return self._cached(
+            f"lineups/5/{season}",
+            lambda: leaguedashlineups.LeagueDashLineups(
+                season=season,
+                group_quantity=5,
+                measure_type_detailed_defense="Advanced",
+                per_mode_detailed="Totals",
+            ).get_data_frames()[0],
             ttl=self._season_ttl(season),
         )
 
