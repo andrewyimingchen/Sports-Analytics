@@ -18,6 +18,7 @@ from nba_api.stats.endpoints import (
     leaguestandings,
     playercareerstats,
     playergamelog,
+    playergamelogs,
     playerprofilev2,
     shotchartdetail,
 )
@@ -75,11 +76,26 @@ class NBAClient:
     def game_log(self, player_id: int, season: str | None = None) -> pd.DataFrame:
         season = season or current_season()
         return self._cached(
-            f"game_log/{player_id}/{season}",
-            lambda: playergamelog.PlayerGameLog(player_id=player_id, season=season)
-            .get_data_frames()[0],
+            f"game_log/v2/{player_id}/{season}",  # v2: key bumped when fetcher changed
+            lambda: self._fetch_game_log(player_id, season),
             ttl=self._season_ttl(season),
         )
+
+    @staticmethod
+    def _fetch_game_log(player_id: int, season: str) -> pd.DataFrame:
+        # PlayerGameLogs (plural) is primary: the singular endpoint serves
+        # truncated logs for some player IDs (same upstream per-ID corruption
+        # as career stats — see _fetch_career_stats).
+        df = playergamelogs.PlayerGameLogs(
+            player_id_nullable=player_id,
+            season_nullable=season,
+            season_type_nullable="Regular Season",
+        ).get_data_frames()[0]
+        if df.empty:
+            df = playergamelog.PlayerGameLog(
+                player_id=player_id, season=season
+            ).get_data_frames()[0]
+        return df
 
     def league_player_stats(
         self, season: str | None = None, per_mode: str = "PerGame"
