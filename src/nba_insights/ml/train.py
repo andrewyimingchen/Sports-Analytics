@@ -32,13 +32,19 @@ WIN_CURVE_PATH = MODELS_DIR / "win_curve.joblib"
 
 
 def build_matchups(client: NBAClient, seasons: list[str]) -> pd.DataFrame:
-    frames = [game_matchup_frame(team_form_features(client.team_games(s))) for s in seasons]
+    # window=None (season-to-date form): +3pp holdout accuracy over last-10
+    frames = [
+        game_matchup_frame(team_form_features(client.team_games(s), window=None))
+        for s in seasons
+    ]
     return pd.concat(frames, ignore_index=True)
 
 
 def build_player_frames(client: NBAClient, seasons: list[str]) -> pd.DataFrame:
     frames = [
-        player_game_features(client.player_games(s), team_form_features(client.team_games(s)))
+        player_game_features(
+            client.player_games(s), team_form_features(client.team_games(s), window=None)
+        )
         for s in seasons
     ]
     return pd.concat(frames, ignore_index=True)

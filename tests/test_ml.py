@@ -2,7 +2,14 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from nba_insights.ml import GameOutcomeModel, PlayerPointsModel, WinCurve, lineup_net_estimate
+from nba_insights.ml import (
+    GameOutcomeModel,
+    PlayerPointsModel,
+    WinCurve,
+    blended_lineup_estimate,
+    lineup_net_estimate,
+    observed_lineup,
+)
 from nba_insights.ml.features import (
     game_matchup_frame,
     matchup_features,
@@ -10,6 +17,7 @@ from nba_insights.ml.features import (
     player_next_game_features,
     team_form_features,
     team_form_snapshot,
+    upcoming_games,
 )
 
 
@@ -32,6 +40,8 @@ def synthetic_team_games(n_games_per_team: int = 30, seed: int = 7) -> pd.DataFr
                 (h, a, h_pts, h_pts - a_pts, True),
                 (a, h, a_pts, a_pts - h_pts, False),
             ]:
+                ftm, fg3m = 17, 12
+                fgm = (pts - ftm - 3 * fg3m) / 2 + fg3m  # 2s + 3s reproduce PTS
                 rows.append(
                     {
                         "SEASON_ID": "22024",
@@ -43,6 +53,14 @@ def synthetic_team_games(n_games_per_team: int = 30, seed: int = 7) -> pd.DataFr
                         "WL": "W" if pm > 0 else "L",
                         "PTS": pts,
                         "PLUS_MINUS": float(pm),
+                        "FGM": fgm,
+                        "FGA": 88.0,
+                        "FG3M": float(fg3m),
+                        "FTM": float(ftm),
+                        "FTA": 22.0,
+                        "TOV": 14.0,
+                        "OREB": 10.0,
+                        "DREB": 33.0,
                     }
                 )
         date += pd.Timedelta(days=2)
@@ -171,6 +189,101 @@ def test_win_curve_monotonic_and_bounded(tmp_path):
     path = tmp_path / "curve.joblib"
     curve.save(path)
     assert WinCurve.load(path).slope == curve.slope
+
+
+def test_four_factor_math():
+    games = synthetic_team_games(20)
+    form = team_form_features(games, window=5).dropna()
+    # eFG = (FGM + 0.5*3PM)/FGA with our constants: pts=110 -> fgm=28.5+12
+    # sanity-band rather than exact: rolling means of plausible single games
+    assert form["form_efg"].between(0.3, 0.8).all()
+    assert form["form_tov_pct"].between(0.05, 0.25).all()
+    assert form["form_oreb_pct"].between(0.1, 0.4).all()
+    assert form["form_pace"].between(80, 120).all()
+    # ortg - drtg should track scoring margin direction
+    best = form[form["TEAM_ABBREVIATION"] == "T1"]
+    worst = form[form["TEAM_ABBREVIATION"] == "T4"]
+    assert best["form_ortg"].mean() - best["form_drtg"].mean() > 0
+    assert worst["form_ortg"].mean() - worst["form_drtg"].mean() < 0
+
+
+def test_fatigue_flags():
+    dates = ["2025-01-01", "2025-01-02", "2025-01-04", "2025-01-10"]
+    games = pd.DataFrame(
+        {
+            "SEASON_ID": "22024",
+            "TEAM_ID": 1,
+            "TEAM_ABBREVIATION": "T1",
+            "GAME_ID": [f"G{i}" for i in range(4)],
+            "GAME_DATE": dates,
+            "MATCHUP": "T1 vs. T2",
+            "WL": "W",
+            "PTS": 110,
+            "PLUS_MINUS": 5.0,
+            "FGM": 40.0,
+            "FGA": 88.0,
+            "FG3M": 12.0,
+            "FTM": 17.0,
+            "FTA": 22.0,
+            "TOV": 14.0,
+            "OREB": 10.0,
+            "DREB": 33.0,
+        }
+    )
+    # opponent rows so the GAME_ID join finds a counterpart
+    opp = games.assign(TEAM_ID=2, TEAM_ABBREVIATION="T2", MATCHUP="T2 @ T1", PLUS_MINUS=-5.0)
+    form = team_form_features(pd.concat([games, opp]), window=2)
+    t1 = form[form["TEAM_ABBREVIATION"] == "T1"].reset_index(drop=True)
+    assert t1["b2b"].tolist() == [0, 1, 0, 0]  # Jan 2 is a back-to-back
+    assert t1["three_in_four"].tolist() == [0, 0, 1, 0]  # Jan 4 is 3rd in 4 days
+
+
+def test_upcoming_games_slate():
+    schedule = pd.DataFrame(
+        {
+            "gameStatus": [3, 1, 1, 1],
+            "gameDateTimeEst": [
+                "2026-01-01T19:00:00Z",
+                "2026-01-05T19:00:00Z",
+                "2026-01-05T21:30:00Z",
+                "2026-01-06T19:00:00Z",
+            ],
+            "homeTeam_teamTricode": ["AAA", "BBB", "CCC", "DDD"],
+            "awayTeam_teamTricode": ["ZZZ", "YYY", "XXX", "WWW"],
+        }
+    )
+    slate = upcoming_games(schedule, today=pd.Timestamp("2026-01-02", tz="UTC"))
+    assert slate["home"].tolist() == ["BBB", "CCC"]  # next date only, played games skipped
+
+    offseason = upcoming_games(schedule, today=pd.Timestamp("2026-08-01", tz="UTC"))
+    assert offseason.empty
+
+
+def test_observed_and_blended_lineup():
+    lineups = pd.DataFrame(
+        {
+            "GROUP_ID": ["-1-2-3-4-5-", "-6-7-8-9-10-"],
+            "MIN": [200.0, 30.0],
+            "NET_RATING": [8.0, -5.0],
+        }
+    )
+    league = pd.DataFrame(
+        {
+            "PLAYER_NAME": [f"P{i}" for i in range(1, 6)],
+            "MIN": [36.0] * 5,
+            "PLUS_MINUS": [2.0] * 5,  # proxy net = +2 per 36
+        }
+    )
+    names, ids = [f"P{i}" for i in range(1, 6)], [5, 4, 3, 2, 1]  # unsorted on purpose
+    row = observed_lineup(lineups, ids)
+    assert row is not None and row["NET_RATING"] == 8.0
+
+    est, minutes = blended_lineup_estimate(lineups, league, names, ids, shrinkage_minutes=200)
+    assert minutes == 200.0
+    assert est == pytest.approx(0.5 * 8.0 + 0.5 * 2.0)  # equal blend at 200 min
+
+    est2, minutes2 = blended_lineup_estimate(lineups, league, names, [11, 12, 13, 14, 15])
+    assert minutes2 == 0.0 and est2 == pytest.approx(2.0)  # pure proxy fallback
 
 
 def test_lineup_net_estimate():

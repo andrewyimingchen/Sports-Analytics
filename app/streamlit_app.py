@@ -17,11 +17,17 @@ from nba_insights.analysis import (
 )
 from nba_insights.config import current_season
 from nba_insights.ingest import NBAClient
-from nba_insights.ml import GameOutcomeModel, PlayerPointsModel, WinCurve, lineup_net_estimate
+from nba_insights.ml import (
+    GameOutcomeModel,
+    PlayerPointsModel,
+    WinCurve,
+    blended_lineup_estimate,
+)
 from nba_insights.ml.features import (
     matchup_features,
     player_next_game_features,
     team_form_snapshot,
+    upcoming_games,
 )
 from nba_insights.ml.train import OUTCOME_PATH, POINTS_PATH, WIN_CURVE_PATH
 from nba_insights.viz import half_court_trace
@@ -364,12 +370,41 @@ def outcome_tab(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> None
     m[0].metric(f"{home} win probability (home)", f"{prob:.0%}")
     m[1].metric(f"{away} win probability (away)", f"{1 - prob:.0%}")
     st.caption(
-        "Logistic regression on each team's last-10-games form (win%, net rating, "
-        "scoring) plus home court. Holdout accuracy on the current season: ~65% "
-        "(always-pick-home scores ~55%)."
+        "Logistic regression on season-to-date form differentials — win%, net "
+        "rating, four factors (eFG%, TOV%, OREB%, FT rate), pace, ORtg/DRtg, "
+        "rest and back-to-backs — plus home court. Holdout accuracy on the "
+        "current season: ~68% (always-pick-home scores ~55%)."
     )
-    with st.expander("Current form (last 10 games)"):
-        st.dataframe(snapshot.loc[[home, away]].round(2), width="stretch")
+    with st.expander("Season-to-date form"):
+        st.dataframe(
+            snapshot.loc[[home, away]].drop(columns="last_game_date").round(3),
+            width="stretch",
+        )
+
+    st.divider()
+    st.subheader("Next slate")
+    try:
+        slate = upcoming_games(client.schedule())
+    except Exception:
+        slate = pd.DataFrame()
+    if slate.empty:
+        st.caption("No upcoming games on the schedule (offseason).")
+        return
+    rows = []
+    for _, g in slate.iterrows():
+        if g["home"] not in snapshot.index or g["away"] not in snapshot.index:
+            continue
+        gx = matchup_features(snapshot, g["home"], g["away"])
+        p = float(models["outcome"].predict_proba(gx).iloc[0])
+        tipoff = pd.Timestamp(g["tipoff"]).tz_convert("US/Eastern")
+        rows.append(
+            {
+                "matchup": f"{g['away']} @ {g['home']}",
+                "tipoff (ET)": tipoff.strftime("%b %d, %I:%M %p"),
+                "home win prob": f"{p:.0%}",
+            }
+        )
+    st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
 
 
 def points_tab(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> None:
@@ -388,7 +423,11 @@ def points_tab(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> None:
         st.warning("No games for this player in the current season.")
         return
     x = player_next_game_features(
-        rows, home=venue == "Home", opp_form_net=float(snapshot.loc[opponent, "form_net"])
+        rows,
+        home=venue == "Home",
+        opp_form_net=float(snapshot.loc[opponent, "form_net"]),
+        opp_form_drtg=float(snapshot.loc[opponent, "form_drtg"]),
+        opp_form_pace=float(snapshot.loc[opponent, "form_pace"]),
     )
     pred = float(models["points"].predict(x).iloc[0])
     m = st.columns(3)
@@ -413,17 +452,29 @@ def lineup_tab(client: NBAClient, models: dict) -> None:
     if len(five) != 5:
         st.info("Select exactly five players.")
         return
-    net = lineup_net_estimate(league, five)
+    ids = [int(roster.loc[roster["PLAYER_NAME"] == n, "PLAYER_ID"].iloc[0]) for n in five]
+    try:
+        lineups = client.lineups()
+    except Exception:
+        lineups = pd.DataFrame(columns=["GROUP_ID", "MIN", "NET_RATING"])
+    net, minutes = blended_lineup_estimate(lineups, league, five, ids)
     prob = models["curve"].win_probability(net)
-    m = st.columns(2)
-    m[0].metric("Estimated net rating", f"{net:+.1f} per 36")
+    m = st.columns(3)
+    m[0].metric("Estimated net rating", f"{net:+.1f}")
     m[1].metric("Win probability vs average opponent", f"{prob:.0%}")
-    st.caption(
-        "Proxy estimate: the mean of the five players' per-36 plus-minus, mapped "
-        "through a win curve fitted on three seasons of team results (~2.8% win "
-        "probability per net point). It ignores lineup fit and synergy — treat it "
-        "as a conversation starter, not a projection."
-    )
+    m[2].metric("Minutes together", f"{minutes:.0f}")
+    if minutes > 0:
+        st.caption(
+            "Blend of this lineup's observed net rating this season (weighted by "
+            "minutes played together) and the per-36 plus-minus proxy, mapped "
+            "through a win curve fitted on three seasons of team results."
+        )
+    else:
+        st.caption(
+            "This five hasn't played together this season, so the estimate is the "
+            "per-36 plus-minus proxy alone — it ignores lineup fit and synergy. "
+            "Treat it as a conversation starter, not a projection."
+        )
 
 
 def predictions_page(client: NBAClient) -> None:

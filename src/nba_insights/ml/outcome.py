@@ -21,7 +21,9 @@ from nba_insights.ml.features import OUTCOME_FEATURES
 
 class GameOutcomeModel:
     def __init__(self, pipeline: Pipeline | None = None):
-        self.pipeline = pipeline or make_pipeline(StandardScaler(), LogisticRegression())
+        # C=0.25: the form features are deliberately collinear (net rating,
+        # ratings, four factors); holdout-tuned on 2025-26
+        self.pipeline = pipeline or make_pipeline(StandardScaler(), LogisticRegression(C=0.25))
 
     def fit(self, matchups: pd.DataFrame) -> GameOutcomeModel:
         """*matchups* is the output of features.game_matchup_frame."""
