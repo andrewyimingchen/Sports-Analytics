@@ -54,7 +54,7 @@ uv run python -m nba_insights.ml.train
 
 | Model | Approach | Holdout result (2025-26) |
 |---|---|---|
-| Game outcome | Logistic regression on season-to-date form differentials: win%, net rating, four factors, pace, ORtg/DRtg, rest, back-to-backs + home court | 68% accuracy (55% baseline: always pick home) |
+| Game outcome | Logistic regression on season-to-date form differentials: win%, net rating, four factors, pace, ORtg/DRtg, rest, back-to-backs, expected minutes out (derived absences) + home court | 69% accuracy, log loss 0.588 (55% baseline: always pick home) |
 | Player points | Ridge regression on recent scoring/minutes/volume, venue, rest, opponent net/DRtg/pace | MAE 4.70 (4.72 baseline: 10-game average) |
 | Starting five | Observed lineup net rating (weighted by minutes together) blended with a per-36 plus-minus proxy, through a fitted win curve | blend; pure proxy when the five never played together |
 

@@ -11,10 +11,12 @@ from nba_insights.ml import (
     observed_lineup,
 )
 from nba_insights.ml.features import (
+    availability_features,
     game_matchup_frame,
     matchup_features,
     player_game_features,
     player_next_game_features,
+    prior_minute_rates,
     team_form_features,
     team_form_snapshot,
     upcoming_games,
@@ -189,6 +191,66 @@ def test_win_curve_monotonic_and_bounded(tmp_path):
     path = tmp_path / "curve.joblib"
     curve.save(path)
     assert WinCurve.load(path).slope == curve.slope
+
+
+def _availability_fixture():
+    """One team, 3 games; player 1 plays 36/36 then misses game 3."""
+    team_games = pd.DataFrame(
+        {
+            "SEASON_ID": "22024",
+            "TEAM_ID": 1,
+            "TEAM_ABBREVIATION": "T1",
+            "GAME_ID": ["G1", "G2", "G3"],
+            "GAME_DATE": ["2025-01-01", "2025-01-03", "2025-01-05"],
+            "MATCHUP": "T1 vs. T2",
+            "WL": "W",
+            "PTS": 110,
+            "PLUS_MINUS": 5.0,
+        }
+    )
+    rows = []
+    for game in ["G1", "G2", "G3"]:
+        for pid, minutes in [(1, 36.0), (2, 20.0)]:
+            if pid == 1 and game == "G3":
+                continue  # star sits out game 3
+            rows.append(
+                {"GAME_ID": game, "TEAM_ID": 1, "PLAYER_ID": pid, "MIN": minutes}
+            )
+    return team_games, pd.DataFrame(rows)
+
+
+def test_availability_weights_absent_star():
+    team_games, player_games = _availability_fixture()
+    av = availability_features(team_games, player_games).set_index("GAME_ID")
+    assert av.loc["G1", "missing_min"] == 0.0  # no history yet, nothing to expect
+    assert av.loc["G2", "missing_min"] == 0.0  # everyone played
+    # game 3: player 1 absent; expected = 72 cum min / (2 games + 20 prior weight... no prior)
+    assert av.loc["G3", "missing_min"] == pytest.approx(72 / 22)
+
+
+def test_availability_prior_seeding_covers_cold_start():
+    team_games, player_games = _availability_fixture()
+    # star (player 1) misses game 1 too: drop their G1 row
+    pg = player_games[~((player_games["PLAYER_ID"] == 1) & (player_games["GAME_ID"] == "G1"))]
+    prior = pd.Series({1: 35.0})  # played 35 min/game last season
+    av = availability_features(team_games, pg, prior_rates=prior, prior_weight=20).set_index(
+        "GAME_ID"
+    )
+    # season opener: no current data, expectation comes wholly from the prior
+    assert av.loc["G1", "missing_min"] == pytest.approx(35.0)
+
+
+def test_prior_minute_rates():
+    pg = pd.DataFrame({"PLAYER_ID": [1, 1, 2], "MIN": [30.0, 34.0, 10.0]})
+    rates = prior_minute_rates(pg)
+    assert rates[1] == pytest.approx(64 / 82)
+
+
+def test_matchup_frame_missing_min_diff():
+    games = synthetic_team_games()
+    form = team_form_features(games, window=5)  # no player_games -> zeros
+    matchups = game_matchup_frame(form)
+    assert (matchups["missing_min_diff"] == 0).all()
 
 
 def test_four_factor_math():

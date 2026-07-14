@@ -364,7 +364,27 @@ def outcome_tab(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> None
     cols = st.columns(2)
     home = cols[0].selectbox("Home team", teams, index=teams.index("LAL") if "LAL" in teams else 0)
     away = cols[1].selectbox("Away team", [t for t in teams if t != home])
-    x = matchup_features(snapshot, home, away)
+
+    league = client.league_player_stats()
+    missing = {}
+    with st.expander("Who's out? (adjusts win probability)"):
+        out_cols = st.columns(2)
+        for col, team in zip(out_cols, (home, away), strict=True):
+            roster = league[league["TEAM_ABBREVIATION"] == team].sort_values(
+                "MIN", ascending=False
+            )
+            out = col.multiselect(f"{team} out", list(roster["PLAYER_NAME"]), key=f"out_{team}")
+            missing[team] = float(
+                roster.loc[roster["PLAYER_NAME"].isin(out), "MIN"].sum()
+            )
+
+    x = matchup_features(
+        snapshot,
+        home,
+        away,
+        home_missing_min=missing[home],
+        away_missing_min=missing[away],
+    )
     prob = float(models["outcome"].predict_proba(x).iloc[0])
     m = st.columns(2)
     m[0].metric(f"{home} win probability (home)", f"{prob:.0%}")
@@ -372,8 +392,9 @@ def outcome_tab(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> None
     st.caption(
         "Logistic regression on season-to-date form differentials — win%, net "
         "rating, four factors (eFG%, TOV%, OREB%, FT rate), pace, ORtg/DRtg, "
-        "rest and back-to-backs — plus home court. Holdout accuracy on the "
-        "current season: ~68% (always-pick-home scores ~55%)."
+        "rest, back-to-backs, and expected minutes out — plus home court. "
+        "Holdout accuracy on the current season: ~69% (always-pick-home "
+        "scores ~55%)."
     )
     with st.expander("Season-to-date form"):
         st.dataframe(
@@ -405,6 +426,7 @@ def outcome_tab(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> None
             }
         )
     st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+    st.caption("Slate probabilities assume both teams at full strength.")
 
 
 def points_tab(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> None:
