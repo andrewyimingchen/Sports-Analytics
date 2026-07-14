@@ -5,14 +5,17 @@ description = "NBA player intelligence: live player profiles, form trends, shot 
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "fastapi>=0.115",
     "nba_api>=1.7",
     "pandas>=2.0",
     "plotly>=5.20",
     "streamlit>=1.35",
+    "uvicorn>=0.30",
 ]
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28.1",
     "pytest>=8.0",
     "ruff>=0.6",
 ]

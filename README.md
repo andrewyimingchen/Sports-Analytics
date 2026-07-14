@@ -43,6 +43,41 @@ functions over DataFrames — fully testable without a connection.
 - Empty API responses are never cached, so a transient glitch can't get pinned
   for a whole TTL.
 
+## JSON API & share cards
+
+The same data is exposed as a FastAPI service:
+
+```bash
+uv run uvicorn nba_insights.api:app --port 8000
+```
+
+| Endpoint | Returns |
+|---|---|
+| `/players/search?q=jokic` | matching players with IDs |
+| `/players/{id}/career` | per-game averages by season |
+| `/players/{id}/percentiles` | current-season league percentile ranks |
+| `/compare?names=A&names=B` | side-by-side per-game stats (2–4 players) |
+| `/players/{id}/card` | self-contained HTML share card |
+
+Interactive docs at `/docs`. The API reads through the same cache as the app,
+so each warms the other.
+
+## Warming the cache
+
+First views fetch live from stats.nba.com; to make them instant, prefetch the
+league dashboard, standings, and the top players by minutes:
+
+```bash
+uv run python -m nba_insights.warm --top 20
+```
+
+Schedule it nightly with cron (run from the repo root so it fills the same
+`data/` directory the app reads):
+
+```cron
+0 6 * * * cd /path/to/Sports-Analytics && uv run python -m nba_insights.warm --top 20
+```
+
 ## Development
 
 ```bash
