@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#fcfcfb" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1a1a19" media="(prefers-color-scheme: dark)">
+<title>NBA Insights</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg">
+<link rel="apple-touch-icon" href="icon.svg">
+<style>
+:root {
+  color-scheme: light dark;
+  --surface: #fcfcfb; --plane: #f9f9f7; --ink: #0b0b0b; --ink-2: #52514e;
+  --muted: #898781; --grid: #e1e0d9; --accent: #2a78d6; --accent-2: #1baf7a;
+  --ring: rgba(11,11,11,.10);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface: #1a1a19; --plane: #0d0d0d; --ink: #ffffff; --ink-2: #c3c2b7;
+    --grid: #2c2c2a; --accent: #3987e5; --accent-2: #199e70;
+    --ring: rgba(255,255,255,.10);
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--plane); color: var(--ink);
+       font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+       padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
+header { padding: 16px 16px 8px; }
+h1 { margin: 0; font-size: 1.3rem; }
+h1 small { color: var(--muted); font-weight: 400; font-size: .8rem; margin-left: 6px; }
+main { padding: 0 16px; max-width: 480px; margin: 0 auto; }
+.card { background: var(--surface); border-radius: 14px; padding: 16px;
+        box-shadow: 0 0 0 1px var(--ring); margin: 12px 0; }
+input[type=search], select, button.primary {
+  width: 100%; padding: 12px; border-radius: 10px; font-size: 1rem;
+  border: 1px solid var(--grid); background: var(--surface); color: var(--ink);
+}
+button.primary { background: var(--accent); color: #fff; border: none; font-weight: 600; }
+.results button { display: block; width: 100%; text-align: left; padding: 12px;
+  background: none; border: none; border-bottom: 1px solid var(--grid);
+  color: var(--ink); font-size: 1rem; }
+.results button:last-child { border-bottom: none; }
+.profile-head { display: flex; gap: 14px; align-items: center; }
+.profile-head img { width: 72px; height: 53px; object-fit: cover;
+  border-radius: 10px; background: var(--grid); }
+.profile-head .name { font-size: 1.15rem; font-weight: 650; }
+.profile-head .sub { color: var(--muted); font-size: .8rem; }
+.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 14px; }
+.tile { border: 1px solid var(--grid); border-radius: 10px; padding: 8px 10px; }
+.tile .v { font-size: 1.3rem; font-weight: 650; }
+.tile .k { color: var(--ink-2); font-size: .68rem; letter-spacing: .04em; }
+.pct .row { display: grid; grid-template-columns: 58px 1fr 30px; gap: 8px;
+  align-items: center; margin: 7px 0; font-size: .78rem; }
+.pct .label { color: var(--ink-2); }
+.pct .bar { height: 8px; border-radius: 4px; background: var(--grid); }
+.pct .fill { height: 100%; border-radius: 4px; background: var(--accent); }
+.pct .num { text-align: right; font-variant-numeric: tabular-nums; }
+.matchup { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; }
+.matchup .at { color: var(--muted); }
+.prob-bar { display: flex; height: 34px; border-radius: 10px; overflow: hidden;
+  margin-top: 14px; font-size: .85rem; font-weight: 650; color: #fff; }
+.prob-bar .home { background: var(--accent); display: flex; align-items: center;
+  padding-left: 10px; min-width: 64px; }
+.prob-bar .away { background: var(--accent-2); display: flex; align-items: center;
+  justify-content: flex-end; padding-right: 10px; min-width: 64px; }
+.prob-caption { display: flex; justify-content: space-between; color: var(--ink-2);
+  font-size: .78rem; margin-top: 6px; }
+.note { color: var(--muted); font-size: .75rem; margin-top: 10px; }
+.error { color: #d03b3b; font-size: .85rem; margin-top: 8px; }
+nav { position: fixed; bottom: 0; left: 0; right: 0; display: flex;
+  background: var(--surface); box-shadow: 0 -1px 0 var(--ring);
+  padding-bottom: env(safe-area-inset-bottom); }
+nav button { flex: 1; padding: 12px 0 10px; background: none; border: none;
+  color: var(--muted); font-size: .75rem; font-weight: 600; }
+nav button.active { color: var(--accent); }
+nav button .ico { display: block; font-size: 1.25rem; margin-bottom: 2px; }
+.hidden { display: none; }
+</style>
+</head>
+<body>
+<header><h1>🏀 NBA Insights <small>data: stats.nba.com</small></h1></header>
+<main>
+  <section id="tab-players">
+    <div class="card">
+      <input id="search" type="search" placeholder="Search a player — e.g. Jokic"
+             autocomplete="off">
+      <div class="results" id="results"></div>
+    </div>
+    <div class="card hidden" id="profile"></div>
+  </section>
+
+  <section id="tab-predict" class="hidden">
+    <div class="card">
+      <div class="matchup">
+        <select id="away"></select><span class="at">@</span><select id="home"></select>
+      </div>
+      <div style="margin-top:12px"><button class="primary" id="go">Predict</button></div>
+      <div id="prediction"></div>
+      <p class="note">Logistic model on season-to-date form, availability and Elo —
+        70% holdout accuracy. Assumes both teams at full strength.</p>
+    </div>
+  </section>
+</main>
+<nav>
+  <button id="nav-players" class="active"><span class="ico">👤</span>Players</button>
+  <button id="nav-predict"><span class="ico">📈</span>Predict</button>
+</nav>
+<script>
+const $ = (id) => document.getElementById(id);
+const api = (path) => fetch(path).then(r => {
+  if (!r.ok) return r.json().then(b => { throw new Error(b.detail || r.statusText); });
+  return r.json();
+});
+
+// --- tabs ---------------------------------------------------------------
+function show(tab) {
+  $("tab-players").classList.toggle("hidden", tab !== "players");
+  $("tab-predict").classList.toggle("hidden", tab !== "predict");
+  $("nav-players").classList.toggle("active", tab === "players");
+  $("nav-predict").classList.toggle("active", tab === "predict");
+}
+$("nav-players").onclick = () => show("players");
+$("nav-predict").onclick = () => { show("predict"); loadTeams(); };
+
+// --- players ------------------------------------------------------------
+let debounce;
+$("search").addEventListener("input", (e) => {
+  clearTimeout(debounce);
+  const q = e.target.value.trim();
+  if (q.length < 3) { $("results").innerHTML = ""; return; }
+  debounce = setTimeout(async () => {
+    try {
+      const players = await api(`/players/search?q=${encodeURIComponent(q)}`);
+      $("results").innerHTML = players.slice(0, 8).map(p =>
+        `<button data-id="${p.id}" data-name="${p.full_name}">${p.full_name}</button>`
+      ).join("") || `<p class="note">No players found.</p>`;
+    } catch (err) { $("results").innerHTML = `<p class="error">${err.message}</p>`; }
+  }, 250);
+});
+
+$("results").addEventListener("click", (e) => {
+  const b = e.target.closest("button");
+  if (b) loadProfile(+b.dataset.id, b.dataset.name);
+});
+
+async function loadProfile(id, name) {
+  const el = $("profile");
+  el.classList.remove("hidden");
+  el.innerHTML = `<p class="note">Loading ${name}…</p>`;
+  try {
+    const seasons = await api(`/players/${id}/career`);
+    const last = seasons[seasons.length - 1];
+    let html = `
+      <div class="profile-head">
+        <img src="/players/${id}/headshot" alt="" onerror="this.style.display='none'">
+        <div><div class="name">${name}</div>
+        <div class="sub">${last.SEASON_ID} · ${last.GP} games</div></div>
+      </div>
+      <div class="tiles">` +
+      ["PTS", "AST", "REB"].map(s =>
+        `<div class="tile"><div class="v">${(+last[s]).toFixed(1)}</div>
+         <div class="k">${s} / GAME</div></div>`).join("") + `</div>`;
+    try {
+      const pct = await api(`/players/${id}/percentiles`);
+      html += `<div class="pct" style="margin-top:14px">
+        <div class="label" style="font-size:.8rem">League percentile, ${pct.season}</div>` +
+        Object.entries(pct.percentiles).map(([k, v]) =>
+          `<div class="row"><span class="label">${k}</span>
+           <div class="bar"><div class="fill" style="width:${Math.round(v)}%"></div></div>
+           <span class="num">${Math.round(v)}</span></div>`).join("") + `</div>`;
+    } catch { /* inactive player: card stays stats-only */ }
+    el.innerHTML = html;
+    el.scrollIntoView({ behavior: "smooth" });
+  } catch (err) { el.innerHTML = `<p class="error">${err.message}</p>`; }
+}
+
+// --- predict --------------------------------------------------------------
+let teamsLoaded = false;
+async function loadTeams() {
+  if (teamsLoaded) return;
+  try {
+    const teams = await api("/teams");
+    for (const [sel, pick] of [["home", "LAL"], ["away", "BOS"]]) {
+      $(sel).innerHTML = teams.map(t =>
+        `<option ${t === pick ? "selected" : ""}>${t}</option>`).join("");
+    }
+    teamsLoaded = true;
+  } catch (err) { $("prediction").innerHTML = `<p class="error">${err.message}</p>`; }
+}
+
+$("go").onclick = async () => {
+  const home = $("home").value, away = $("away").value;
+  if (home === away) { $("prediction").innerHTML = `<p class="error">Pick two different teams.</p>`; return; }
+  $("prediction").innerHTML = `<p class="note">Crunching…</p>`;
+  try {
+    const r = await api(`/predict/game?home=${home}&away=${away}`);
+    const hp = Math.round(r.home_win_prob * 100), ap = 100 - hp;
+    $("prediction").innerHTML = `
+      <div class="prob-bar">
+        <div class="home" style="flex:${hp}">${home} ${hp}%</div>
+        <div class="away" style="flex:${ap}">${ap}% ${away}</div>
+      </div>
+      <div class="prob-caption"><span>${home} at home</span><span>${away} away</span></div>`;
+  } catch (err) { $("prediction").innerHTML = `<p class="error">${err.message}</p>`; }
+};
+
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
+</script>
+</body>
+</html>

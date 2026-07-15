@@ -62,13 +62,24 @@ Evaluation is a true temporal holdout: trained on 2022-25, scored on the
 current season. Retrain whenever you want fresher form; artifacts live in
 `data/models/` (never committed).
 
-## JSON API & share cards
+## Phone app (PWA)
 
-The same data is exposed as a FastAPI service:
+A minimal installable mobile app ships with the API — no app store, no
+native toolchain:
 
 ```bash
 uv run uvicorn nba_insights.api:app --port 8000
 ```
+
+Open `http://<your-host>:8000/app/` on a phone (or desktop) and "Add to
+Home Screen". Two tabs: player search → profile (headshot, stat tiles,
+league percentiles) and game prediction (team pickers → win probability
+from the 70%-accuracy model). Vanilla HTML/JS, ~300 lines, served from
+`src/nba_insights/api/static/`.
+
+## JSON API & share cards
+
+The same FastAPI service exposes the data as JSON:
 
 | Endpoint | Returns |
 |---|---|
@@ -77,6 +88,9 @@ uv run uvicorn nba_insights.api:app --port 8000
 | `/players/{id}/percentiles` | current-season league percentile ranks |
 | `/compare?names=A&names=B` | side-by-side per-game stats (2–4 players) |
 | `/players/{id}/card` | self-contained HTML share card |
+| `/teams` | tricodes of all teams this season |
+| `/predict/game?home=LAL&away=BOS` | home-team win probability |
+| `/players/{id}/headshot` | headshot proxy (CDN blocks hotlinking) |
 
 Interactive docs at `/docs`. The API reads through the same cache as the app,
 so each warms the other.

@@ -1,0 +1,13 @@
+{
+  "name": "NBA Insights",
+  "short_name": "NBA Insights",
+  "description": "Player profiles and game predictions from stats.nba.com data",
+  "start_url": "/app/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#1a1a19",
+  "theme_color": "#2a78d6",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
