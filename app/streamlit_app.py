@@ -15,7 +15,7 @@ from nba_insights.analysis import (
     percentile_ranks,
     rolling_form,
 )
-from nba_insights.config import current_season
+from nba_insights.config import current_season, past_seasons
 from nba_insights.ingest import NBAClient
 from nba_insights.ml import (
     GameOutcomeModel,
@@ -23,6 +23,7 @@ from nba_insights.ml import (
     WinCurve,
     blended_lineup_estimate,
 )
+from nba_insights.ml.elo import current_elo
 from nba_insights.ml.features import (
     matchup_features,
     player_next_game_features,
@@ -499,6 +500,14 @@ def lineup_tab(client: NBAClient, models: dict) -> None:
         )
 
 
+@st.cache_data(ttl=86400, show_spinner=False)
+def league_elo() -> pd.Series:
+    """Current Elo per team, warmed up over the two prior seasons."""
+    client = get_client()
+    seasons = [*past_seasons(2), current_season()]
+    return current_elo(pd.concat([client.team_games(s) for s in seasons], ignore_index=True))
+
+
 def predictions_page(client: NBAClient) -> None:
     models = load_models()
     if models is None:
@@ -508,6 +517,10 @@ def predictions_page(client: NBAClient) -> None:
         )
         return
     snapshot = team_form_snapshot(client.team_games())
+    try:
+        snapshot["elo"] = league_elo().reindex(snapshot.index)
+    except Exception:
+        pass  # matchup_features degrades to a neutral elo_diff
     tabs = st.tabs(["Game outcome", "Player points", "Starting five"])
     with tabs[0]:
         outcome_tab(client, models, snapshot)

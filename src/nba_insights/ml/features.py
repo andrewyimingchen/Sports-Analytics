@@ -40,6 +40,7 @@ OUTCOME_FEATURES = [f"{c}_diff" for c in TEAM_FORM_COLS] + [
     "b2b_diff",
     "three_in_four_diff",
     "missing_min_diff",
+    "elo_diff",
 ]
 
 POINTS_FEATURES = [
@@ -168,6 +169,7 @@ def team_form_features(
     window: int | None = 10,
     player_games: pd.DataFrame | None = None,
     prior_rates: pd.Series | None = None,
+    elo: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Per team-game rolling form, shifted so each row is pre-game knowledge.
 
@@ -189,6 +191,10 @@ def team_form_features(
         )
     else:
         df["missing_min"] = 0.0
+    if elo is not None:
+        df = df.merge(elo, on=["GAME_ID", "TEAM_ID"], how="left")
+    else:
+        df["elo"] = 0.0  # neutral: both sides equal, elo_diff = 0
     df = df.sort_values(["TEAM_ID", "GAME_DATE"]).reset_index(drop=True)
     grouped = df.groupby("TEAM_ID", sort=False)
 
@@ -217,6 +223,7 @@ def team_form_features(
         "b2b",
         "three_in_four",
         "missing_min",
+        "elo",
         *TEAM_FORM_COLS,
         "win",
     ]
@@ -242,12 +249,13 @@ def game_matchup_frame(team_form: pd.DataFrame) -> pd.DataFrame:
             "b2b_diff": merged["b2b_h"] - merged["b2b_a"],
             "three_in_four_diff": merged["three_in_four_h"] - merged["three_in_four_a"],
             "missing_min_diff": merged["missing_min_h"] - merged["missing_min_a"],
+            "elo_diff": merged["elo_h"] - merged["elo_a"],
             "home_win": merged["win_h"],
         }
     )
     for col in TEAM_FORM_COLS:
         out[f"{col}_diff"] = merged[f"{col}_h"] - merged[f"{col}_a"]
-    return out.dropna().reset_index(drop=True)
+    return out.dropna(subset=[*OUTCOME_FEATURES, "home_win"]).reset_index(drop=True)
 
 
 def team_form_snapshot(team_games: pd.DataFrame, window: int | None = None) -> pd.DataFrame:
@@ -280,7 +288,11 @@ def matchup_features(
     home_missing_min: float = 0.0,
     away_missing_min: float = 0.0,
 ) -> pd.DataFrame:
-    """Single-row outcome-model input for a matchup between two teams."""
+    """Single-row outcome-model input for a matchup between two teams.
+
+    If the snapshot carries an ``elo`` column (see ml.elo.current_elo), the
+    Elo differential is included; otherwise it is neutral (0).
+    """
     h, a = snapshot.loc[home_team], snapshot.loc[away_team]
     row = {f"{col}_diff": h[col] - a[col] for col in TEAM_FORM_COLS}
     row.update(
@@ -288,6 +300,7 @@ def matchup_features(
         b2b_diff=b2b_diff,
         three_in_four_diff=three_in_four_diff,
         missing_min_diff=home_missing_min - away_missing_min,
+        elo_diff=(h["elo"] - a["elo"]) if "elo" in snapshot.columns else 0.0,
     )
     return pd.DataFrame([row])
 
