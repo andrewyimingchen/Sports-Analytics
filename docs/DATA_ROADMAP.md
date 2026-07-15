@@ -131,6 +131,12 @@ Three candidates tested on the standard holdout (baseline 69.2% / 0.588):
   adjustment double-counts what the four factors + net already encode.
 - **Gradient boosting — rejected** (log loss 0.621): logistic regression
   wins comfortably on these smooth, collinear features at n≈3,500.
+- **Neural networks (MLP) — rejected** (best config 69.8% / 0.598; a
+  64×32 net overfit to 61.8% / 0.839): same reason as GBM — with ~3,200
+  training rows of hand-engineered, near-linear features, the classifier
+  is not the bottleneck. An NN would only earn its keep as a *feature
+  learner* on raw play-by-play sequences (player/lineup embeddings), a
+  multi-week project with the ~70% market ceiling capping the upside.
 
 Remaining known lever: real injury/availability *feeds* at inference time
 (bead 1nn, in season). Beyond that, the market ceiling (~70%) is close —
