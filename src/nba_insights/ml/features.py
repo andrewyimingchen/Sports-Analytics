@@ -39,6 +39,7 @@ OUTCOME_FEATURES = [f"{c}_diff" for c in TEAM_FORM_COLS] + [
     "rest_diff",
     "b2b_diff",
     "three_in_four_diff",
+    "missing_min_diff",
 ]
 
 POINTS_FEATURES = [
@@ -106,7 +107,68 @@ def _with_derived_stats(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def team_form_features(team_games: pd.DataFrame, window: int | None = 10) -> pd.DataFrame:
+def prior_minute_rates(prior_player_games: pd.DataFrame) -> pd.Series:
+    """Per player: previous-season minutes per team game (82-game basis).
+
+    Used to seed availability expectations at the start of a season, when a
+    player has no current-season history yet. Indexed by PLAYER_ID.
+    """
+    pg = prior_player_games.copy()
+    pg["MIN"] = pd.to_numeric(pg["MIN"], errors="coerce").fillna(0)
+    return pg.groupby("PLAYER_ID")["MIN"].sum() / 82
+
+
+def availability_features(
+    team_games: pd.DataFrame,
+    player_games: pd.DataFrame,
+    prior_rates: pd.Series | None = None,
+    prior_weight: float = 20.0,
+) -> pd.DataFrame:
+    """Expected minutes missing per team-game, derived from absences.
+
+    A player with no player-game row for one of their team's games didn't
+    play (injury, rest, DNP — indistinguishable, and mostly irrelevant for
+    prediction). Each absentee is weighted by the minutes they were expected
+    to play: current-season cumulative minutes per team game (shifted —
+    pre-game knowledge only), blended with *prior_rates* (last season's
+    minutes per game) counting as *prior_weight* pseudo-games, so a star
+    missing the season opener still registers. Returns one row per
+    (GAME_ID, TEAM_ID) with missing_min.
+    """
+    tg = _prepare(team_games)[["GAME_ID", "TEAM_ID", "GAME_DATE"]]
+    pg = player_games[["GAME_ID", "TEAM_ID", "PLAYER_ID", "MIN"]].copy()
+    pg["MIN"] = pd.to_numeric(pg["MIN"], errors="coerce").fillna(0)
+
+    out = []
+    for team_id, games in tg.groupby("TEAM_ID"):
+        games = games.sort_values("GAME_DATE")
+        # games × players minutes matrix; NaN = did not play
+        matrix = (
+            pg[pg["TEAM_ID"] == team_id]
+            .pivot_table(index="GAME_ID", columns="PLAYER_ID", values="MIN")
+            .reindex(games["GAME_ID"])
+        )
+        seed = pd.Series(0.0, index=matrix.columns)
+        if prior_rates is not None:
+            seed = prior_rates.reindex(matrix.columns).fillna(0.0)
+        n_prior = pd.Series(range(len(matrix)), index=matrix.index, dtype=float)
+        cum = matrix.fillna(0).cumsum().shift(1).fillna(0.0)
+        expected = (cum + seed * prior_weight).div(n_prior + prior_weight, axis=0)
+        missing = expected.where(matrix.isna()).sum(axis=1)
+        out.append(
+            pd.DataFrame(
+                {"GAME_ID": matrix.index, "TEAM_ID": team_id, "missing_min": missing.values}
+            )
+        )
+    return pd.concat(out, ignore_index=True)
+
+
+def team_form_features(
+    team_games: pd.DataFrame,
+    window: int | None = 10,
+    player_games: pd.DataFrame | None = None,
+    prior_rates: pd.Series | None = None,
+) -> pd.DataFrame:
     """Per team-game rolling form, shifted so each row is pre-game knowledge.
 
     One row per team per game: fatigue flags (rest_days, b2b, three_in_four
@@ -114,8 +176,19 @@ def team_form_features(team_games: pd.DataFrame, window: int | None = 10) -> pd.
     games (or season-to-date when ``window=None``, minimum 10 games) for
     every column in TEAM_FORM_COLS, and win (the label). Early games
     without enough history are NaN and dropped by callers.
+
+    With *player_games*, each row also carries missing_min — the expected
+    minutes absent from that game's roster (see availability_features);
+    without it the column is 0.
     """
     df = _with_derived_stats(_prepare(team_games))
+    if player_games is not None:
+        df = df.merge(
+            availability_features(team_games, player_games, prior_rates=prior_rates),
+            on=["GAME_ID", "TEAM_ID"],
+        )
+    else:
+        df["missing_min"] = 0.0
     df = df.sort_values(["TEAM_ID", "GAME_DATE"]).reset_index(drop=True)
     grouped = df.groupby("TEAM_ID", sort=False)
 
@@ -143,6 +216,7 @@ def team_form_features(team_games: pd.DataFrame, window: int | None = 10) -> pd.
         "rest_days",
         "b2b",
         "three_in_four",
+        "missing_min",
         *TEAM_FORM_COLS,
         "win",
     ]
@@ -167,6 +241,7 @@ def game_matchup_frame(team_form: pd.DataFrame) -> pd.DataFrame:
             "rest_diff": merged["rest_days_h"] - merged["rest_days_a"],
             "b2b_diff": merged["b2b_h"] - merged["b2b_a"],
             "three_in_four_diff": merged["three_in_four_h"] - merged["three_in_four_a"],
+            "missing_min_diff": merged["missing_min_h"] - merged["missing_min_a"],
             "home_win": merged["win_h"],
         }
     )
@@ -202,11 +277,18 @@ def matchup_features(
     rest_diff: float = 0.0,
     b2b_diff: float = 0.0,
     three_in_four_diff: float = 0.0,
+    home_missing_min: float = 0.0,
+    away_missing_min: float = 0.0,
 ) -> pd.DataFrame:
     """Single-row outcome-model input for a matchup between two teams."""
     h, a = snapshot.loc[home_team], snapshot.loc[away_team]
     row = {f"{col}_diff": h[col] - a[col] for col in TEAM_FORM_COLS}
-    row.update(rest_diff=rest_diff, b2b_diff=b2b_diff, three_in_four_diff=three_in_four_diff)
+    row.update(
+        rest_diff=rest_diff,
+        b2b_diff=b2b_diff,
+        three_in_four_diff=three_in_four_diff,
+        missing_min_diff=home_missing_min - away_missing_min,
+    )
     return pd.DataFrame([row])
 
 

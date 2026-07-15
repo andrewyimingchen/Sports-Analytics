@@ -95,5 +95,23 @@ Measured on the same 1,071-game 2025-26 holdout:
   near the rolling-average baseline. Tracking/hustle/positional defense
   remain unbuilt; revisit only with per-game (not season-aggregate) data,
   which is what avoids leakage.
-- **#8–#10 unchanged** — injury reports still the biggest missing signal;
-  re-probe in season (bead 1nn).
+- **#8 availability — shipped without scraping anything.** Historical
+  absences are fully derivable from the player-game logs we already cache:
+  no row for a team's game = didn't play. Each absentee is weighted by
+  expected minutes (current-season cumulative, seeded with last season's
+  rate so a star missing the opener still registers — LeBron's 22
+  early-season absences were invisible without the prior). Result on the
+  same holdout: **68.3% → 69.2%**, log loss 0.603 → **0.588**. At
+  inference the outcome tab has a "who's out?" picker (Dončić out moves
+  LAL from 58% to 53% at home). A live injury-report *feed* (know who's
+  out without asking the user) is still bead 1nn — re-probe in season.
+- **#10 play-by-play — phase 1 built; garbage-time result negative.**
+  Full PBP ingest + resumable season backfill shipped (4 seasons cached,
+  ~4,900 games). The first hypothesis — garbage-time-filtered net rating —
+  was tested on the 69.2% holdout and **did not move log loss** (0.5878 →
+  0.5881; the +0.5pp accuracy bump is ~5 games, noise). Season-to-date
+  form already averages blowouts out. Per the decision rule the feature
+  was not shipped. The PBP corpus stays: it's the foundation for
+  stint/lineup-level modeling (the phase where GT filtering should
+  actually matter, since stints are short windows).
+- **#9 unchanged** — odds benchmark needs a key.
