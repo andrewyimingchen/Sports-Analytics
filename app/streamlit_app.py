@@ -5,9 +5,14 @@ Run with: uv run streamlit run app/streamlit_app.py
 
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+
+sys.path.insert(0, str(Path(__file__).parent))  # sibling modules (methodology)
 
 from nba_insights.analysis import (
     career_per_game,
@@ -540,7 +545,9 @@ def main() -> None:
     PAL.update(theme_palette())
     st.title("🏀 NBA Insights")
     client = get_client()
-    page = st.sidebar.radio("View", ["Player profile", "Compare players", "Predictions"])
+    page = st.sidebar.radio(
+        "View", ["Player profile", "Compare players", "Predictions", "Methodology"]
+    )
     st.sidebar.caption(
         "Data: stats.nba.com via nba_api. Responses are cached locally; "
         "current-season data refreshes daily."
@@ -549,8 +556,12 @@ def main() -> None:
         profile_page(client)
     elif page == "Compare players":
         compare_page(client)
-    else:
+    elif page == "Predictions":
         predictions_page(client)
+    else:
+        import methodology
+
+        methodology.render(client, load_models(), PAL)
 
 
 main()
