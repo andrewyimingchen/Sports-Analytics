@@ -204,24 +204,36 @@ features, the classifier is not the bottleneck.
             st.caption(f"Calibration analysis unavailable: {e}")
 
     st.divider()
-    st.markdown("### Player points model")
+    st.markdown("### Player stat-line model")
     st.markdown(
         """
-**Two-stage: minutes × rate.** Most of the variance in a player's points
-is variance in playing time, so the model predicts them separately and
-multiplies:
+**Two-stage: minutes × rate, one rate stage per stat.** Most of the
+variance in a player's counting stats is variance in playing time, so the
+model predicts them separately and multiplies:
 
-- **Minutes stage** — rotation trend (5-game and exponentially-weighted
-  averages), rest, venue, and the team's expected minutes out (injuries
-  and rest days open up playing time).
-- **Rate stage** — per-minute scoring (EWMA, halflife 10 games), shot
-  volume, opponent defensive rating and pace, and teammate absences
-  (usage rises when stars sit).
+- **Minutes stage** (fit once, shared) — rotation trend (5-game and
+  exponentially-weighted averages), rest, venue, and the team's expected
+  minutes out (injuries and rest days open up playing time).
+- **Rate stage** (one per stat) — the stat's own per-minute EWMA
+  (halflife 10 games), shot volume, opponent defensive rating and pace,
+  and teammate absences (usage rises when stars sit).
 
-Holdout MAE **4.58** vs 4.72 for the honest baseline (the player's own
-10-game average) across 21,204 player-games. For context: predicting a
-single game's points is noise-dominated — star players' scoring has a
-game-to-game standard deviation near 8 points.
+Each stat is judged on the holdout against the player's own 10-game
+average — the honest baseline (21,204 player-games):
+
+| Stat | Model MAE | 10-game avg |
+|------|-----------|-------------|
+| Points | **4.58** | 4.72 |
+| Rebounds | **1.90** | 1.95 |
+| Assists | **1.36** | 1.39 |
+| Steals | **0.72** | 0.75 |
+| 3-pointers | **0.92** | 0.92 |
+
+Blocks were built and **rejected**: every variant lost to the 10-game
+average (best 0.531 vs 0.522), so the app shows the form average for
+blocks, labeled as such. For context: predicting a single game's points
+is noise-dominated — star players' scoring has a game-to-game standard
+deviation near 8 points.
 """
     )
     if models:
@@ -233,7 +245,7 @@ game-to-game standard deviation near 8 points.
             )
         with cols[1]:
             st.plotly_chart(
-                _coef_chart(models["points"].rate, RATE_FEATURES, "Rate stage", pal),
+                _coef_chart(models["points"].rate, RATE_FEATURES, "Rate stage (points)", pal),
                 width="stretch",
             )
 

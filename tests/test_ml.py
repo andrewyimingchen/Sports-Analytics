@@ -69,28 +69,40 @@ def synthetic_team_games(n_games_per_team: int = 30, seed: int = 7) -> pd.DataFr
     return pd.DataFrame(rows)
 
 
-def synthetic_player_games(n_games: int = 40, seed: int = 3) -> pd.DataFrame:
+def synthetic_player_games(
+    n_games: int = 40, seed: int = 3, full_line: bool = False
+) -> pd.DataFrame:
+    """Player 1 is a high-usage scorer; player 2 a role player who rebounds."""
     rng = np.random.default_rng(seed)
     rows = []
-    for pid, base in [(1, 25.0), (2, 12.0)]:
+    for pid, base, reb in [(1, 25.0, 4.0), (2, 12.0, 10.0)]:
         date = pd.Timestamp("2024-11-01")
         for g in range(n_games):
             pts = max(0, rng.normal(base, 5))
-            rows.append(
-                {
-                    "PLAYER_ID": pid,
-                    "PLAYER_NAME": f"Player {pid}",
-                    "TEAM_ID": pid,
-                    "GAME_ID": f"G{g:04d}",
-                    "GAME_DATE": date.strftime("%Y-%m-%d"),
-                    "MATCHUP": f"T{pid} vs. OPP" if g % 2 else f"T{pid} @ OPP",
-                    "WL": "W",
-                    "MIN": 34 + rng.normal(0, 3),
-                    "PTS": pts,
-                    "FGA": pts * 0.8,
-                    "PLUS_MINUS": 0.0,
-                }
-            )
+            row = {
+                "PLAYER_ID": pid,
+                "PLAYER_NAME": f"Player {pid}",
+                "TEAM_ID": pid,
+                "GAME_ID": f"G{g:04d}",
+                "GAME_DATE": date.strftime("%Y-%m-%d"),
+                "MATCHUP": f"T{pid} vs. OPP" if g % 2 else f"T{pid} @ OPP",
+                "WL": "W",
+                "MIN": 34 + rng.normal(0, 3),
+                "PTS": pts,
+                "FGA": pts * 0.8,
+                "PLUS_MINUS": 0.0,
+            }
+            if full_line:
+                row.update(
+                    {
+                        "REB": max(0, rng.normal(reb, 2)),
+                        "AST": max(0, rng.normal(base / 4, 1.5)),
+                        "STL": max(0, rng.normal(1.0, 0.8)),
+                        "BLK": max(0, rng.normal(0.6, 0.6)),
+                        "FG3M": max(0, rng.normal(base / 10, 1.0)),
+                    }
+                )
+            rows.append(row)
             date += pd.Timedelta(days=2)
     return pd.DataFrame(rows)
 
@@ -178,6 +190,54 @@ def test_points_model_learns_player_level(tmp_path):
     path = tmp_path / "points.joblib"
     model.save(path)
     assert PlayerPointsModel.load(path).predict(feats).equals(model.predict(feats))
+
+
+def test_stat_line_model_predicts_all_stats(tmp_path):
+    feats = player_game_features(synthetic_player_games(60, full_line=True))
+    model = PlayerPointsModel().fit(feats)
+    line = model.predict_line(feats)
+    assert list(line.columns) == ["PTS", "REB", "AST", "STL", "FG3M"]
+    assert "BLK" not in line.columns  # rejected: lost to its 10-game average on holdout
+
+    # levels are learned per player: the scorer outscores, the rebounder rebounds
+    scorer = line[feats["PLAYER_ID"] == 1].mean()
+    role = line[feats["PLAYER_ID"] == 2].mean()
+    assert scorer["PTS"] > role["PTS"] + 5
+    assert role["REB"] > scorer["REB"] + 2
+
+    metrics = model.evaluate(feats)
+    assert set(metrics["line"]) == set(line.columns)
+    assert metrics["mae"] == metrics["line"]["PTS"]["mae"]
+
+    path = tmp_path / "line.joblib"
+    model.save(path)
+    reloaded = PlayerPointsModel.load(path)
+    pd.testing.assert_frame_equal(reloaded.predict_line(feats), line)
+
+
+def test_stat_line_rates_are_pregame_only():
+    pg = synthetic_player_games(full_line=True)
+    feats = player_game_features(pg)
+    one = feats[feats["PLAYER_ID"] == 2].reset_index(drop=True)
+    merged = pg[pg["PLAYER_ID"] == 2].reset_index(drop=True)
+    # reb_r10 at row i is the mean of the 10 REB values before that game
+    i = 15
+    game_id = one["GAME_ID"].iloc[i]
+    pos = merged.index[merged["GAME_ID"] == game_id][0]
+    expected = merged["REB"].iloc[pos - 10 : pos].mean()
+    assert one["reb_r10"].iloc[i] == pytest.approx(expected)
+
+
+def test_points_model_loads_legacy_artifact(tmp_path):
+    import joblib
+
+    feats = player_game_features(synthetic_player_games(60))
+    model = PlayerPointsModel().fit(feats)
+    path = tmp_path / "legacy.joblib"
+    joblib.dump({"minutes": model.minutes, "rate": model.rates["PTS"]}, path)
+    legacy = PlayerPointsModel.load(path)
+    assert legacy.predict(feats).equals(model.predict(feats))
+    assert list(legacy.predict_line(feats).columns) == ["PTS"]
 
 
 def test_win_curve_monotonic_and_bounded(tmp_path):

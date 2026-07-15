@@ -44,6 +44,13 @@ OUTCOME_FEATURES = [f"{c}_diff" for c in TEAM_FORM_COLS] + [
     "elo_diff",
 ]
 
+# The projected stat line: PTS first (the headline), then the rest of the box.
+# BLK was built and rejected: every rate-stage and single-stage variant lost to
+# the player's own 10-game average on the holdout (best 0.531 vs 0.522 MAE) —
+# blocks are too rare for regression to beat the form average, so the app
+# shows that average instead of a model projection.
+STAT_LINE = ["PTS", "REB", "AST", "STL", "FG3M"]
+
 POINTS_FEATURES = [
     "pts_r5",
     "pts_r10",
@@ -387,12 +394,22 @@ def player_game_features(
     ]:
         df[col] = grouped[source].transform(lambda s, w=window: s.shift(1).rolling(w).mean())
 
-    # EWMA form: per-minute scoring rate and minutes trend (halflife 10 games)
-    rate = df["PTS"] / df["MIN"].where(df["MIN"] > 0)
-    df["rate_ewm"] = rate.groupby(df["PLAYER_ID"], sort=False).transform(
-        lambda s: s.shift(1).ewm(halflife=10).mean()
-    )
+    # EWMA form (halflife 10 games): minutes trend plus a per-minute rate for
+    # every stat in the projected line. PTS keeps the original column names
+    # ("rate_ewm", "pts_r10"); the others follow "{stat}_rate_ewm"/"{stat}_r10".
+    # Stats absent from the input (lone player logs, tests) are skipped.
     df["min_ewm"] = grouped["MIN"].transform(lambda s: s.shift(1).ewm(halflife=10).mean())
+    for stat in STAT_LINE:
+        if stat not in df.columns:
+            continue
+        rate = df[stat] / df["MIN"].where(df["MIN"] > 0)
+        rate_col = "rate_ewm" if stat == "PTS" else f"{stat.lower()}_rate_ewm"
+        df[rate_col] = rate.groupby(df["PLAYER_ID"], sort=False).transform(
+            lambda s: s.shift(1).ewm(halflife=10).mean()
+        )
+        base_col = f"{stat.lower()}_r10"
+        if base_col not in df.columns:
+            df[base_col] = grouped[stat].transform(lambda s: s.shift(1).rolling(10).mean())
 
     df["opp_form_net"] = 0.0
     df["opp_form_drtg"] = _LEAGUE_AVG_DRTG
@@ -423,6 +440,13 @@ def player_game_features(
             df["own_missing_min"] = df["j_own"].fillna(_LEAGUE_AVG_MISSING)
             df = df.drop(columns=["j_own"])
 
+    line_cols = [
+        c
+        for stat in STAT_LINE
+        if stat in df.columns
+        for c in (stat, f"{stat.lower()}_rate_ewm", f"{stat.lower()}_r10")
+        if c in df.columns
+    ]
     keep = [
         "PLAYER_ID",
         "PLAYER_NAME",
@@ -433,7 +457,7 @@ def player_game_features(
         "min_ewm",
         "own_missing_min",
         "MIN",
-        "PTS",
+        *line_cols,
     ]
     keep = list(dict.fromkeys(keep))  # POINTS_FEATURES may later include the new cols
     return df[keep].dropna().reset_index(drop=True)
@@ -460,21 +484,23 @@ def player_next_game_features(
     df["MIN"] = pd.to_numeric(df["MIN"], errors="coerce").fillna(0)
     df = df.sort_values("GAME_DATE")
     rate = df["PTS"] / df["MIN"].where(df["MIN"] > 0)
-    return pd.DataFrame(
-        [
-            {
-                "pts_r5": df["PTS"].tail(5).mean(),
-                "pts_r10": df["PTS"].tail(10).mean(),
-                "min_r5": df["MIN"].tail(5).mean(),
-                "fga_r5": df["FGA"].tail(5).mean(),
-                "home": int(home),
-                "rest_days": rest_days,
-                "opp_form_net": opp_form_net,
-                "opp_form_drtg": opp_form_drtg,
-                "opp_form_pace": opp_form_pace,
-                "rate_ewm": rate.ewm(halflife=10).mean().iloc[-1],
-                "min_ewm": df["MIN"].ewm(halflife=10).mean().iloc[-1],
-                "own_missing_min": own_missing_min,
-            }
-        ]
-    )
+    row = {
+        "pts_r5": df["PTS"].tail(5).mean(),
+        "pts_r10": df["PTS"].tail(10).mean(),
+        "min_r5": df["MIN"].tail(5).mean(),
+        "fga_r5": df["FGA"].tail(5).mean(),
+        "home": int(home),
+        "rest_days": rest_days,
+        "opp_form_net": opp_form_net,
+        "opp_form_drtg": opp_form_drtg,
+        "opp_form_pace": opp_form_pace,
+        "rate_ewm": rate.ewm(halflife=10).mean().iloc[-1],
+        "min_ewm": df["MIN"].ewm(halflife=10).mean().iloc[-1],
+        "own_missing_min": own_missing_min,
+    }
+    for stat in STAT_LINE:
+        if stat == "PTS" or stat not in df.columns:
+            continue
+        stat_rate = df[stat] / df["MIN"].where(df["MIN"] > 0)
+        row[f"{stat.lower()}_rate_ewm"] = stat_rate.ewm(halflife=10).mean().iloc[-1]
+    return pd.DataFrame([row])
