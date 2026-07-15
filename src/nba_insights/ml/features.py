@@ -17,9 +17,10 @@ import pandas as pd
 
 REST_CAP = 10  # days; longer breaks (injury, all-star) aren't "more rested"
 
-# neutral fill values when opponent context is unavailable
+# neutral fill values when opponent/team context is unavailable
 _LEAGUE_AVG_DRTG = 112.0
 _LEAGUE_AVG_PACE = 99.0
+_LEAGUE_AVG_MISSING = 57.0  # league-mean expected minutes out per team-game
 
 # rolling form columns produced by team_form_features / team_form_snapshot
 TEAM_FORM_COLS = [
@@ -53,6 +54,9 @@ POINTS_FEATURES = [
     "opp_form_net",
     "opp_form_drtg",
     "opp_form_pace",
+    "rate_ewm",
+    "min_ewm",
+    "own_missing_min",
 ]
 
 _BOX_COLS = ["PTS", "FGM", "FGA", "FG3M", "FTM", "FTA", "TOV", "OREB", "DREB"]
@@ -164,12 +168,29 @@ def availability_features(
     return pd.concat(out, ignore_index=True)
 
 
+def prior_team_form(prior_team_games: pd.DataFrame) -> pd.DataFrame:
+    """Per-team means of every form source stat over a (prior) season.
+
+    Used to seed season-to-date form at the start of the next season, so
+    the outcome model has features from game 1 instead of dropping each
+    team's first ~10 games. Indexed by TEAM_ID.
+    """
+    df = _with_derived_stats(_prepare(prior_team_games))
+    return df.groupby("TEAM_ID").agg(
+        {source: "mean" for source in set(_FORM_SOURCES.values())}
+    )
+
+
+FORM_PRIOR_WEIGHT = 10.0  # prior-season mean counts as this many pseudo-games
+
+
 def team_form_features(
     team_games: pd.DataFrame,
     window: int | None = 10,
     player_games: pd.DataFrame | None = None,
     prior_rates: pd.Series | None = None,
     elo: pd.DataFrame | None = None,
+    form_priors: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     """Per team-game rolling form, shifted so each row is pre-game knowledge.
 
@@ -205,13 +226,27 @@ def team_form_features(
     df["b2b"] = (gap1 == 1).astype(int)
     df["three_in_four"] = ((gap2 <= 3) & gap2.notna()).astype(int)
 
-    for col, source in _FORM_SOURCES.items():
-        if window is None:
-            df[col] = grouped[source].transform(
-                lambda s: s.shift(1).expanding(min_periods=10).mean()
-            )
-        else:
-            df[col] = grouped[source].transform(lambda s, w=window: s.shift(1).rolling(w).mean())
+    if window is None and form_priors is not None:
+        # season-to-date seeded with prior-season means: defined from game 1
+        league_prior = form_priors.mean()
+        for team_id, g in df.groupby("TEAM_ID", sort=False):
+            prior = form_priors.loc[team_id] if team_id in form_priors.index else league_prior
+            n = pd.Series(range(len(g)), index=g.index, dtype=float)
+            for col, source in _FORM_SOURCES.items():
+                cum = g[source].shift(1).cumsum().fillna(0.0)
+                df.loc[g.index, col] = (prior[source] * FORM_PRIOR_WEIGHT + cum) / (
+                    FORM_PRIOR_WEIGHT + n
+                )
+    else:
+        for col, source in _FORM_SOURCES.items():
+            if window is None:
+                df[col] = grouped[source].transform(
+                    lambda s: s.shift(1).expanding(min_periods=10).mean()
+                )
+            else:
+                df[col] = grouped[source].transform(
+                    lambda s, w=window: s.shift(1).rolling(w).mean()
+                )
 
     keep = [
         "GAME_ID",
@@ -352,9 +387,17 @@ def player_game_features(
     ]:
         df[col] = grouped[source].transform(lambda s, w=window: s.shift(1).rolling(w).mean())
 
+    # EWMA form: per-minute scoring rate and minutes trend (halflife 10 games)
+    rate = df["PTS"] / df["MIN"].where(df["MIN"] > 0)
+    df["rate_ewm"] = rate.groupby(df["PLAYER_ID"], sort=False).transform(
+        lambda s: s.shift(1).ewm(halflife=10).mean()
+    )
+    df["min_ewm"] = grouped["MIN"].transform(lambda s: s.shift(1).ewm(halflife=10).mean())
+
     df["opp_form_net"] = 0.0
     df["opp_form_drtg"] = _LEAGUE_AVG_DRTG
     df["opp_form_pace"] = _LEAGUE_AVG_PACE
+    df["own_missing_min"] = _LEAGUE_AVG_MISSING
     if team_form is not None:
         opp = team_form[["GAME_ID", "TEAM_ID", "form_net", "form_drtg", "form_pace"]].rename(
             columns={
@@ -370,6 +413,15 @@ def player_game_features(
         df["opp_form_drtg"] = df["j_drtg"].fillna(_LEAGUE_AVG_DRTG)
         df["opp_form_pace"] = df["j_pace"].fillna(_LEAGUE_AVG_PACE)
         df = df.drop(columns=["OPP_TEAM_ID", "j_net", "j_drtg", "j_pace"])
+        if "missing_min" in team_form.columns:
+            # the player's OWN team's expected minutes out: teammates absent
+            # means more shots for whoever plays (usage boost)
+            own = team_form[["GAME_ID", "TEAM_ID", "missing_min"]].rename(
+                columns={"missing_min": "j_own"}
+            )
+            df = df.merge(own, on=["GAME_ID", "TEAM_ID"], how="left")
+            df["own_missing_min"] = df["j_own"].fillna(_LEAGUE_AVG_MISSING)
+            df = df.drop(columns=["j_own"])
 
     keep = [
         "PLAYER_ID",
@@ -377,8 +429,13 @@ def player_game_features(
         "GAME_ID",
         "GAME_DATE",
         *POINTS_FEATURES,
+        "rate_ewm",
+        "min_ewm",
+        "own_missing_min",
+        "MIN",
         "PTS",
     ]
+    keep = list(dict.fromkeys(keep))  # POINTS_FEATURES may later include the new cols
     return df[keep].dropna().reset_index(drop=True)
 
 
@@ -389,17 +446,20 @@ def player_next_game_features(
     rest_days: float = 2.0,
     opp_form_drtg: float = _LEAGUE_AVG_DRTG,
     opp_form_pace: float = _LEAGUE_AVG_PACE,
+    own_missing_min: float = _LEAGUE_AVG_MISSING,
 ) -> pd.DataFrame:
     """Single-row points-model input for a player's *next* game.
 
     *player_rows* is that player's slice of a player-games frame; rolling
     stats use their most recent games (unshifted — the next game hasn't
-    happened yet).
+    happened yet). *own_missing_min* defaults to the league-average roster
+    absence; pass a real value to model teammates sitting out.
     """
     df = player_rows.copy()
     df["GAME_DATE"] = pd.to_datetime(df["GAME_DATE"])
     df["MIN"] = pd.to_numeric(df["MIN"], errors="coerce").fillna(0)
     df = df.sort_values("GAME_DATE")
+    rate = df["PTS"] / df["MIN"].where(df["MIN"] > 0)
     return pd.DataFrame(
         [
             {
@@ -412,6 +472,9 @@ def player_next_game_features(
                 "opp_form_net": opp_form_net,
                 "opp_form_drtg": opp_form_drtg,
                 "opp_form_pace": opp_form_pace,
+                "rate_ewm": rate.ewm(halflife=10).mean().iloc[-1],
+                "min_ewm": df["MIN"].ewm(halflife=10).mean().iloc[-1],
+                "own_missing_min": own_missing_min,
             }
         ]
     )

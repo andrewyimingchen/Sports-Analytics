@@ -516,7 +516,13 @@ def predictions_page(client: NBAClient) -> None:
             "and reload this page."
         )
         return
-    snapshot = team_form_snapshot(client.team_games())
+    try:
+        snapshot = team_form_snapshot(client.team_games())
+    except Exception:
+        snapshot = pd.DataFrame()
+    if snapshot.empty:  # season hasn't started: fall back to last season's form
+        snapshot = team_form_snapshot(client.team_games(past_seasons(1)[0]))
+        st.caption("Season hasn't started — using last season's form (Elo already regressed).")
     try:
         snapshot["elo"] = league_elo().reindex(snapshot.index)
     except Exception:
