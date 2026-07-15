@@ -161,3 +161,30 @@ existed. Both shipped:
   standard 1,071-game subset actually improved to 70.7% accuracy (log
   loss 0.587, within noise of 0.585). The app falls back to last season's
   form snapshot before opening night.
+
+## Status update (2026-07-15, round 4): full stat line
+
+The two-stage structure (shared minutes stage × per-stat per-minute rate
+stage) generalized from points to the box line. Each stat judged on the
+standard holdout (2025-26, 21,204 player-games) against the player's own
+10-game average:
+
+| Stat | Model MAE | Baseline MAE | Verdict |
+|------|-----------|--------------|---------|
+| PTS  | 4.581     | 4.716        | shipped (unchanged from round 3) |
+| REB  | 1.902     | 1.948        | shipped |
+| AST  | 1.363     | 1.387        | shipped |
+| STL  | 0.725     | 0.748        | shipped |
+| FG3M | 0.917     | 0.918        | shipped (flat, not worse) |
+| BLK  | 0.532     | 0.522        | **rejected** |
+
+- **BLK — rejected.** Every variant lost to the 10-game average: the full
+  rate-stage feature set (0.532), rate-only (0.532), rate + minutes context
+  (0.531), rate + opponent pace (0.534), and single-stage ridge on the
+  average itself (0.532–0.541). Blocks are too rare and rim-protector-
+  concentrated for squared-error regression to beat the form average under
+  MAE. The app shows the 10-game average for blocks, labeled as such.
+- Rate stages share one feature template (the stat's own per-minute EWMA,
+  halflife 10, plus shot volume, venue, opponent form, and teammate
+  absences); the minutes stage is fit once and shared. Legacy points-only
+  artifacts still load.

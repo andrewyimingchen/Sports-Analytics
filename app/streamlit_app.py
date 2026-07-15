@@ -472,14 +472,36 @@ def points_tab(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> None:
         opp_form_drtg=float(snapshot.loc[opponent, "form_drtg"]),
         opp_form_pace=float(snapshot.loc[opponent, "form_pace"]),
     )
-    pred = float(models["points"].predict(x).iloc[0])
+    line = models["points"].predict_line(x).iloc[0]
     m = st.columns(3)
-    m[0].metric("Projected points", f"{pred:.1f}", border=True)
+    m[0].metric("Projected points", f"{line['PTS']:.1f}", border=True)
     m[1].metric("Last 5 games", f"{x['pts_r5'].iloc[0]:.1f}", border=True)
     m[2].metric("Last 10 games", f"{x['pts_r10'].iloc[0]:.1f}", border=True)
+
+    rest = [
+        (stat, label)
+        for stat, label in [
+            ("REB", "Rebounds"),
+            ("AST", "Assists"),
+            ("STL", "Steals"),
+            ("FG3M", "3-pointers"),
+        ]
+        if stat in line.index
+    ]
+    if rest:
+        cols = st.columns(len(rest) + 1)
+        for col, (stat, label) in zip(cols, rest, strict=False):
+            col.metric(label, f"{line[stat]:.1f}", border=True)
+        # blocks: the 10-game form average — every model variant lost to it
+        # on holdout, so the honest forecast is the average itself
+        blk = rows.sort_values("GAME_DATE")["BLK"].tail(10).mean()
+        cols[-1].metric("Blocks (form avg)", f"{blk:.1f}", border=True)
     st.caption(
-        "Ridge regression on recent scoring, minutes, and shot volume, venue, rest, "
-        "and opponent form — trained on three seasons of league-wide player games."
+        "Two-stage ridge — projected minutes × a per-minute rate for each stat — "
+        "on recent form, shot volume, venue, rest, opponent form, and teammate "
+        "absences; trained on three seasons of league-wide player games. Every "
+        "projected stat beats the player's own 10-game average on holdout; "
+        "blocks don't, so the form average is shown instead."
     )
 
 

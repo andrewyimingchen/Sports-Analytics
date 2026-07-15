@@ -55,7 +55,7 @@ uv run python -m nba_insights.ml.train
 | Model | Approach | Holdout result (2025-26) |
 |---|---|---|
 | Game outcome | Logistic regression on prior-seeded season-to-date form differentials (win%, net rating, four factors, pace, ORtg/DRtg), rest/back-to-backs, expected minutes out (derived absences), carried-over Elo + home court | 70.2% accuracy, log loss 0.589 over the **full season** incl. opening weeks (55% baseline: always pick home) |
-| Player points | Two-stage: minutes model (rotation trend, rest, roster availability) × per-minute rate model (EWMA form, opponent context, teammate absences) | MAE 4.58 (4.72 baseline: 10-game average) |
+| Player stat line | Two-stage: shared minutes model (rotation trend, rest, roster availability) × a per-minute rate model per stat (EWMA form, opponent context, teammate absences) | PTS MAE 4.58 (baseline 4.72), REB 1.90 (1.95), AST 1.36 (1.39), STL 0.72 (0.75), 3PM 0.92 (0.92); BLK rejected — form average wins |
 | Starting five | Observed lineup net rating (weighted by minutes together) blended with a per-36 plus-minus proxy, through a fitted win curve | blend; pure proxy when the five never played together |
 
 Evaluation is a true temporal holdout: trained on 2022-25, scored on the
