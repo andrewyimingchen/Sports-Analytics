@@ -23,6 +23,7 @@ from nba_insights.ml.features import (
     game_matchup_frame,
     player_game_features,
     prior_minute_rates,
+    prior_team_form,
     team_form_features,
 )
 
@@ -56,6 +57,8 @@ def build_matchups(client: NBAClient, seasons: list[str], elo: pd.DataFrame) -> 
     # window=None (season-to-date form): +3pp holdout accuracy over last-10.
     # availability (derived absences, prior-season-seeded): +0.8pp more.
     # carried-over Elo: +0.8pp more (69.2 -> 70.0, ll 0.588 -> 0.585).
+    # prior-seeded form: features from game 1 - covers the ~13% of games
+    # (each team's first ~10) the model previously refused to predict.
     frames = [
         game_matchup_frame(
             team_form_features(
@@ -64,6 +67,7 @@ def build_matchups(client: NBAClient, seasons: list[str], elo: pd.DataFrame) -> 
                 player_games=client.player_games(s),
                 prior_rates=prior_minute_rates(client.player_games(_prev_season(s))),
                 elo=elo,
+                form_priors=prior_team_form(client.team_games(_prev_season(s))),
             )
         )
         for s in seasons
@@ -72,9 +76,17 @@ def build_matchups(client: NBAClient, seasons: list[str], elo: pd.DataFrame) -> 
 
 
 def build_player_frames(client: NBAClient, seasons: list[str]) -> pd.DataFrame:
+    # availability-enabled team form so own_missing_min (teammate absences ->
+    # usage boost) is real rather than a league-average constant
     frames = [
         player_game_features(
-            client.player_games(s), team_form_features(client.team_games(s), window=None)
+            client.player_games(s),
+            team_form_features(
+                client.team_games(s),
+                window=None,
+                player_games=client.player_games(s),
+                prior_rates=prior_minute_rates(client.player_games(_prev_season(s))),
+            ),
         )
         for s in seasons
     ]

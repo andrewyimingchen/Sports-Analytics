@@ -348,6 +348,35 @@ def test_observed_and_blended_lineup():
     assert minutes2 == 0.0 and est2 == pytest.approx(2.0)  # pure proxy fallback
 
 
+def test_prior_seeded_form_defined_from_game_one():
+    from nba_insights.ml.features import FORM_PRIOR_WEIGHT, prior_team_form
+
+    prior_season = synthetic_team_games(30, seed=11)
+    season = synthetic_team_games(30, seed=12)
+    priors = prior_team_form(prior_season)
+    form = team_form_features(season, window=None, form_priors=priors)
+    # no NaNs anywhere: every game has features, including each team's first
+    assert form["form_net"].notna().all()
+    # game 1 form equals the prior exactly (no current-season evidence yet)
+    t1_first = form[form["TEAM_ID"] == 1].iloc[0]
+    assert t1_first["form_net"] == pytest.approx(priors.loc[1, "PLUS_MINUS"])
+    # game 2 blends prior (k pseudo-games) with one observed game
+    t1 = form[form["TEAM_ID"] == 1].reset_index(drop=True)
+    g1 = season[(season["TEAM_ID"] == 1)].sort_values("GAME_DATE").iloc[0]["PLUS_MINUS"]
+    expected = (priors.loc[1, "PLUS_MINUS"] * FORM_PRIOR_WEIGHT + g1) / (FORM_PRIOR_WEIGHT + 1)
+    assert t1["form_net"].iloc[1] == pytest.approx(expected)
+
+
+def test_player_features_include_usage_and_ewm():
+    pg = synthetic_player_games()
+    feats = player_game_features(pg)
+    assert {"rate_ewm", "min_ewm", "own_missing_min", "MIN"} <= set(feats.columns)
+    one = feats[feats["PLAYER_ID"] == 1]
+    # scorer's per-minute rate should exceed the role player's
+    role = feats[feats["PLAYER_ID"] == 2]
+    assert one["rate_ewm"].mean() > role["rate_ewm"].mean()
+
+
 def test_elo_pregame_and_ordering():
     from nba_insights.ml.elo import BASE, elo_ratings
 

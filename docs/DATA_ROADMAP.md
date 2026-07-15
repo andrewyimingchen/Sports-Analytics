@@ -141,3 +141,23 @@ Three candidates tested on the standard holdout (baseline 69.2% / 0.588):
 Remaining known lever: real injury/availability *feeds* at inference time
 (bead 1nn, in season). Beyond that, the market ceiling (~70%) is close —
 gains from here are fractions of a point.
+
+## Status update (2026-07-15, round 3): points model + coverage
+
+Redirected effort from the near-ceiling outcome model to where headroom
+existed. Both shipped:
+
+- **Two-stage points model — MAE 4.70 → 4.58** (baseline 4.72). Minutes
+  predicted from rotation trend/rest/roster availability, per-minute rate
+  from EWMA form + opponent context, projection = product. Single-feature
+  contributions measured first: own-team absences alone 4.65, EWMA alone
+  4.69. Most of a player's points variance is minutes variance — modeling
+  it explicitly was worth more than any feature.
+- **Prior-seeded form → full-season coverage.** Form features seeded with
+  prior-season team means (10 pseudo-games) exist from game 1, so the
+  outcome model no longer refuses each team's first ~10 games: 154
+  previously-unpredictable early games now score 66.9% (their home
+  baseline: 59.1%), full-season 70.2% / 0.589 over 1,225 games, and the
+  standard 1,071-game subset actually improved to 70.7% accuracy (log
+  loss 0.587, within noise of 0.585). The app falls back to last season's
+  form snapshot before opening night.
