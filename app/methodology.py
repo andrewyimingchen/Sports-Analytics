@@ -53,7 +53,8 @@ def _coef_chart(pipeline, features: list[str], title: str, pal: dict) -> go.Figu
         .reset_index(drop=True)
     )
     # diverging encoding: sign is the polarity, blue helps home / red hurts
-    colors = ["#2a78d6" if c > 0 else "#e34948" for c in df["coef"]]
+    blue, red = pal["series"][0], pal["series"][7]
+    colors = [blue if c > 0 else red for c in df["coef"]]
     fig = go.Figure(
         go.Bar(x=df["coef"], y=df["feature"], orientation="h", marker_color=colors)
     )
@@ -96,7 +97,7 @@ def _calibration_chart(preds: pd.DataFrame, pal: dict) -> go.Figure:
     fig.add_trace(
         go.Scatter(
             x=cal["predicted"], y=cal["actual"], mode="lines+markers",
-            name="model", line=dict(color="#2a78d6", width=2),
+            name="model", line=dict(color=pal["series"][0], width=2),
             marker=dict(size=(cal["n"] / cal["n"].max() * 14 + 6)),
             text=[f"{n} games" for n in cal["n"]],
         )
@@ -163,7 +164,7 @@ features, the classifier is not the bottleneck.
             x=journey["accuracy"],
             y=journey["stage"],
             orientation="h",
-            marker_color=["#898781"] + ["#2a78d6"] * (len(journey) - 1),
+            marker_color=[pal["muted"]] + [pal["series"][0]] * (len(journey) - 1),
             text=[f"{a:.1f}%" for a in journey["accuracy"]],
             textposition="outside",
         )

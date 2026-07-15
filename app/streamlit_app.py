@@ -40,16 +40,36 @@ from nba_insights.viz import half_court_trace
 
 HEADSHOT_URL = "https://cdn.nba.com/headshots/nba/latest/1040x760/{player_id}.png"
 
-# Reference dataviz palette: categorical slots in fixed order, chrome inks.
-# Dark values are the same hues re-stepped for the dark surface, not a flip.
+# Reference dataviz palette: categorical slots in fixed order (the July 2026
+# re-ordering — validated for adjacent CVD and normal-vision separation on the
+# app's own surfaces, #fcfcfb / #1a1a19). Dark values are the same hues
+# re-stepped for the dark surface, not a flip.
 _LIGHT = {
-    "series": ["#2a78d6", "#1baf7a", "#eda100", "#008300", "#4a3aa7", "#e34948"],
+    "series": [
+        "#2a78d6",
+        "#008300",
+        "#e87ba4",
+        "#eda100",
+        "#1baf7a",
+        "#eb6834",
+        "#4a3aa7",
+        "#e34948",
+    ],
     "grid": "#e1e0d9",
     "muted": "#898781",
     "ink2": "#52514e",
 }
 _DARK = {
-    "series": ["#3987e5", "#199e70", "#c98500", "#008300", "#9085e9", "#e66767"],
+    "series": [
+        "#3987e5",
+        "#008300",
+        "#d55181",
+        "#c98500",
+        "#199e70",
+        "#d95926",
+        "#9085e9",
+        "#e66767",
+    ],
     "grid": "#2c2c2a",
     "muted": "#898781",
     "ink2": "#c3c2b7",
@@ -127,9 +147,7 @@ def career_chart(per_game: pd.DataFrame) -> go.Figure:
 def form_chart(form: pd.DataFrame, stat: str, window: int) -> go.Figure:
     fig = go.Figure()
     fig.add_trace(
-        go.Bar(
-            x=form["GAME_DATE"], y=form[stat], name=f"{stat} per game", marker_color=PAL["grid"]
-        )
+        go.Bar(x=form["GAME_DATE"], y=form[stat], name=f"{stat} per game", marker_color=PAL["grid"])
     )
     fig.add_trace(
         go.Scatter(
@@ -244,6 +262,7 @@ def profile_header(player: dict, totals: pd.DataFrame, per_game: pd.DataFrame) -
                 f"{stat} / game",
                 f"{latest[stat]:.1f}",
                 delta=f"{latest[stat] - career_avg:+.1f} vs career",
+                border=True,
             )
 
 
@@ -264,6 +283,8 @@ def profile_page(client: NBAClient) -> None:
 
     seasons = list(per_game["SEASON_ID"])
     st.plotly_chart(career_chart(per_game), width="stretch")
+    with st.expander("Career data as table"):
+        st.dataframe(per_game, width="stretch", hide_index=True)
 
     season = st.selectbox("Season", list(reversed(seasons)))
     left, right = st.columns(2)
@@ -345,9 +366,7 @@ def compare_page(client: NBAClient) -> None:
         return
 
     try:
-        careers = {
-            p["full_name"]: career_per_game(client.career_stats(p["id"])) for p in (a, b)
-        }
+        careers = {p["full_name"]: career_per_game(client.career_stats(p["id"])) for p in (a, b)}
         if all(not df.empty for df in careers.values()):
             st.plotly_chart(compare_careers_chart(careers), width="stretch")
     except Exception as e:
@@ -376,13 +395,9 @@ def outcome_tab(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> None
     with st.expander("Who's out? (adjusts win probability)"):
         out_cols = st.columns(2)
         for col, team in zip(out_cols, (home, away), strict=True):
-            roster = league[league["TEAM_ABBREVIATION"] == team].sort_values(
-                "MIN", ascending=False
-            )
+            roster = league[league["TEAM_ABBREVIATION"] == team].sort_values("MIN", ascending=False)
             out = col.multiselect(f"{team} out", list(roster["PLAYER_NAME"]), key=f"out_{team}")
-            missing[team] = float(
-                roster.loc[roster["PLAYER_NAME"].isin(out), "MIN"].sum()
-            )
+            missing[team] = float(roster.loc[roster["PLAYER_NAME"].isin(out), "MIN"].sum())
 
     x = matchup_features(
         snapshot,
@@ -393,8 +408,8 @@ def outcome_tab(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> None
     )
     prob = float(models["outcome"].predict_proba(x).iloc[0])
     m = st.columns(2)
-    m[0].metric(f"{home} win probability (home)", f"{prob:.0%}")
-    m[1].metric(f"{away} win probability (away)", f"{1 - prob:.0%}")
+    m[0].metric(f"{home} win probability (home)", f"{prob:.0%}", border=True)
+    m[1].metric(f"{away} win probability (away)", f"{1 - prob:.0%}", border=True)
     st.caption(
         "Logistic regression on season-to-date form differentials — win%, net "
         "rating, four factors (eFG%, TOV%, OREB%, FT rate), pace, ORtg/DRtg, "
@@ -459,9 +474,9 @@ def points_tab(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> None:
     )
     pred = float(models["points"].predict(x).iloc[0])
     m = st.columns(3)
-    m[0].metric("Projected points", f"{pred:.1f}")
-    m[1].metric("Last 5 games", f"{x['pts_r5'].iloc[0]:.1f}")
-    m[2].metric("Last 10 games", f"{x['pts_r10'].iloc[0]:.1f}")
+    m[0].metric("Projected points", f"{pred:.1f}", border=True)
+    m[1].metric("Last 5 games", f"{x['pts_r5'].iloc[0]:.1f}", border=True)
+    m[2].metric("Last 10 games", f"{x['pts_r10'].iloc[0]:.1f}", border=True)
     st.caption(
         "Ridge regression on recent scoring, minutes, and shot volume, venue, rest, "
         "and opponent form — trained on three seasons of league-wide player games."
@@ -488,9 +503,9 @@ def lineup_tab(client: NBAClient, models: dict) -> None:
     net, minutes = blended_lineup_estimate(lineups, league, five, ids)
     prob = models["curve"].win_probability(net)
     m = st.columns(3)
-    m[0].metric("Estimated net rating", f"{net:+.1f}")
-    m[1].metric("Win probability vs average opponent", f"{prob:.0%}")
-    m[2].metric("Minutes together", f"{minutes:.0f}")
+    m[0].metric("Estimated net rating", f"{net:+.1f}", border=True)
+    m[1].metric("Win probability vs average opponent", f"{prob:.0%}", border=True)
+    m[2].metric("Minutes together", f"{minutes:.0f}", border=True)
     if minutes > 0:
         st.caption(
             "Blend of this lineup's observed net rating this season (weighted by "
@@ -541,27 +556,75 @@ def predictions_page(client: NBAClient) -> None:
         lineup_tab(client, models)
 
 
+def page_header(title: str, caption: str) -> None:
+    st.title(title)
+    st.caption(caption)
+
+
+def profile_view() -> None:
+    page_header("Player profile", "Career trajectory, season form, shot chart, league percentiles.")
+    profile_page(get_client())
+
+
+def compare_view() -> None:
+    page_header("Compare players", "Two players side by side — current season and career.")
+    compare_page(get_client())
+
+
+def predictions_view() -> None:
+    page_header(
+        "Predictions", "Game outcomes, player points, and lineup estimates from the trained models."
+    )
+    predictions_page(get_client())
+
+
+def methodology_view() -> None:
+    page_header("Methodology", "How the models are built, measured, and kept honest.")
+    import methodology
+
+    methodology.render(get_client(), load_models(), PAL)
+
+
 def main() -> None:
     PAL.update(theme_palette())
-    st.title("🏀 NBA Insights")
-    client = get_client()
-    page = st.sidebar.radio(
-        "View", ["Player profile", "Compare players", "Predictions", "Methodology"]
+    nav = st.navigation(
+        {
+            "Explore": [
+                st.Page(
+                    profile_view,
+                    title="Player profile",
+                    icon=":material/person:",
+                    url_path="profile",
+                    default=True,
+                ),
+                st.Page(
+                    compare_view,
+                    title="Compare players",
+                    icon=":material/group:",
+                    url_path="compare",
+                ),
+            ],
+            "Model": [
+                st.Page(
+                    predictions_view,
+                    title="Predictions",
+                    icon=":material/insights:",
+                    url_path="predictions",
+                ),
+                st.Page(
+                    methodology_view,
+                    title="Methodology",
+                    icon=":material/science:",
+                    url_path="methodology",
+                ),
+            ],
+        }
     )
     st.sidebar.caption(
         "Data: stats.nba.com via nba_api. Responses are cached locally; "
         "current-season data refreshes daily."
     )
-    if page == "Player profile":
-        profile_page(client)
-    elif page == "Compare players":
-        compare_page(client)
-    elif page == "Predictions":
-        predictions_page(client)
-    else:
-        import methodology
-
-        methodology.render(client, load_models(), PAL)
+    nav.run()
 
 
 main()

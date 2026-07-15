@@ -1,0 +1,29 @@
+# App theme built from the same design tokens as the chart palette
+# (see PAL in app/streamlit_app.py), so chrome and charts read as one system.
+
+[theme]
+font = 'system-ui, -apple-system, "Segoe UI", sans-serif'
+headingFont = 'system-ui, -apple-system, "Segoe UI", sans-serif'
+baseRadius = "0.5rem"
+
+[theme.light]
+primaryColor = "#2a78d6"
+backgroundColor = "#fcfcfb"
+secondaryBackgroundColor = "#f0efec"
+textColor = "#0b0b0b"
+borderColor = "#e1e0d9"
+linkColor = "#2a78d6"
+
+[theme.light.sidebar]
+backgroundColor = "#f9f9f7"
+
+[theme.dark]
+primaryColor = "#3987e5"
+backgroundColor = "#1a1a19"
+secondaryBackgroundColor = "#262624"
+textColor = "#ffffff"
+borderColor = "#2c2c2a"
+linkColor = "#3987e5"
+
+[theme.dark.sidebar]
+backgroundColor = "#0d0d0d"
