@@ -18,6 +18,7 @@ import pandas as pd
 from nba_insights.config import MODELS_DIR, current_season, past_seasons
 from nba_insights.ingest import NBAClient
 from nba_insights.ml import GameOutcomeModel, PlayerPointsModel, WinCurve
+from nba_insights.ml.elo import elo_ratings
 from nba_insights.ml.features import (
     game_matchup_frame,
     player_game_features,
@@ -37,9 +38,24 @@ POINTS_PATH = MODELS_DIR / "points.joblib"
 WIN_CURVE_PATH = MODELS_DIR / "win_curve.joblib"
 
 
-def build_matchups(client: NBAClient, seasons: list[str]) -> pd.DataFrame:
+ELO_WARMUP_SEASONS = 2  # extra seasons before the earliest, so Elo converges
+
+
+def build_elo(client: NBAClient, seasons: list[str]) -> pd.DataFrame:
+    """Continuous Elo over warm-up + given seasons (one pass, carried over)."""
+    earliest = min(int(s[:4]) for s in seasons)
+    warmup = [
+        f"{y}-{(y + 1) % 100:02d}"
+        for y in range(earliest - ELO_WARMUP_SEASONS, earliest)
+    ]
+    frames = [client.team_games(s) for s in [*warmup, *sorted(seasons)]]
+    return elo_ratings(pd.concat(frames, ignore_index=True))
+
+
+def build_matchups(client: NBAClient, seasons: list[str], elo: pd.DataFrame) -> pd.DataFrame:
     # window=None (season-to-date form): +3pp holdout accuracy over last-10.
     # availability (derived absences, prior-season-seeded): +0.8pp more.
+    # carried-over Elo: +0.8pp more (69.2 -> 70.0, ll 0.588 -> 0.585).
     frames = [
         game_matchup_frame(
             team_form_features(
@@ -47,6 +63,7 @@ def build_matchups(client: NBAClient, seasons: list[str]) -> pd.DataFrame:
                 window=None,
                 player_games=client.player_games(s),
                 prior_rates=prior_minute_rates(client.player_games(_prev_season(s))),
+                elo=elo,
             )
         )
         for s in seasons
@@ -76,8 +93,9 @@ def main() -> None:
     logger.info("training on %s, evaluating on %s", train_seasons, test_season)
 
     logger.info("building game matchup frames…")
-    train_matchups = build_matchups(client, train_seasons)
-    test_matchups = build_matchups(client, [test_season])
+    elo = build_elo(client, [*train_seasons, test_season])
+    train_matchups = build_matchups(client, train_seasons, elo)
+    test_matchups = build_matchups(client, [test_season], elo)
     outcome = GameOutcomeModel().fit(train_matchups)
     metrics = outcome.evaluate(test_matchups)
     logger.info("game outcome (holdout %s): %s", test_season, metrics)

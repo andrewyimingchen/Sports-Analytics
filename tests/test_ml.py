@@ -348,6 +348,84 @@ def test_observed_and_blended_lineup():
     assert minutes2 == 0.0 and est2 == pytest.approx(2.0)  # pure proxy fallback
 
 
+def test_elo_pregame_and_ordering():
+    from nba_insights.ml.elo import BASE, elo_ratings
+
+    games = synthetic_team_games(60)
+    elo = elo_ratings(games)
+    # pre-game: both teams enter the very first game at BASE
+    tg = games.copy()
+    first_gid = tg.sort_values("GAME_DATE")["GAME_ID"].iloc[0]
+    assert (elo[elo["GAME_ID"] == first_gid]["elo"] == BASE).all()
+    # by the end, the strongest synthetic team should out-rate the weakest
+    last = elo.groupby("TEAM_ID").tail(1).set_index("TEAM_ID")["elo"]
+    assert last[1] > last[4]
+
+
+def test_current_elo_and_matchup_integration():
+    from nba_insights.ml.elo import current_elo, elo_ratings
+
+    games = synthetic_team_games(60)
+    final = current_elo(games)
+    assert final["T1"] > final["T4"]
+
+    # elo merged into form flows through to matchup elo_diff
+    form = team_form_features(games, window=5, elo=elo_ratings(games))
+    matchups = game_matchup_frame(form)
+    assert matchups["elo_diff"].abs().sum() > 0
+
+    # snapshot + elo column -> matchup_features includes the diff
+    snap = team_form_snapshot(games, window=10)
+    snap["elo"] = final.reindex(snap.index)
+    x = matchup_features(snap, "T1", "T4")
+    assert x["elo_diff"].iloc[0] > 0
+
+    # without elo anywhere, the diff is neutral
+    form0 = team_form_features(games, window=5)
+    assert (game_matchup_frame(form0)["elo_diff"] == 0).all()
+
+
+def test_elo_season_rollover_regresses():
+    from nba_insights.ml.elo import (
+        BASE,
+        CARRY,
+        HOME_ADV,
+        K,
+        _expected_home,
+        _mov_multiplier,
+        elo_ratings,
+    )
+
+    def game(season, date, gid, margin):
+        rows = []
+        for team, opp, pm, home in [(1, 2, margin, True), (2, 1, -margin, False)]:
+            rows.append(
+                {
+                    "SEASON_ID": season,
+                    "TEAM_ID": team,
+                    "TEAM_ABBREVIATION": f"T{team}",
+                    "GAME_ID": gid,
+                    "GAME_DATE": date,
+                    "MATCHUP": f"T{team} vs. T{opp}" if home else f"T{team} @ T{opp}",
+                    "WL": "W" if pm > 0 else "L",
+                    "PTS": 110,
+                    "PLUS_MINUS": float(pm),
+                }
+            )
+        return rows
+
+    games = pd.DataFrame(
+        game("22024", "2025-01-01", "G1", 10) + game("22025", "2025-11-01", "G2", 10)
+    )
+    elo = elo_ratings(games)
+    # replicate the single season-1 update by hand
+    shift = K * _mov_multiplier(10, HOME_ADV) * (1 - _expected_home(BASE, BASE))
+    end_t1 = BASE + shift
+    expected_entry = CARRY * end_t1 + (1 - CARRY) * BASE
+    entry_t1 = elo[(elo["GAME_ID"] == "G2") & (elo["TEAM_ID"] == 1)]["elo"].iloc[0]
+    assert entry_t1 == pytest.approx(expected_entry)
+
+
 def test_lineup_net_estimate():
     league = pd.DataFrame(
         {

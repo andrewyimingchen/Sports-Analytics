@@ -115,3 +115,23 @@ Measured on the same 1,071-game 2025-26 holdout:
   stint/lineup-level modeling (the phase where GT filtering should
   actually matter, since stints are short windows).
 - **#9 unchanged** — odds benchmark needs a key.
+
+## Status update (2026-07-15): feature-engineering round on existing data
+
+Three candidates tested on the standard holdout (baseline 69.2% / 0.588):
+
+- **Carried-over Elo — shipped: 70.0% / 0.585.** Margin-aware Elo (538-style
+  MOV multiplier), 75% carried across seasons, two warm-up seasons before
+  training data. Improved both metrics at identical coverage; first variant
+  to reach the round number. Also opens a future door: Elo has an opinion
+  from opening night, while form features drop each team's first 10 games.
+- **Venue-split form — rejected** (log loss 0.594): home/road form splits
+  add noise; the model's intercept already carries home court.
+- **SOS-adjusted net — rejected** (log loss 0.593): opponent-strength
+  adjustment double-counts what the four factors + net already encode.
+- **Gradient boosting — rejected** (log loss 0.621): logistic regression
+  wins comfortably on these smooth, collinear features at n≈3,500.
+
+Remaining known lever: real injury/availability *feeds* at inference time
+(bead 1nn, in season). Beyond that, the market ceiling (~70%) is close —
+gains from here are fractions of a point.
