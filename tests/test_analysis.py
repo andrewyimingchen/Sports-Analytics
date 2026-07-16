@@ -2,6 +2,7 @@ import pandas as pd
 import pytest
 
 from nba_insights.analysis import (
+    attach_ratings,
     career_per_game,
     comparison_table,
     league_leaders,
@@ -120,3 +121,24 @@ def test_league_leaders_ranks_and_filters_small_samples(league_stats):
 def test_league_leaders_unknown_stat_raises(league_stats):
     with pytest.raises(KeyError, match="XG"):
         league_leaders(league_stats, "XG")
+
+
+def test_attach_ratings_merges_and_keeps_everyone(league_stats):
+    league = league_stats.assign(PLAYER_ID=[1, 2, 3, 4, 5])
+    advanced = pd.DataFrame({"PLAYER_ID": [1, 2], "NET_RATING": [8.5, -2.0]})
+    clutch = pd.DataFrame({"PLAYER_ID": [1], "GP": [30], "NET_RATING": [12.0]})
+    out = attach_ratings(league, advanced, clutch)
+    assert len(out) == len(league)  # nobody dropped
+    alice = out[out["PLAYER_NAME"] == "Alice"].iloc[0]
+    assert alice["NET_RATING"] == 8.5
+    assert alice["CLUTCH_NET_RATING"] == 12.0
+    assert alice["CLUTCH_GP"] == 30
+    assert pd.isna(out.loc[out["PLAYER_NAME"] == "Carol", "NET_RATING"].iloc[0])
+
+
+def test_attach_ratings_tolerates_missing_tables(league_stats):
+    league = league_stats.assign(PLAYER_ID=range(5))
+    out = attach_ratings(league, None, None)
+    assert "NET_RATING" not in out.columns
+    with pytest.raises(KeyError, match="PLAYER_ID"):
+        attach_ratings(league_stats)

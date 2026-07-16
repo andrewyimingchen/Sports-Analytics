@@ -15,6 +15,7 @@ from datetime import timedelta
 import pandas as pd
 from nba_api.stats.endpoints import (
     leaguedashlineups,
+    leaguedashplayerclutch,
     leaguedashplayerstats,
     leaguegamefinder,
     leaguestandings,
@@ -110,6 +111,36 @@ class NBAClient:
             f"league_player_stats/{season}/{per_mode}",
             lambda: leaguedashplayerstats.LeagueDashPlayerStats(
                 season=season, per_mode_detailed=per_mode
+            ).get_data_frames()[0],
+            ttl=self._season_ttl(season),
+        )
+
+    def league_player_advanced(self, season: str | None = None) -> pd.DataFrame:
+        """One row per player: advanced metrics (net/off/def rating, usage)."""
+        season = season or current_season()
+        return self._cached(
+            f"league_player_advanced/{season}",
+            lambda: leaguedashplayerstats.LeagueDashPlayerStats(
+                season=season, measure_type_detailed_defense="Advanced"
+            ).get_data_frames()[0],
+            ttl=self._season_ttl(season),
+        )
+
+    def league_player_clutch(self, season: str | None = None) -> pd.DataFrame:
+        """Per-player advanced stats in the clutch (last 5 min, margin <= 5).
+
+        GP and MIN in this table are clutch games and clutch minutes per
+        game, not season-wide values.
+        """
+        season = season or current_season()
+        return self._cached(
+            f"league_player_clutch/{season}",
+            lambda: leaguedashplayerclutch.LeagueDashPlayerClutch(
+                season=season,
+                measure_type_detailed_defense="Advanced",
+                clutch_time="Last 5 Minutes",
+                ahead_behind="Ahead or Behind",
+                point_diff=5,
             ).get_data_frames()[0],
             ttl=self._season_ttl(season),
         )

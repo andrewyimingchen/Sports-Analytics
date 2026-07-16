@@ -4,7 +4,20 @@ from __future__ import annotations
 
 import pandas as pd
 
-DEFAULT_STATS = ["GP", "MIN", "PTS", "AST", "REB", "STL", "BLK", "TOV", "FG_PCT", "FG3_PCT"]
+DEFAULT_STATS = [
+    "GP",
+    "MIN",
+    "PTS",
+    "AST",
+    "REB",
+    "STL",
+    "BLK",
+    "TOV",
+    "FG_PCT",
+    "FG3_PCT",
+    "NET_RATING",
+    "CLUTCH_NET_RATING",
+]
 
 
 def comparison_table(

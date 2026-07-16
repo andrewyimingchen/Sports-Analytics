@@ -4,7 +4,18 @@ from __future__ import annotations
 
 import pandas as pd
 
-DEFAULT_STATS = ["PTS", "AST", "REB", "STL", "BLK", "FG_PCT", "FG3_PCT", "FT_PCT"]
+DEFAULT_STATS = [
+    "PTS",
+    "AST",
+    "REB",
+    "STL",
+    "BLK",
+    "FG_PCT",
+    "FG3_PCT",
+    "FT_PCT",
+    "NET_RATING",
+    "CLUTCH_NET_RATING",
+]
 
 
 def percentile_ranks(

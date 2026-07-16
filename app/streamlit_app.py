@@ -15,6 +15,7 @@ import streamlit as st
 sys.path.insert(0, str(Path(__file__).parent))  # sibling modules (methodology, ui)
 
 from nba_insights.analysis import (
+    attach_ratings,
     career_per_game,
     comparison_table,
     league_leaders,
@@ -74,6 +75,25 @@ PAL = dict(_LIGHT)
 @st.cache_resource
 def get_client() -> NBAClient:
     return NBAClient()
+
+
+# display names for the rating columns on charts and tables
+RATING_LABELS = {"NET_RATING": "NET RTG", "CLUTCH_NET_RATING": "CLUTCH NET"}
+
+
+def league_with_ratings(client: NBAClient) -> pd.DataFrame:
+    """League per-game stats enriched with net and clutch ratings.
+
+    Falls back to the plain per-game table if the rating endpoints are
+    unreachable — downstream defaults skip the missing columns.
+    """
+    league = client.league_player_stats()
+    try:
+        return attach_ratings(
+            league, client.league_player_advanced(), client.league_player_clutch()
+        )
+    except Exception:
+        return league
 
 
 @st.cache_data(ttl=86400, show_spinner=False)
@@ -185,9 +205,9 @@ def percentile_chart(ranks: pd.Series) -> go.Figure:
         )
     )
     fig = base_layout(fig, f"League percentile, {current_season()}")
-    fig.update_layout(hovermode="closest", showlegend=False, margin=dict(l=70))
+    fig.update_layout(hovermode="closest", showlegend=False)
     fig.update_xaxes(range=[0, 108], showgrid=True, gridcolor=PAL["grid"])
-    fig.update_yaxes(autorange="reversed", showgrid=False)
+    fig.update_yaxes(autorange="reversed", showgrid=False, automargin=True)
     return fig
 
 
@@ -279,7 +299,12 @@ def pick_player(client: NBAClient, label: str, key: str) -> dict | None:
     return names[choice]
 
 
-def profile_header(player: dict, totals: pd.DataFrame, per_game: pd.DataFrame) -> None:
+def profile_header(
+    player: dict,
+    totals: pd.DataFrame,
+    per_game: pd.DataFrame,
+    ratings: pd.Series | None = None,
+) -> None:
     """Headshot, team context, and headline stat tiles with career deltas."""
     latest_totals = totals[totals["GP"] > 0].sort_values("SEASON_ID").iloc[-1]
     latest = per_game.iloc[-1]
@@ -294,7 +319,8 @@ def profile_header(player: dict, totals: pd.DataFrame, per_game: pd.DataFrame) -
         team = latest_totals.get("TEAM_ABBREVIATION", "")
         st.caption(f"{team} · {latest['SEASON_ID']} · {int(latest['GP'])} games")
 
-        tiles = st.columns(3)
+        has_ratings = ratings is not None and pd.notna(ratings.get("NET_RATING"))
+        tiles = st.columns(5 if has_ratings else 3)
         career_games = totals["GP"].sum()
         for col, stat in zip(tiles, ("PTS", "AST", "REB"), strict=False):
             career_avg = totals[stat].sum() / career_games if career_games else 0
@@ -302,6 +328,14 @@ def profile_header(player: dict, totals: pd.DataFrame, per_game: pd.DataFrame) -
                 f"{stat} / game",
                 f"{latest[stat]:.1f}",
                 delta=f"{latest[stat] - career_avg:+.1f} vs career",
+            )
+        if has_ratings:
+            tiles[3].metric("Net rating", f"{ratings['NET_RATING']:+.1f}")
+            clutch = ratings.get("CLUTCH_NET_RATING")
+            tiles[4].metric(
+                "Clutch net",
+                f"{clutch:+.1f}" if pd.notna(clutch) else "—",
+                help="Net rating in the last 5 minutes with the score within 5 points.",
             )
 
 
@@ -382,7 +416,15 @@ def profile_page(client: NBAClient) -> None:
         return
 
     per_game = career_per_game(totals)
-    profile_header(player, totals, per_game)
+    ratings = None
+    if player["is_active"]:
+        try:
+            row = league_with_ratings(client)
+            row = row[row["PLAYER_ID"] == player["id"]]
+            ratings = row.iloc[0] if not row.empty else None
+        except Exception:
+            pass
+    profile_header(player, totals, per_game, ratings)
 
     seasons = list(per_game["SEASON_ID"])
     st.plotly_chart(career_chart(per_game), width="stretch")
@@ -391,8 +433,8 @@ def profile_page(client: NBAClient) -> None:
 
     if player["is_active"]:
         try:
-            league = client.league_player_stats()
-            ranks = percentile_ranks(league, player["full_name"])
+            league = league_with_ratings(client)
+            ranks = percentile_ranks(league, player["full_name"]).rename(RATING_LABELS)
             st.plotly_chart(percentile_chart(ranks), width="stretch")
             with st.expander("Percentile data as table"):
                 st.dataframe(ranks.to_frame("percentile"))
@@ -414,11 +456,14 @@ def compare_page(client: NBAClient) -> None:
         leader_suggestions(client, "cmp_a", "cmp_b")
         return
     try:
-        league = client.league_player_stats()
+        league = league_with_ratings(client)
         table = comparison_table(league, [a["full_name"], b["full_name"]])
-        st.dataframe(table, width="stretch")
+        st.dataframe(table.rename(index=RATING_LABELS), width="stretch")
 
-        ranks = pd.concat([percentile_ranks(league, p["full_name"]) for p in (a, b)], axis=1)
+        ranks = pd.concat(
+            [percentile_ranks(league, p["full_name"]).rename(RATING_LABELS) for p in (a, b)],
+            axis=1,
+        )
         fig = go.Figure()
         for i, name in enumerate(ranks.columns):
             fig.add_trace(
@@ -431,9 +476,9 @@ def compare_page(client: NBAClient) -> None:
                 )
             )
         fig = base_layout(fig, "League percentile, side by side")
-        fig.update_layout(barmode="group", hovermode="closest", margin=dict(l=70))
+        fig.update_layout(barmode="group", hovermode="closest")
         fig.update_xaxes(range=[0, 100])
-        fig.update_yaxes(autorange="reversed")
+        fig.update_yaxes(autorange="reversed", automargin=True)
         st.plotly_chart(fig, width="stretch")
     except KeyError as e:
         st.warning(f"Comparison needs both players active this season: {e}")
@@ -751,25 +796,36 @@ def home_page(client: NBAClient) -> None:
     """League pulse: the app opens with content, not an empty search box."""
     st.caption(f"League pulse · {current_season()}")
     try:
-        league = client.league_player_stats()
+        league = league_with_ratings(client)
     except Exception as e:
         st.error(f"Could not load league stats: {e}")
         return
 
-    tiles = st.columns(4)
+    specs = [
+        ("PTS", "Points"),
+        ("AST", "Assists"),
+        ("REB", "Rebounds"),
+        ("FG3M", "Threes"),
+        ("NET_RATING", "Net rating"),
+        ("CLUTCH_NET_RATING", "Clutch net"),
+    ]
+    tiles = st.columns(len(specs))
     boards: dict[str, pd.DataFrame] = {}
-    for col, (stat, label) in zip(
-        tiles,
-        [("PTS", "Points"), ("AST", "Assists"), ("REB", "Rebounds"), ("FG3M", "Threes")],
-        strict=False,
-    ):
+    for col, (stat, label) in zip(tiles, specs, strict=True):
+        pool = league
+        if stat == "NET_RATING":
+            pool = league[league["MIN"] >= 15]  # rotation players only
+        elif stat == "CLUTCH_NET_RATING" and "CLUTCH_GP" in league.columns:
+            pool = league[league["CLUTCH_GP"] >= 15]  # enough clutch games
         try:
-            boards[label] = league_leaders(league, stat, top=10)
+            boards[label] = league_leaders(pool, stat, top=10)
         except KeyError:
             continue
         row = boards[label].iloc[0]
         team = row.get("TEAM_ABBREVIATION", "")
-        col.metric(f"{label} — {row['PLAYER_NAME']} · {team}", f"{row[stat]:.1f}")
+        value = f"{row[stat]:+.1f}" if "RATING" in stat else f"{row[stat]:.1f}"
+        col.metric(label, value)
+        col.caption(f"{row['PLAYER_NAME']} · {team}")
     with st.expander("Top-ten leaderboards"):
         for tab, label in zip(st.tabs(list(boards)), boards, strict=True):
             with tab:
