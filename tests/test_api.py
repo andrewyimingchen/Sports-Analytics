@@ -37,6 +37,9 @@ class FakeNBAClient:
     def search_players(self, name):
         return [p for p in (ALICE, BOB) if name.lower() in p["full_name"].lower()]
 
+    def find_player(self, player_id):
+        return next((p for p in (ALICE, BOB) if p["id"] == player_id), None)
+
     def career_stats(self, player_id):
         return self.career if player_id == 1 else pd.DataFrame()
 

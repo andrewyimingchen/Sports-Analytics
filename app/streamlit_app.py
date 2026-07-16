@@ -5,6 +5,8 @@ Run with: uv run streamlit run app/streamlit_app.py
 
 from __future__ import annotations
 
+import json
+import logging
 import sys
 from pathlib import Path
 
@@ -14,8 +16,8 @@ import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).parent))  # sibling modules (methodology, ui)
 
+from nba_insights import serve
 from nba_insights.analysis import (
-    attach_ratings,
     career_per_game,
     comparison_table,
     league_leaders,
@@ -38,14 +40,16 @@ from nba_insights.ml.elo import current_elo
 from nba_insights.ml.features import (
     matchup_features,
     player_next_game_features,
+    prior_team_form,
     team_form_snapshot,
+    team_rest_features,
     upcoming_games,
 )
-from nba_insights.ml.train import OUTCOME_PATH, POINTS_PATH, WIN_CURVE_PATH
+from nba_insights.ml.train import METRICS_PATH, OUTCOME_PATH, POINTS_PATH, WIN_CURVE_PATH
 from nba_insights.viz import half_court_trace
 from ui import inject_css
 
-HEADSHOT_URL = "https://cdn.nba.com/headshots/nba/latest/1040x760/{player_id}.png"
+logger = logging.getLogger(__name__)
 
 # Reference dataviz palette: categorical slots in fixed order, chrome inks.
 # Dark values are the same hues re-stepped for the dark surface, not a flip.
@@ -83,36 +87,42 @@ def get_client() -> NBAClient:
 RATING_LABELS = {"NET_RATING": "NET RTG", "CLUTCH_NET_RATING": "CLUTCH NET"}
 
 
-def league_with_ratings(client: NBAClient) -> pd.DataFrame:
-    """League per-game stats enriched with net and clutch ratings.
+@st.cache_data(ttl=3600, show_spinner=False)
+def league_with_ratings(_client: NBAClient) -> pd.DataFrame:
+    """Ratings-attached league table (see serve.league_with_ratings),
+    cached at the app layer: pages call this several times per rerun and
+    the frame shouldn't be re-read from SQLite each time."""
+    return serve.league_with_ratings(_client)
 
-    Falls back to the plain per-game table if the rating endpoints are
-    unreachable — downstream defaults skip the missing columns.
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def season_player_games(_client: NBAClient) -> pd.DataFrame:
+    """Current-season player-game rows (~26k), cached at the app layer."""
+    return _client.player_games()
+
+
+@st.cache_data(ttl=3600, show_spinner="Building team form snapshot…")
+def prediction_snapshot(_client: NBAClient) -> pd.DataFrame:
+    """Season-to-date team form for the models, prior-seeded like training.
+
+    The outcome model is trained on form shrunk toward prior-season means
+    (10 pseudo-games); serving the raw small-sample means early in the
+    season would feed it features it never saw.
     """
-    league = client.league_player_stats()
+    games = _client.team_games()
     try:
-        return attach_ratings(
-            league, client.league_player_advanced(), client.league_player_clutch()
-        )
+        priors = prior_team_form(_client.team_games(past_seasons(1)[0]))
     except Exception:
-        return league
+        logger.warning("prior-season form unavailable; serving unseeded snapshot",
+                       exc_info=True)
+        priors = None
+    return team_form_snapshot(games, form_priors=priors)
 
 
 @st.cache_data(ttl=86400, show_spinner=False)
 def fetch_headshot(player_id: int) -> bytes | None:
     """Fetch the headshot server-side; the CDN rejects browser hotlinking."""
-    import requests
-
-    try:
-        r = requests.get(
-            HEADSHOT_URL.format(player_id=player_id),
-            headers={"User-Agent": "Mozilla/5.0"},
-            timeout=10,
-        )
-        r.raise_for_status()
-        return r.content
-    except Exception:
-        return None
+    return serve.fetch_headshot(player_id)
 
 
 def base_layout(fig: go.Figure, title: str) -> go.Figure:
@@ -238,12 +248,14 @@ def percentile_chart(ranks: pd.Series) -> go.Figure:
             orientation="h",
             marker_color=PAL["series"][0],
             text=[f"{v:.0f}" for v in ranks.values],
-            textposition="outside",
+            # a percentile axis must stop at 100; long bars carry their
+            # label inside instead of stretching the scale to fit it
+            textposition=["inside" if v > 90 else "outside" for v in ranks.values],
         )
     )
     fig = base_layout(fig, f"League percentile, {current_season()}")
     fig.update_layout(hovermode="closest", showlegend=False)
-    fig.update_xaxes(range=[0, 108], showgrid=True, gridcolor=PAL["grid"])
+    fig.update_xaxes(range=[0, 100], showgrid=True, gridcolor=PAL["grid"])
     fig.update_yaxes(autorange="reversed", showgrid=False, automargin=True)
     return fig
 
@@ -323,7 +335,10 @@ def net_rating_chart(snapshot: pd.DataFrame, n: int = 5) -> go.Figure:
 
 def pick_player(client: NBAClient, label: str, key: str) -> dict | None:
     query = st.text_input(label, key=key, placeholder="e.g. LeBron James")
-    if not query or len(query) < 3:
+    if not query:
+        return None
+    if len(query) < 3:
+        st.caption("Keep typing — search needs at least 3 characters.")
         return None
     matches = client.search_players(query)
     if not matches:
@@ -473,7 +488,7 @@ def profile_page(client: NBAClient) -> None:
             row = row[row["PLAYER_ID"] == player["id"]]
             ratings = row.iloc[0] if not row.empty else None
         except Exception:
-            pass
+            logger.warning("league ratings unavailable for profile header", exc_info=True)
     profile_header(player, totals, per_game, ratings)
 
     seasons = list(per_game["SEASON_ID"])
@@ -495,23 +510,29 @@ def profile_page(client: NBAClient) -> None:
 
 
 def compare_page(client: NBAClient) -> None:
-    st.caption(f"Per-game stats, {current_season()} season.")
-    cols = st.columns(2)
-    with cols[0]:
-        a = pick_player(client, "First player", "cmp_a")
-    with cols[1]:
-        b = pick_player(client, "Second player", "cmp_b")
-    if not (a and b):
-        st.info("Pick two players to compare.")
+    st.caption(f"Per-game stats, {current_season()} season. Compare up to four players.")
+    labels = ["First player", "Second player", "Third (optional)", "Fourth (optional)"]
+    keys = ["cmp_a", "cmp_b", "cmp_c", "cmp_d"]
+    picks = []
+    for col, label, key in zip(st.columns(4), labels, keys, strict=True):
+        with col:
+            picks.append(pick_player(client, label, key))
+    players, seen = [], set()
+    for p in picks:
+        if p and p["id"] not in seen:
+            players.append(p)
+            seen.add(p["id"])
+    if len(players) < 2:
+        st.info("Pick at least two players to compare.")
         leader_suggestions(client, "cmp_a", "cmp_b")
         return
     try:
         league = league_with_ratings(client)
-        table = comparison_table(league, [a["full_name"], b["full_name"]])
+        table = comparison_table(league, [p["full_name"] for p in players])
         st.dataframe(table.rename(index=RATING_LABELS), width="stretch")
 
         ranks = pd.concat(
-            [percentile_ranks(league, p["full_name"]).rename(RATING_LABELS) for p in (a, b)],
+            [percentile_ranks(league, p["full_name"]).rename(RATING_LABELS) for p in players],
             axis=1,
         )
         fig = go.Figure()
@@ -531,14 +552,14 @@ def compare_page(client: NBAClient) -> None:
         fig.update_yaxes(autorange="reversed", automargin=True)
         st.plotly_chart(fig, width="stretch")
     except KeyError as e:
-        st.warning(f"Comparison needs both players active this season: {e}")
+        st.warning(f"Comparison needs every player active this season: {e}")
     except Exception as e:
         st.error(f"Could not load comparison: {e}")
         return
 
     try:
         careers = {
-            p["full_name"]: career_per_game(client.career_stats(p["id"])) for p in (a, b)
+            p["full_name"]: career_per_game(client.career_stats(p["id"])) for p in players
         }
         if all(not df.empty for df in careers.values()):
             st.plotly_chart(compare_careers_chart(careers), width="stretch")
@@ -554,7 +575,30 @@ def load_models() -> dict | None:
         "outcome": GameOutcomeModel.load(OUTCOME_PATH),
         "points": PlayerPointsModel.load(POINTS_PATH),
         "curve": WinCurve.load(WIN_CURVE_PATH),
+        "metrics": _load_metrics(),
     }
+
+
+def _load_metrics() -> dict:
+    """Holdout metrics recorded by ml.train — the single source of truth
+    for every number quoted in captions. Empty when trained before
+    metrics.json existed."""
+    try:
+        return json.loads(METRICS_PATH.read_text())
+    except Exception:
+        return {}
+
+
+def _outcome_record(models: dict) -> str:
+    """Holdout sentence for the outcome model, from recorded metrics."""
+    metrics = models.get("metrics") or {}
+    o = metrics.get("outcome")
+    if not o:
+        return ""
+    return (
+        f" Holdout accuracy on {metrics.get('holdout_season', 'the current season')}: "
+        f"{o['accuracy']:.1%} (always-pick-home scores {o['baseline_accuracy']:.1%})."
+    )
 
 
 def missing_minutes_picker(
@@ -580,7 +624,7 @@ def outcome_tab(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> None
     home = cols[0].selectbox("Home team", teams, index=teams.index("LAL") if "LAL" in teams else 0)
     away = cols[1].selectbox("Away team", [t for t in teams if t != home])
 
-    league = client.league_player_stats()
+    league = league_with_ratings(client)
     with st.expander("Who's out? (adjusts win probability)"):
         missing = missing_minutes_picker(league, home, away, key_prefix="out")
 
@@ -598,9 +642,8 @@ def outcome_tab(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> None
     st.caption(
         "Logistic regression on season-to-date form differentials — win%, net "
         "rating, four factors (eFG%, TOV%, OREB%, FT rate), pace, ORtg/DRtg, "
-        "rest, back-to-backs, and expected minutes out — plus home court. "
-        "Holdout accuracy on the current season: ~69% (always-pick-home "
-        "scores ~55%)."
+        "rest, back-to-backs, and expected minutes out — plus home court."
+        + _outcome_record(models)
     )
     with st.expander("Season-to-date form"):
         st.dataframe(
@@ -617,15 +660,33 @@ def slate_section(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> No
     try:
         slate = upcoming_games(client.schedule())
     except Exception:
+        logger.warning("schedule unavailable for the slate", exc_info=True)
         slate = pd.DataFrame()
     if slate.empty:
         st.caption("No upcoming games on the schedule (offseason).")
         return
+    # real rest/fatigue flags per team entering the slate — the model is
+    # trained on them, so defaulting to "everyone equally rested" wastes
+    # a feature we already have
+    rest = None
+    try:
+        rest = team_rest_features(client.team_games(), tipoff=slate["tipoff"].iloc[0])
+    except Exception:
+        logger.warning("rest features unavailable; slate assumes neutral rest",
+                       exc_info=True)
     rows = []
     for _, g in slate.iterrows():
         if g["home"] not in snapshot.index or g["away"] not in snapshot.index:
             continue
-        gx = matchup_features(snapshot, g["home"], g["away"])
+        fatigue = {}
+        if rest is not None and g["home"] in rest.index and g["away"] in rest.index:
+            h, a = rest.loc[g["home"]], rest.loc[g["away"]]
+            fatigue = dict(
+                rest_diff=float(h["rest_days"] - a["rest_days"]),
+                b2b_diff=float(h["b2b"] - a["b2b"]),
+                three_in_four_diff=float(h["three_in_four"] - a["three_in_four"]),
+            )
+        gx = matchup_features(snapshot, g["home"], g["away"], **fatigue)
         p = float(models["outcome"].predict_proba(gx).iloc[0])
         tipoff = pd.Timestamp(g["tipoff"]).tz_convert("US/Eastern")
         rows.append(
@@ -636,7 +697,10 @@ def slate_section(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> No
             }
         )
     st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
-    st.caption("Slate probabilities assume both teams at full strength.")
+    st.caption(
+        "Slate probabilities account for rest and back-to-backs, and assume "
+        "both teams at full strength."
+    )
 
 
 def margin_chart(margin: pd.Series, home: str, away: str) -> go.Figure:
@@ -676,7 +740,7 @@ def simulate_tab(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> Non
     )
     away = cols[1].selectbox("Away team", [t for t in teams if t != home], key="sim_away")
 
-    league = client.league_player_stats()
+    league = league_with_ratings(client)
     with st.expander("Who's out? (dents scoring efficiency)"):
         missing = missing_minutes_picker(league, home, away, key_prefix="sim_out")
 
@@ -707,9 +771,9 @@ def simulate_tab(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> Non
         f"{s['margin_p90']:+.0f}. Monte Carlo over pace and ratings — "
         "possessions drawn around the teams' average pace, each side's "
         "scoring around its offensive rating against the opponent's defense, "
-        "plus home court (fitted: 2.2 points) and minutes out. Holdout log "
-        "loss 0.601 vs the outcome model's 0.585 — trust the model's win "
-        "probability as the headline; the simulator adds the distributions."
+        "plus home court (fitted: 2.2 points) and minutes out. The outcome "
+        "model is better calibrated on holdout — trust its win probability "
+        "as the headline; the simulator adds the distributions."
     )
     try:
         x = matchup_features(
@@ -719,7 +783,8 @@ def simulate_tab(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> Non
         model_p = float(models["outcome"].predict_proba(x).iloc[0])
         st.caption(f"For comparison, the outcome model gives {home} {model_p:.0%}.")
     except Exception:
-        pass
+        logger.warning("outcome-model comparison unavailable in simulate tab",
+                       exc_info=True)
 
     with st.expander("Total points distribution"):
         total = sims["home_pts"] + sims["away_pts"]
@@ -743,17 +808,41 @@ def points_tab(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> None:
     opponent = cols[0].selectbox("Opponent", teams)
     venue = cols[1].radio("Venue", ["Home", "Away"], horizontal=True)
 
-    season_games = client.player_games()
+    season_games = season_player_games(client)
     rows = season_games[season_games["PLAYER_ID"] == player["id"]]
     if rows.empty:
         st.warning("No games for this player in the current season.")
         return
+
+    # teammates out -> usage boost; leave empty for a league-average absence load
+    own_missing = None
+    own_team = rows.sort_values("GAME_DATE").iloc[-1].get("TEAM_ABBREVIATION")
+    if own_team:
+        league = league_with_ratings(client)
+        mates = league[
+            (league["TEAM_ABBREVIATION"] == own_team)
+            & (league["PLAYER_ID"] != player["id"])
+        ].sort_values("MIN", ascending=False)
+        with st.expander(f"Teammates out? ({own_team} — boosts the projection)"):
+            out = st.multiselect(
+                "Out",
+                list(mates["PLAYER_NAME"]),
+                key="pts_out",
+                help="Leave empty to assume a league-average absence load.",
+            )
+            if out:
+                own_missing = float(
+                    mates.loc[mates["PLAYER_NAME"].isin(out), "MIN"].sum()
+                )
+
+    feature_kwargs = {} if own_missing is None else {"own_missing_min": own_missing}
     x = player_next_game_features(
         rows,
         home=venue == "Home",
         opp_form_net=float(snapshot.loc[opponent, "form_net"]),
         opp_form_drtg=float(snapshot.loc[opponent, "form_drtg"]),
         opp_form_pace=float(snapshot.loc[opponent, "form_pace"]),
+        **feature_kwargs,
     )
     pred = float(models["points"].predict(x).iloc[0])
     m = st.columns(3)
@@ -763,15 +852,36 @@ def points_tab(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> None:
         m[0].caption(f"80% range: {interval[0]:.0f}–{interval[1]:.0f}")
     m[1].metric("Last 5 games", f"{x['pts_r5'].iloc[0]:.1f}")
     m[2].metric("Last 10 games", f"{x['pts_r10'].iloc[0]:.1f}")
+    if len(rows) < 10:
+        st.warning(
+            f"Only {len(rows)} games this season — the model trained on players "
+            "with at least a 10-game history, so treat this projection loosely."
+        )
     st.caption(
         "Ridge regression on recent scoring, minutes, and shot volume, venue, rest, "
         "and opponent form — trained on three seasons of league-wide player games."
+        + _points_record(models)
     )
+
+
+def _points_record(models: dict) -> str:
+    """Holdout sentence for the points model, from recorded metrics."""
+    metrics = models.get("metrics") or {}
+    p = metrics.get("points")
+    if not p:
+        return ""
+    sentence = (
+        f" Holdout MAE {p['mae']:.2f} points "
+        f"(10-game-average baseline: {p['baseline_mae']:.2f})."
+    )
+    if "interval_coverage" in p:
+        sentence += f" The 80% range covered {p['interval_coverage']:.0%} of holdout games."
+    return sentence
 
 
 @st.fragment
 def lineup_tab(client: NBAClient, models: dict) -> None:
-    league = client.league_player_stats()
+    league = league_with_ratings(client)
     teams = sorted(league["TEAM_ABBREVIATION"].dropna().unique())
     team = st.selectbox("Team", teams, index=teams.index("LAL") if "LAL" in teams else 0)
     roster = league[league["TEAM_ABBREVIATION"] == team].sort_values("MIN", ascending=False)
@@ -807,7 +917,7 @@ def lineup_tab(client: NBAClient, models: dict) -> None:
         )
 
 
-@st.cache_data(ttl=86400, show_spinner=False)
+@st.cache_data(ttl=86400, show_spinner="Warming Elo ratings (two prior seasons)…")
 def league_elo() -> pd.Series:
     """Current Elo per team, warmed up over the two prior seasons."""
     client = get_client()
@@ -824,8 +934,9 @@ def predictions_page(client: NBAClient) -> None:
         )
         return
     try:
-        snapshot = team_form_snapshot(client.team_games())
+        snapshot = prediction_snapshot(client)
     except Exception:
+        logger.warning("team form snapshot unavailable", exc_info=True)
         snapshot = pd.DataFrame()
     if snapshot.empty:  # season hasn't started: fall back to last season's form
         snapshot = team_form_snapshot(client.team_games(past_seasons(1)[0]))
@@ -833,7 +944,9 @@ def predictions_page(client: NBAClient) -> None:
     try:
         snapshot["elo"] = league_elo().reindex(snapshot.index)
     except Exception:
-        pass  # matchup_features degrades to a neutral elo_diff
+        # matchup_features degrades to a neutral elo_diff
+        logger.warning("Elo unavailable; predictions use a neutral elo_diff", exc_info=True)
+        st.caption("Elo ratings unavailable — predictions fall back to a neutral Elo edge.")
     tabs = st.tabs(["Game outcome", "Simulate", "Player points", "Starting five"])
     with tabs[0]:
         outcome_tab(client, models, snapshot)
@@ -861,7 +974,8 @@ def team_detail(client: NBAClient, games: pd.DataFrame, snapshot: pd.DataFrame) 
     try:
         tiles[3].metric("Elo", f"{league_elo()[team]:.0f}")
     except Exception:
-        pass
+        logger.warning("Elo unavailable for team tile", exc_info=True)
+        tiles[3].metric("Elo", "—", help="Elo ratings unavailable right now.")
 
     st.plotly_chart(
         form_chart(rolling_form(log, "PLUS_MINUS", 10), "PLUS_MINUS", 10, label="Point margin"),
@@ -946,7 +1060,8 @@ def home_page(client: NBAClient) -> None:
     """League pulse: the app opens with content, not an empty search box."""
     st.caption(f"League pulse · {current_season()}")
     try:
-        league = league_with_ratings(client)
+        with st.spinner("Loading the league dashboard (first view fetches live)…"):
+            league = league_with_ratings(client)
     except Exception as e:
         st.error(f"Could not load league stats: {e}")
         return
@@ -959,31 +1074,42 @@ def home_page(client: NBAClient) -> None:
         ("NET_RATING", "Net rating"),
         ("CLUTCH_NET_RATING", "Clutch net"),
     ]
+    # GP floors scale down early in the season so the boards (and tiles)
+    # aren't empty from opening night to December
+    max_gp = int(league["GP"].max()) if "GP" in league.columns and len(league) else 0
+    min_gp = min(20, max(1, max_gp // 2))
     tiles = st.columns(len(specs))
     boards: dict[str, pd.DataFrame] = {}
     for col, (stat, label) in zip(tiles, specs, strict=True):
         pool = league
-        if stat == "NET_RATING":
+        if stat == "NET_RATING" and "MIN" in league.columns:
             pool = league[league["MIN"] >= 15]  # rotation players only
         elif stat == "CLUTCH_NET_RATING" and "CLUTCH_GP" in league.columns:
-            pool = league[league["CLUTCH_GP"] >= 15]  # enough clutch games
+            pool = league[league["CLUTCH_GP"] >= min(15, min_gp)]  # enough clutch games
         try:
-            boards[label] = league_leaders(pool, stat, top=10)
+            board = league_leaders(pool, stat, top=10, min_gp=min_gp)
         except KeyError:
             continue
-        row = boards[label].iloc[0]
+        if board.empty:  # early season / empty upstream table: skip the tile
+            continue
+        boards[label] = board
+        row = board.iloc[0]
         team = row.get("TEAM_ABBREVIATION", "")
         value = f"{row[stat]:+.1f}" if "RATING" in stat else f"{row[stat]:.1f}"
         col.metric(label, value)
         col.caption(f"{row['PLAYER_NAME']} · {team}")
-    with st.expander("Top-ten leaderboards"):
-        for tab, label in zip(st.tabs(list(boards)), boards, strict=True):
-            with tab:
-                st.dataframe(boards[label].round(1), width="stretch", hide_index=True)
+    if boards:
+        with st.expander("Top-ten leaderboards"):
+            for tab, label in zip(st.tabs(list(boards)), boards, strict=True):
+                with tab:
+                    st.dataframe(boards[label].round(1), width="stretch", hide_index=True)
+    else:
+        st.info("No league stats yet this season — leaderboards appear after opening night.")
 
     try:
         snapshot = team_form_snapshot(client.team_games())
     except Exception:
+        logger.warning("team form unavailable on home page", exc_info=True)
         snapshot = pd.DataFrame()
     if not snapshot.empty:
         left, right = st.columns(2)
@@ -1005,11 +1131,16 @@ def home_page(client: NBAClient) -> None:
     models = load_models()
     if models is not None and not snapshot.empty:
         try:
-            snapshot["elo"] = league_elo().reindex(snapshot.index)
+            slate_snapshot = prediction_snapshot(client)  # prior-seeded, like training
         except Exception:
-            pass
+            logger.warning("seeded snapshot unavailable; slate uses raw form", exc_info=True)
+            slate_snapshot = snapshot
+        try:
+            slate_snapshot["elo"] = league_elo().reindex(slate_snapshot.index)
+        except Exception:
+            logger.warning("Elo unavailable for the slate", exc_info=True)
         st.divider()
-        slate_section(client, models, snapshot)
+        slate_section(client, models, slate_snapshot)
 
 
 def methodology_page(client: NBAClient) -> None:

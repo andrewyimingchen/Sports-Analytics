@@ -133,6 +133,16 @@ probabilities) and MAE (for points) are the decision metrics. Changes that
 don't improve the holdout are reverted, and the failures are documented
 below just like the successes.
 
+**Holdout hygiene.** Hyperparameters are tuned on a *dev season* — the most
+recent training season — never on the holdout; the holdout is scored once,
+after all choices are locked. One honest caveat: the feature-set decisions
+recorded in the journey and rejected tables below were historically
+adjudicated on the holdout season itself, so treat those specific numbers
+as the best of several looks rather than a single clean draw. The training
+pipeline (`ml/train.py`) now enforces the dev-season protocol, and
+`data/models/metrics.json` records the once-only holdout numbers the app
+quotes.
+
 **Leakage discipline.** Every rolling feature is shifted one game: a row's
 features describe what was knowable *before* tipoff. Elo ratings are
 strictly pre-game; availability expectations use only prior games.
@@ -143,7 +153,8 @@ strictly pre-game; availability expectations use only prior games.
     st.markdown("### Game outcome model")
     st.markdown(
         """
-Logistic regression (scaled, C=0.25) on **home-minus-away differentials**
+Logistic regression (scaled; regularization strength tuned on the dev
+season) on **home-minus-away differentials**
 of season-to-date form: win%, net rating, Dean Oliver's four factors
 (eFG%, TOV%, OREB%, FT rate), pace and per-100 ratings — plus rest and
 back-to-back flags, expected minutes out (derived from who actually missed
@@ -244,8 +255,11 @@ single game's points is noise-dominated — star players' scoring has a
 game-to-game standard deviation near 8 points.
 
 The projection ships with an **empirical 80% interval**: the 10th/90th
-percentiles of training residuals (asymmetric, −6.7/+8.1 — single-game
-scoring is right-skewed) added to the prediction and floored at zero.
+percentiles of training residuals, binned by projection level (a 28-point
+projection has far more spread than an 8-point one), added to the
+prediction and floored at zero. Residuals are asymmetric — single-game
+scoring is right-skewed — and the measured holdout coverage of the band is
+recorded in `metrics.json` and shown in the app.
 """
     )
     if models:

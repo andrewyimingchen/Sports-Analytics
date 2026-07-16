@@ -61,14 +61,16 @@ flowchart TB
 | Layer | Contract |
 |---|---|
 | `ingest/` | The **only** code that touches the network. Rate-limited `nba_api` wrapper; never called directly by the app layer. |
-| `store/` | `Cache.get_or_fetch` fronts every remote call. Per-endpoint TTLs (current-season data refreshes daily); empty responses are never cached. |
+| `store/` | `Cache.get_or_fetch` fronts every remote call. Per-endpoint TTLs (current-season data refreshes daily); payloads are parquet blobs (legacy JSON entries migrate on read); empty responses are trusted for only an hour; finished-season entries count as immutable only if fetched after the season ended; per-key single-flight locking under concurrency. |
 | `analysis/`, `ml/features.py`, `pbp/` | Pure functions: DataFrames in, DataFrames out; `KeyError` on missing players/columns. No I/O, so tests stay offline. |
-| `ml/train.py` | The evaluation protocol lives here: train on the three seasons before the current one, score on the current season as a true temporal holdout. The shipped artifacts are the ones whose numbers were printed. |
+| `ml/train.py` | The evaluation protocol lives here: train on the three seasons before the current one, tune hyperparameters on the most recent training season (dev), score on the current season as a temporal holdout touched exactly once. The shipped artifacts are the ones whose numbers were printed, and `data/models/metrics.json` records them for the app to quote. |
 | `app/`, `api/` | Read through the cache and the saved artifacts only. The Streamlit app is the analyst-facing UI; the FastAPI app serves JSON plus the installable PWA. |
 
 ## Supporting pieces
 
 - `config.py` — seasons, cache/model paths.
+- `serve.py` — composition shared by both serving layers (ratings-attached
+  league table, headshot proxy), so the app and the API give the same answers.
 - `viz.py` — plotly half-court trace for shot charts.
 - `warm.py` — cache warming.
 - Column names follow stats.nba.com conventions (`PTS`, `GP`, `SEASON_ID`, …).

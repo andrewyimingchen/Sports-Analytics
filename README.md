@@ -27,10 +27,14 @@ Requires [uv](https://docs.astral.sh/uv/) and Python ≥ 3.11.
 
 ```bash
 uv sync
+uv run python -m nba_insights.warm --top 20   # optional but recommended: prefetch
 uv run streamlit run app/streamlit_app.py
 ```
 
-Then open http://localhost:8501, search a player, and explore.
+Then open http://localhost:8501, search a player, and explore. The warm
+step prefetches the league dashboards and top players so the first page
+load is instant; skip it and the first views fetch live instead
+(rate-limited, so the landing page can take a while on a cold cache).
 
 ## Architecture
 
@@ -55,8 +59,12 @@ functions over DataFrames — fully testable without a connection.
 
 - stats.nba.com intermittently serves empty (G-League-tagged) career responses
   for some player IDs; the client falls back to `PlayerProfileV2`.
-- Empty API responses are never cached, so a transient glitch can't get pinned
-  for a whole TTL.
+- Empty API responses are cached for only an hour, so a transient glitch can't
+  get pinned for a whole TTL, while a legitimately empty response (a player
+  with no playoff games) doesn't refetch on every view.
+- A finished season's entry is only treated as immutable if it was fetched
+  after the season actually ended; a mid-season snapshot refetches once the
+  season rolls over.
 
 ## Predictions (ML)
 
@@ -70,13 +78,17 @@ uv run python -m nba_insights.ml.train
 | Model | Approach | Holdout result (2025-26) |
 |---|---|---|
 | Game outcome | Logistic regression on prior-seeded season-to-date form differentials (win%, net rating, four factors, pace, ORtg/DRtg), rest/back-to-backs, expected minutes out (derived absences), carried-over Elo + home court | 70.2% accuracy, log loss 0.589 over the **full season** incl. opening weeks (55% baseline: always pick home) |
-| Player points | Two-stage: minutes model (rotation trend, rest, roster availability) × per-minute rate model (EWMA form, opponent context, teammate absences); ships an empirical 80% interval from training residual quantiles | MAE 4.58 (4.72 baseline: 10-game average) |
+| Player points | Two-stage: minutes model (rotation trend, rest, roster availability) × per-minute rate model (EWMA form, opponent context, teammate absences); ships an empirical 80% interval from training residual quantiles, binned by projection level | MAE 4.58 (4.72 baseline: 10-game average); the 80% interval covered 80.4% of holdout games |
 | Starting five | Observed lineup net rating (weighted by minutes together) blended with a per-36 plus-minus proxy, through a fitted win curve | blend; pure proxy when the five never played together |
 | Game simulator | Monte Carlo over pace and ratings (10,000 sims: shared possessions, per-100 scoring vs opponent defense, home court, minutes out, overtime); parameters fitted on the training seasons | log loss 0.601 / 68.6% — the logistic model keeps the headline number; the simulator supplies margin/total distributions |
 
-Evaluation is a true temporal holdout: trained on 2022-25, scored on the
-current season. Retrain whenever you want fresher form; artifacts live in
-`data/models/` (never committed).
+Evaluation is a temporal holdout: trained on 2022-25, scored on the current
+season, with hyperparameters tuned on a dev season (the most recent training
+season) so the holdout is only touched once. Retraining writes the holdout
+numbers to `data/models/metrics.json`, which is what the app's captions
+quote — the table above is the record from the last full evaluation.
+Retrain whenever you want fresher form; artifacts live in `data/models/`
+(never committed).
 
 ## Phone app (PWA)
 

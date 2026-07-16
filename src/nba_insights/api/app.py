@@ -9,6 +9,7 @@ warm each other.
 
 from __future__ import annotations
 
+import logging
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated
@@ -24,8 +25,15 @@ from nba_insights.config import current_season, past_seasons
 from nba_insights.ingest import NBAClient
 from nba_insights.ml import GameOutcomeModel
 from nba_insights.ml.elo import current_elo
-from nba_insights.ml.features import matchup_features, team_form_snapshot
+from nba_insights.ml.features import (
+    matchup_features,
+    prior_team_form,
+    team_form_snapshot,
+)
 from nba_insights.ml.train import OUTCOME_PATH
+from nba_insights.serve import fetch_headshot, league_with_ratings
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="NBA Insights API", version="0.1.0")
 
@@ -60,8 +68,18 @@ OutcomeModel = Annotated[GameOutcomeModel, Depends(get_outcome_model)]
 
 @lru_cache(maxsize=2)
 def _snapshot_for_day(day: str, client: NBAClient) -> pd.DataFrame:
-    """Team form snapshot with Elo, cached per calendar day."""
-    snapshot = team_form_snapshot(client.team_games())
+    """Team form snapshot with Elo, cached per calendar day.
+
+    Prior-seeded like the outcome model's training features, so
+    early-season serving inputs match the training distribution.
+    """
+    try:
+        priors = prior_team_form(client.team_games(past_seasons(1)[0]))
+    except Exception:
+        logger.warning("prior-season form unavailable; serving unseeded snapshot",
+                       exc_info=True)
+        priors = None
+    snapshot = team_form_snapshot(client.team_games(), form_priors=priors)
     try:
         games = pd.concat(
             [client.team_games(s) for s in [*past_seasons(2), current_season()]],
@@ -69,15 +87,17 @@ def _snapshot_for_day(day: str, client: NBAClient) -> pd.DataFrame:
         )
         snapshot["elo"] = current_elo(games).reindex(snapshot.index)
     except Exception:
-        pass  # matchup_features degrades to a neutral elo_diff
+        # matchup_features degrades to a neutral elo_diff
+        logger.warning("Elo unavailable; predictions use a neutral elo_diff",
+                       exc_info=True)
     return snapshot
 
 
 def _find_player(client: NBAClient, player_id: int) -> dict:
-    match = [p for p in client.search_players("") if p["id"] == player_id]
+    match = client.find_player(player_id)
     if not match:
         raise HTTPException(404, f"no player with id {player_id}")
-    return match[0]
+    return match
 
 
 @app.get("/teams")
@@ -101,23 +121,7 @@ def predict_game(home: str, away: str, client: Client, model: OutcomeModel) -> d
     return {"home": home, "away": away, "home_win_prob": round(prob, 3)}
 
 
-_HEADSHOT_URL = "https://cdn.nba.com/headshots/nba/latest/1040x760/{player_id}.png"
-
-
-@lru_cache(maxsize=256)
-def _fetch_headshot(player_id: int) -> bytes | None:
-    import requests
-
-    try:
-        r = requests.get(
-            _HEADSHOT_URL.format(player_id=player_id),
-            headers={"User-Agent": "Mozilla/5.0"},
-            timeout=10,
-        )
-        r.raise_for_status()
-        return r.content
-    except Exception:
-        return None
+_fetch_headshot = lru_cache(maxsize=256)(fetch_headshot)
 
 
 @app.get("/players/{player_id}/headshot")
@@ -148,9 +152,13 @@ def player_career(player_id: int, client: Client) -> list[dict]:
 
 @app.get("/players/{player_id}/percentiles")
 def player_percentiles(player_id: int, client: Client) -> dict:
-    """League percentile ranks (0-100) for the current season."""
+    """League percentile ranks (0-100) for the current season.
+
+    Uses the ratings-attached league table so the API reports the same
+    stat set (incl. net and clutch rating) as the Streamlit app.
+    """
     player = _find_player(client, player_id)
-    league = client.league_player_stats()
+    league = league_with_ratings(client)
     try:
         ranks = percentile_ranks(league, player["full_name"])
     except KeyError as e:
@@ -158,7 +166,9 @@ def player_percentiles(player_id: int, client: Client) -> dict:
     return {
         "player": player["full_name"],
         "season": current_season(),
-        "percentiles": ranks.to_dict(),
+        # dropna: a player missing from a rating table must not emit NaN
+        # (invalid JSON), just omit the stat
+        "percentiles": ranks.dropna().to_dict(),
     }
 
 
@@ -167,11 +177,13 @@ def compare(
     names: Annotated[list[str], Query(min_length=2, max_length=4)], client: Client
 ) -> dict:
     """Side-by-side per-game stats for 2-4 players in the current season."""
-    league = client.league_player_stats()
+    league = league_with_ratings(client)
     try:
         table = comparison_table(league, names)
     except KeyError as e:
         raise HTTPException(404, str(e)) from e
+    # NaN (e.g. no clutch sample) becomes null, not invalid-JSON NaN
+    table = table.astype(object).where(table.notna(), None)
     return {"season": current_season(), "stats": table.to_dict()}
 
 

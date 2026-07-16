@@ -95,8 +95,9 @@ def test_stale_served_when_fetch_fails(tmp_path, df):
     pd.testing.assert_frame_equal(result, df)
 
 
-def test_empty_result_returned_but_not_cached(tmp_path, df):
-    cache = make_cache(tmp_path)
+def test_empty_result_cached_only_briefly(tmp_path, df):
+    clock = FakeClock()
+    cache = make_cache(tmp_path, clock)
     results = [pd.DataFrame(), df]
 
     def fetcher():
@@ -104,8 +105,54 @@ def test_empty_result_returned_but_not_cached(tmp_path, df):
 
     first = cache.get_or_fetch("k", fetcher, ttl=None)
     assert first.empty
-    second = cache.get_or_fetch("k", fetcher, ttl=None)  # refetches despite ttl=None
+    # within EMPTY_TTL the cached empty frame is served — no refetch storm
+    again = cache.get_or_fetch("k", fetcher, ttl=None)
+    assert again.empty and len(results) == 1
+    # past EMPTY_TTL the empty entry is distrusted and refetched
+    clock.advance(hours=2)
+    second = cache.get_or_fetch("k", fetcher, ttl=None)
     pd.testing.assert_frame_equal(second, df)
+
+
+def test_fetched_after_invalidates_older_entries(tmp_path, df):
+    clock = FakeClock()  # starts 2026-01-01: mid-season
+    cache = make_cache(tmp_path, clock)
+    calls = []
+
+    def fetcher():
+        calls.append(1)
+        return df
+
+    cache.get_or_fetch("k", fetcher, ttl=None)
+    # entry fetched before the cutoff (season end) is a partial snapshot
+    cutoff = datetime(2026, 7, 1, tzinfo=UTC)
+    clock.advance(days=365)
+    cache.get_or_fetch("k", fetcher, ttl=None, fetched_after=cutoff)
+    assert len(calls) == 2
+    # the refetched entry now postdates the cutoff and is served as immutable
+    cache.get_or_fetch("k", fetcher, ttl=None, fetched_after=cutoff)
+    assert len(calls) == 2
+
+
+def test_legacy_json_entry_migrated_in_place(tmp_path, df):
+    import sqlite3
+
+    clock = FakeClock()
+    cache = make_cache(tmp_path, clock)
+    payload = df.to_json(orient="table", date_format="iso")
+    with sqlite3.connect(tmp_path / "cache.sqlite3") as conn:
+        conn.execute(
+            "INSERT INTO cache_entries (key, fetched_at, payload) VALUES (?, ?, ?)",
+            ("v2:k", datetime(2025, 6, 1, tzinfo=UTC).isoformat(), payload),
+        )
+    out = cache.get("k")
+    pd.testing.assert_frame_equal(out, df)
+    # migrated to the current format keeping the original fetch time
+    with sqlite3.connect(tmp_path / "cache.sqlite3") as conn:
+        row = conn.execute(
+            "SELECT fetched_at FROM cache_entries WHERE key = 'v3:k'"
+        ).fetchone()
+    assert row is not None and row[0] == datetime(2025, 6, 1, tzinfo=UTC).isoformat()
 
 
 def test_fetch_failure_without_stale_raises(tmp_path):
