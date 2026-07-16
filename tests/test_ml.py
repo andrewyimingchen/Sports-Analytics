@@ -177,7 +177,16 @@ def test_points_model_learns_player_level(tmp_path):
 
     path = tmp_path / "points.joblib"
     model.save(path)
-    assert PlayerPointsModel.load(path).predict(feats).equals(model.predict(feats))
+    loaded = PlayerPointsModel.load(path)
+    assert loaded.predict(feats).equals(model.predict(feats))
+
+    # 80% interval: fitted from training residuals, survives the round trip,
+    # brackets the projection, and never goes below zero points
+    assert loaded.resid_quantiles == model.resid_quantiles
+    lo, hi = loaded.interval(20.0)
+    assert 0 <= lo < 20.0 < hi
+    assert loaded.interval(0.5)[0] == 0.0
+    assert PlayerPointsModel(loaded.minutes, loaded.rate).interval(20.0) is None
 
 
 def test_win_curve_monotonic_and_bounded(tmp_path):

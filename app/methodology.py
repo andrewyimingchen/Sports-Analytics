@@ -242,6 +242,10 @@ Holdout MAE **4.58** vs 4.72 for the honest baseline (the player's own
 10-game average) across 21,204 player-games. For context: predicting a
 single game's points is noise-dominated — star players' scoring has a
 game-to-game standard deviation near 8 points.
+
+The projection ships with an **empirical 80% interval**: the 10th/90th
+percentiles of training residuals (asymmetric, −6.7/+8.1 — single-game
+scoring is right-skewed) added to the prediction and floored at zero.
 """
     )
     if models:

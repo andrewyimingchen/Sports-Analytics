@@ -136,6 +136,34 @@ def test_attach_ratings_merges_and_keeps_everyone(league_stats):
     assert pd.isna(out.loc[out["PLAYER_NAME"] == "Carol", "NET_RATING"].iloc[0])
 
 
+def test_zone_efficiency_diffs_against_league():
+    from nba_insights.analysis import zone_efficiency
+
+    shots = pd.DataFrame(
+        {
+            "SHOT_ZONE_BASIC": ["Restricted Area"] * 4 + ["Above the Break 3"] * 2,
+            "SHOT_ZONE_AREA": ["Center(C)"] * 6,
+            "SHOT_ZONE_RANGE": ["Less Than 8 ft."] * 4 + ["24+ ft."] * 2,
+            "SHOT_MADE_FLAG": [1, 1, 1, 0, 0, 0],
+        }
+    )
+    league = pd.DataFrame(
+        {
+            "SHOT_ZONE_BASIC": ["Restricted Area", "Above the Break 3"],
+            "SHOT_ZONE_AREA": ["Center(C)", "Center(C)"],
+            "SHOT_ZONE_RANGE": ["Less Than 8 ft.", "24+ ft."],
+            "FG_PCT": [0.65, 0.35],
+        }
+    )
+    out = zone_efficiency(shots, league).set_index("SHOT_ZONE_BASIC")
+    assert out.loc["Restricted Area", "FGA"] == 4
+    assert out.loc["Restricted Area", "PLAYER_PCT"] == 0.75
+    assert out.loc["Restricted Area", "DIFF"] == pytest.approx(0.10)
+    assert out.loc["Above the Break 3", "DIFF"] == pytest.approx(-0.35)
+    with pytest.raises(KeyError, match="SHOT_MADE_FLAG"):
+        zone_efficiency(shots.drop(columns=["SHOT_MADE_FLAG"]), league)
+
+
 def test_attach_ratings_tolerates_missing_tables(league_stats):
     league = league_stats.assign(PLAYER_ID=range(5))
     out = attach_ratings(league, None, None)
