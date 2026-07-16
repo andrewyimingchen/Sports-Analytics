@@ -161,3 +161,22 @@ existed. Both shipped:
   standard 1,071-game subset actually improved to 70.7% accuracy (log
   loss 0.587, within noise of 0.585). The app falls back to last season's
   form snapshot before opening night.
+
+## Status update (2026-07-15, round 4): Monte Carlo game simulator
+
+Shipped `ml/simulate.py` — a pace/ratings Monte Carlo that plays a matchup
+10,000 times: shared possession count drawn around the teams' average pace,
+each side's points-per-100 drawn around its ORtg met by the opponent's DRtg
+(league-relative, prior-seeded season-to-date form), plus home court and
+expected minutes out; regulation ties resolve through overtime. Parameters
+fitted on the three training seasons (3,685 games): **HCA 2.20 points**,
+**per-team scoring noise σ = 0.096 ppp** (reproduces the observed 13.8-point
+margin residual sd).
+
+Measured on the same 1,225-game holdout: **log loss 0.601 / 68.6%** — worse
+than the shipped logistic model (0.585 / 70.2%), as expected: the simulator
+sees only ratings and pace, not Elo, four factors, rest, or availability.
+Decision: the model keeps the headline win probability; the simulator is
+shipped for what the model cannot produce — margin/total distributions,
+overtime rates, and score-level what-ifs. Closed-form check: the Gaussian
+margin implies p = Φ(μ/σ); MC at 200k sims agreed within 0.007.

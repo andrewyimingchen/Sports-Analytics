@@ -4,6 +4,7 @@ import pytest
 from nba_insights.analysis import (
     career_per_game,
     comparison_table,
+    league_leaders,
     percentile_ranks,
     rolling_form,
 )
@@ -107,3 +108,15 @@ def test_comparison_table_shape_and_order(league_stats):
 def test_comparison_table_missing_player_raises(league_stats):
     with pytest.raises(KeyError, match="Zelda"):
         comparison_table(league_stats, ["Alice", "Zelda"])
+
+
+def test_league_leaders_ranks_and_filters_small_samples(league_stats):
+    out = league_leaders(league_stats, "PTS", top=2, min_gp=10)
+    # Bench Guy's 50 PPG over 3 games doesn't qualify
+    assert list(out["PLAYER_NAME"]) == ["Alice", "Bob"]
+    assert list(out["PTS"]) == [30.0, 25.0]
+
+
+def test_league_leaders_unknown_stat_raises(league_stats):
+    with pytest.raises(KeyError, match="XG"):
+        league_leaders(league_stats, "XG")

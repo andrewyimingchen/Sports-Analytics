@@ -203,6 +203,27 @@ features, the classifier is not the bottleneck.
             st.caption(f"Calibration analysis unavailable: {e}")
 
     st.divider()
+    st.markdown("### Game simulator")
+    st.markdown(
+        """
+The Simulate tab plays each matchup 10,000 times: possessions drawn around
+the teams' average pace, each side's points-per-100 drawn around its
+offensive rating against the opponent's defensive rating (league-relative),
+plus home court and expected minutes out; tied regulation scores go to
+overtime. Home court (**2.20 points**) and scoring noise (**σ = 0.096
+points per possession**, reproducing the observed 13.8-point margin
+spread) are fitted on the three training seasons.
+
+Scored on the same holdout as everything else, its win probabilities come
+in at **log loss 0.601 / 68.6%** — worse than the outcome model (0.585 /
+70.2%), because it sees only ratings and pace. That is why the model keeps
+the headline probability and the simulator is used for what a classifier
+cannot produce: margin and total distributions, overtime rates, and
+score-level what-ifs.
+"""
+    )
+
+    st.divider()
     st.markdown("### Player points model")
     st.markdown(
         """

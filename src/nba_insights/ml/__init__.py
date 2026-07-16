@@ -8,6 +8,7 @@ from nba_insights.ml.lineup import (
 )
 from nba_insights.ml.outcome import GameOutcomeModel
 from nba_insights.ml.performance import PlayerPointsModel
+from nba_insights.ml.simulate import sim_summary, simulate_game, simulate_matchup
 
 __all__ = [
     "GameOutcomeModel",
@@ -16,4 +17,7 @@ __all__ = [
     "blended_lineup_estimate",
     "lineup_net_estimate",
     "observed_lineup",
+    "sim_summary",
+    "simulate_game",
+    "simulate_matchup",
 ]

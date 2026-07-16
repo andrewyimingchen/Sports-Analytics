@@ -12,11 +12,12 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-sys.path.insert(0, str(Path(__file__).parent))  # sibling modules (methodology)
+sys.path.insert(0, str(Path(__file__).parent))  # sibling modules (methodology, ui)
 
 from nba_insights.analysis import (
     career_per_game,
     comparison_table,
+    league_leaders,
     percentile_ranks,
     rolling_form,
 )
@@ -27,6 +28,8 @@ from nba_insights.ml import (
     PlayerPointsModel,
     WinCurve,
     blended_lineup_estimate,
+    sim_summary,
+    simulate_matchup,
 )
 from nba_insights.ml.elo import current_elo
 from nba_insights.ml.features import (
@@ -37,6 +40,7 @@ from nba_insights.ml.features import (
 )
 from nba_insights.ml.train import OUTCOME_PATH, POINTS_PATH, WIN_CURVE_PATH
 from nba_insights.viz import half_court_trace
+from ui import inject_css
 
 HEADSHOT_URL = "https://cdn.nba.com/headshots/nba/latest/1040x760/{player_id}.png"
 
@@ -99,6 +103,7 @@ def base_layout(fig: go.Figure, title: str) -> go.Figure:
         margin=dict(l=40, r=20, t=50, b=40),
         legend=dict(orientation="h", yanchor="bottom", y=1.0, xanchor="right", x=1.0),
         hovermode="x unified",
+        transition=dict(duration=350, easing="cubic-in-out"),
     )
     fig.update_xaxes(showgrid=False, linecolor=PAL["grid"], tickcolor=PAL["muted"])
     fig.update_yaxes(gridcolor=PAL["grid"], zeroline=False)
@@ -206,6 +211,59 @@ def compare_careers_chart(careers: dict[str, pd.DataFrame], stat: str = "PTS") -
     return fig
 
 
+def elo_dot_chart(elo: pd.Series, top: int = 10) -> go.Figure:
+    """Power rankings as a dot plot — Elo's origin is arbitrary, so
+    zero-based bars would be misleading."""
+    ranked = elo.dropna().sort_values(ascending=False).head(top)
+    fig = go.Figure(
+        go.Scatter(
+            x=ranked.values,
+            y=ranked.index,
+            mode="markers+text",
+            marker=dict(color=PAL["series"][0], size=10),
+            text=[f"{v:.0f}" for v in ranked.values],
+            textposition="middle right",
+            textfont=dict(color=PAL["muted"]),
+        )
+    )
+    fig = base_layout(fig, f"Elo power rankings — top {top}")
+    pad = (ranked.max() - ranked.min()) * 0.18 + 1
+    fig.update_layout(hovermode="closest", showlegend=False, height=360)
+    fig.update_xaxes(range=[ranked.min() - pad, ranked.max() + pad], showgrid=True,
+                     gridcolor=PAL["grid"])
+    fig.update_yaxes(autorange="reversed", showgrid=False)
+    return fig
+
+
+def net_rating_chart(snapshot: pd.DataFrame, n: int = 5) -> go.Figure:
+    """Best and worst teams by season-to-date net rating; diverging around 0."""
+    net = snapshot["form_net"].dropna().sort_values(ascending=False)
+    ends = pd.concat([net.head(n), net.tail(n)])
+    colors = [PAL["series"][0] if v > 0 else PAL["series"][5] for v in ends.values]
+    fig = go.Figure(
+        go.Bar(
+            x=ends.values,
+            y=ends.index,
+            orientation="h",
+            marker_color=colors,
+            text=[f"{v:+.1f}" for v in ends.values],
+            textposition="outside",
+            cliponaxis=False,
+        )
+    )
+    fig = base_layout(fig, f"Net rating — best and worst {n}")
+    fig.update_layout(hovermode="closest", showlegend=False, height=360)
+    pad = float(ends.abs().max()) * 0.25  # room for the outside labels
+    fig.update_xaxes(
+        range=[ends.min() - pad, ends.max() + pad],
+        zeroline=True,
+        zerolinecolor=PAL["muted"],
+        gridcolor=PAL["grid"],
+    )
+    fig.update_yaxes(autorange="reversed", showgrid=False)
+    return fig
+
+
 def pick_player(client: NBAClient, label: str, key: str) -> dict | None:
     query = st.text_input(label, key=key, placeholder="e.g. LeBron James")
     if not query or len(query) < 3:
@@ -247,24 +305,10 @@ def profile_header(player: dict, totals: pd.DataFrame, per_game: pd.DataFrame) -
             )
 
 
-def profile_page(client: NBAClient) -> None:
-    player = pick_player(client, "Search for a player", "profile_search")
-    if not player:
-        st.info("Type a player name to build their profile.")
-        return
-
-    with st.spinner("Loading career stats…"):
-        totals = client.career_stats(player["id"])
-    if totals.empty:
-        st.error("No career data found for this player.")
-        return
-
-    per_game = career_per_game(totals)
-    profile_header(player, totals, per_game)
-
-    seasons = list(per_game["SEASON_ID"])
-    st.plotly_chart(career_chart(per_game), width="stretch")
-
+@st.fragment
+def season_detail(client: NBAClient, player: dict, seasons: list[str]) -> None:
+    """Season-scoped charts; a fragment so switching season or stat only
+    re-renders this section instead of rerunning the whole page."""
     season = st.selectbox("Season", list(reversed(seasons)))
     left, right = st.columns(2)
 
@@ -293,6 +337,58 @@ def profile_page(client: NBAClient) -> None:
         except Exception as e:
             st.error(f"Could not load shot chart: {e}")
 
+
+def _fill_widgets(**values: str) -> None:
+    """on_click callback: pre-fill search inputs before the next run."""
+    st.session_state.update(values)
+
+
+def leader_suggestions(client: NBAClient, *keys: str) -> None:
+    """Clickable current-scoring-leader chips that fill the search box(es)."""
+    try:
+        leaders = league_leaders(client.league_player_stats(), "PTS", top=5)
+    except Exception:
+        return
+    names = list(leaders["PLAYER_NAME"])
+    if len(keys) == 1:
+        st.caption("Or jump straight to a scoring leader:")
+        for col, name in zip(st.columns(len(names)), names, strict=True):
+            col.button(
+                name,
+                key=f"suggest_{keys[0]}_{name}",
+                on_click=_fill_widgets,
+                kwargs={keys[0]: name},
+                width="stretch",
+            )
+    elif len(names) >= 2:
+        st.button(
+            f"Try {names[0]} vs {names[1]}",
+            on_click=_fill_widgets,
+            kwargs=dict(zip(keys, names[:2], strict=False)),
+        )
+
+
+def profile_page(client: NBAClient) -> None:
+    player = pick_player(client, "Search for a player", "profile_search")
+    if not player:
+        st.info("Type a player name to build their profile.")
+        leader_suggestions(client, "profile_search")
+        return
+
+    with st.spinner("Loading career stats…"):
+        totals = client.career_stats(player["id"])
+    if totals.empty:
+        st.error("No career data found for this player.")
+        return
+
+    per_game = career_per_game(totals)
+    profile_header(player, totals, per_game)
+
+    seasons = list(per_game["SEASON_ID"])
+    st.plotly_chart(career_chart(per_game), width="stretch")
+
+    season_detail(client, player, seasons)
+
     if player["is_active"]:
         try:
             league = client.league_player_stats()
@@ -315,6 +411,7 @@ def compare_page(client: NBAClient) -> None:
         b = pick_player(client, "Second player", "cmp_b")
     if not (a and b):
         st.info("Pick two players to compare.")
+        leader_suggestions(client, "cmp_a", "cmp_b")
         return
     try:
         league = client.league_player_stats()
@@ -365,6 +462,23 @@ def load_models() -> dict | None:
     }
 
 
+def missing_minutes_picker(
+    league: pd.DataFrame, home: str, away: str, key_prefix: str
+) -> dict[str, float]:
+    """Two per-team multiselects; returns expected minutes out per team."""
+    missing = {}
+    for col, team in zip(st.columns(2), (home, away), strict=True):
+        roster = league[league["TEAM_ABBREVIATION"] == team].sort_values(
+            "MIN", ascending=False
+        )
+        out = col.multiselect(
+            f"{team} out", list(roster["PLAYER_NAME"]), key=f"{key_prefix}_{team}"
+        )
+        missing[team] = float(roster.loc[roster["PLAYER_NAME"].isin(out), "MIN"].sum())
+    return missing
+
+
+@st.fragment
 def outcome_tab(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> None:
     teams = sorted(snapshot.index)
     cols = st.columns(2)
@@ -372,17 +486,8 @@ def outcome_tab(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> None
     away = cols[1].selectbox("Away team", [t for t in teams if t != home])
 
     league = client.league_player_stats()
-    missing = {}
     with st.expander("Who's out? (adjusts win probability)"):
-        out_cols = st.columns(2)
-        for col, team in zip(out_cols, (home, away), strict=True):
-            roster = league[league["TEAM_ABBREVIATION"] == team].sort_values(
-                "MIN", ascending=False
-            )
-            out = col.multiselect(f"{team} out", list(roster["PLAYER_NAME"]), key=f"out_{team}")
-            missing[team] = float(
-                roster.loc[roster["PLAYER_NAME"].isin(out), "MIN"].sum()
-            )
+        missing = missing_minutes_picker(league, home, away, key_prefix="out")
 
     x = matchup_features(
         snapshot,
@@ -409,6 +514,10 @@ def outcome_tab(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> None
         )
 
     st.divider()
+    slate_section(client, models, snapshot)
+
+
+def slate_section(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> None:
     st.subheader("Next slate")
     try:
         slate = upcoming_games(client.schedule())
@@ -435,6 +544,100 @@ def outcome_tab(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> None
     st.caption("Slate probabilities assume both teams at full strength.")
 
 
+def margin_chart(margin: pd.Series, home: str, away: str) -> go.Figure:
+    """Histogram of simulated margins, diverging around zero."""
+    bins = pd.interval_range(
+        start=(margin.min() // 4) * 4, end=margin.max() + 4, freq=4
+    )
+    counts = pd.cut(margin, bins).value_counts().sort_index()
+    centers = [iv.mid for iv in counts.index]
+    share = counts / len(margin)
+    colors = [PAL["series"][0] if c > 0 else PAL["series"][5] for c in centers]
+    fig = go.Figure(
+        go.Bar(
+            x=centers,
+            y=share.values,
+            marker_color=colors,
+            width=3.4,
+            customdata=[f"{iv.left:+.0f} to {iv.right:+.0f}" for iv in counts.index],
+            hovertemplate="%{customdata}: %{y:.1%}<extra></extra>",
+        )
+    )
+    fig = base_layout(fig, f"Simulated margin — {home} minus {away}")
+    fig.update_layout(hovermode="closest", showlegend=False, height=380)
+    fig.update_xaxes(zeroline=True, zerolinecolor=PAL["muted"], title="points")
+    fig.update_yaxes(tickformat=".0%", gridcolor=PAL["grid"])
+    return fig
+
+
+@st.fragment
+def simulate_tab(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> None:
+    import zlib
+
+    teams = sorted(snapshot.index)
+    cols = st.columns(2)
+    home = cols[0].selectbox(
+        "Home team", teams, index=teams.index("LAL") if "LAL" in teams else 0, key="sim_home"
+    )
+    away = cols[1].selectbox("Away team", [t for t in teams if t != home], key="sim_away")
+
+    league = client.league_player_stats()
+    with st.expander("Who's out? (dents scoring efficiency)"):
+        missing = missing_minutes_picker(league, home, away, key_prefix="sim_out")
+
+    # stable seed per scenario: same inputs always show the same 10,000 games
+    seed = zlib.crc32(f"{home}|{away}|{missing[home]}|{missing[away]}".encode())
+    sims = simulate_matchup(
+        snapshot,
+        home,
+        away,
+        home_missing_min=missing[home],
+        away_missing_min=missing[away],
+        n_sims=10_000,
+        seed=seed,
+    )
+    s = sim_summary(sims)
+
+    m = st.columns(4)
+    m[0].metric(f"{home} wins (10,000 sims)", f"{s['home_win_prob']:.0%}")
+    favorite = home if s["median_margin"] >= 0 else away
+    m[1].metric("Median margin", f"{favorite} by {abs(s['median_margin']):.0f}")
+    m[2].metric("Median total", f"{s['median_total']:.0f} pts")
+    m[3].metric("Overtime", f"{s['overtime_prob']:.1%}")
+
+    st.plotly_chart(margin_chart(sims["home_pts"] - sims["away_pts"], home, away),
+                    width="stretch")
+    st.caption(
+        f"80% of sims land between {home} {s['margin_p10']:+.0f} and "
+        f"{s['margin_p90']:+.0f}. Monte Carlo over pace and ratings — "
+        "possessions drawn around the teams' average pace, each side's "
+        "scoring around its offensive rating against the opponent's defense, "
+        "plus home court (fitted: 2.2 points) and minutes out. Holdout log "
+        "loss 0.601 vs the outcome model's 0.585 — trust the model's win "
+        "probability as the headline; the simulator adds the distributions."
+    )
+    try:
+        x = matchup_features(
+            snapshot, home, away,
+            home_missing_min=missing[home], away_missing_min=missing[away],
+        )
+        model_p = float(models["outcome"].predict_proba(x).iloc[0])
+        st.caption(f"For comparison, the outcome model gives {home} {model_p:.0%}.")
+    except Exception:
+        pass
+
+    with st.expander("Total points distribution"):
+        total = sims["home_pts"] + sims["away_pts"]
+        fig = go.Figure(
+            go.Histogram(x=total, nbinsx=40, marker_color=PAL["series"][0])
+        )
+        fig = base_layout(fig, "Simulated total points")
+        fig.update_layout(hovermode="closest", showlegend=False, height=320)
+        fig.update_yaxes(gridcolor=PAL["grid"])
+        st.plotly_chart(fig, width="stretch")
+
+
+@st.fragment
 def points_tab(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> None:
     player = pick_player(client, "Player", "pred_player")
     if not player:
@@ -468,6 +671,7 @@ def points_tab(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> None:
     )
 
 
+@st.fragment
 def lineup_tab(client: NBAClient, models: dict) -> None:
     league = client.league_player_stats()
     teams = sorted(league["TEAM_ABBREVIATION"].dropna().unique())
@@ -532,36 +736,121 @@ def predictions_page(client: NBAClient) -> None:
         snapshot["elo"] = league_elo().reindex(snapshot.index)
     except Exception:
         pass  # matchup_features degrades to a neutral elo_diff
-    tabs = st.tabs(["Game outcome", "Player points", "Starting five"])
+    tabs = st.tabs(["Game outcome", "Simulate", "Player points", "Starting five"])
     with tabs[0]:
         outcome_tab(client, models, snapshot)
     with tabs[1]:
-        points_tab(client, models, snapshot)
+        simulate_tab(client, models, snapshot)
     with tabs[2]:
+        points_tab(client, models, snapshot)
+    with tabs[3]:
         lineup_tab(client, models)
+
+
+def home_page(client: NBAClient) -> None:
+    """League pulse: the app opens with content, not an empty search box."""
+    st.caption(f"League pulse · {current_season()}")
+    try:
+        league = client.league_player_stats()
+    except Exception as e:
+        st.error(f"Could not load league stats: {e}")
+        return
+
+    tiles = st.columns(4)
+    boards: dict[str, pd.DataFrame] = {}
+    for col, (stat, label) in zip(
+        tiles,
+        [("PTS", "Points"), ("AST", "Assists"), ("REB", "Rebounds"), ("FG3M", "Threes")],
+        strict=False,
+    ):
+        try:
+            boards[label] = league_leaders(league, stat, top=10)
+        except KeyError:
+            continue
+        row = boards[label].iloc[0]
+        team = row.get("TEAM_ABBREVIATION", "")
+        col.metric(f"{label} — {row['PLAYER_NAME']} · {team}", f"{row[stat]:.1f}")
+    with st.expander("Top-ten leaderboards"):
+        for tab, label in zip(st.tabs(list(boards)), boards, strict=True):
+            with tab:
+                st.dataframe(boards[label].round(1), width="stretch", hide_index=True)
+
+    try:
+        snapshot = team_form_snapshot(client.team_games())
+    except Exception:
+        snapshot = pd.DataFrame()
+    if not snapshot.empty:
+        left, right = st.columns(2)
+        with left:
+            try:
+                st.plotly_chart(elo_dot_chart(league_elo()), width="stretch")
+            except Exception as e:
+                st.caption(f"Elo rankings unavailable: {e}")
+        with right:
+            st.plotly_chart(net_rating_chart(snapshot), width="stretch")
+        with st.expander("Full team form table"):
+            st.dataframe(
+                snapshot.drop(columns="last_game_date").round(3).sort_values(
+                    "form_net", ascending=False
+                ),
+                width="stretch",
+            )
+
+    models = load_models()
+    if models is not None and not snapshot.empty:
+        try:
+            snapshot["elo"] = league_elo().reindex(snapshot.index)
+        except Exception:
+            pass
+        st.divider()
+        slate_section(client, models, snapshot)
+
+
+def methodology_page(client: NBAClient) -> None:
+    import methodology
+
+    methodology.render(client, load_models(), PAL)
 
 
 def main() -> None:
     PAL.update(theme_palette())
-    st.title("🏀 NBA Insights")
+    inject_css()
     client = get_client()
-    page = st.sidebar.radio(
-        "View", ["Player profile", "Compare players", "Predictions", "Methodology"]
+    nav = st.navigation(
+        [
+            st.Page(lambda: home_page(client), title="League pulse", icon="📈", default=True),
+            st.Page(
+                lambda: profile_page(client),
+                title="Player profile",
+                icon="🏀",
+                url_path="profile",
+            ),
+            st.Page(
+                lambda: compare_page(client),
+                title="Compare players",
+                icon="⚖️",
+                url_path="compare",
+            ),
+            st.Page(
+                lambda: predictions_page(client),
+                title="Predictions",
+                icon="🔮",
+                url_path="predictions",
+            ),
+            st.Page(
+                lambda: methodology_page(client),
+                title="Methodology",
+                icon="📐",
+                url_path="methodology",
+            ),
+        ]
     )
+    st.title("🏀 NBA Insights")
     st.sidebar.caption(
         "Data: stats.nba.com via nba_api. Responses are cached locally; "
         "current-season data refreshes daily."
     )
-    if page == "Player profile":
-        profile_page(client)
-    elif page == "Compare players":
-        compare_page(client)
-    elif page == "Predictions":
-        predictions_page(client)
-    else:
-        import methodology
-
-        methodology.render(client, load_models(), PAL)
+    nav.run()
 
 
 main()
