@@ -84,6 +84,10 @@ def offline_app(tmp_path, monkeypatch):
             raise AssertionError("app hit the network despite a full fixture cache")
 
         monkeypatch.setattr(client_mod.NBAClient, "_call", no_network)
+        # leader tiles fetch headshots from the NBA CDN; stub them offline
+        import nba_insights.serve as serve_mod
+
+        monkeypatch.setattr(serve_mod, "fetch_headshot", lambda player_id: None)
         # cached resources/frames from other tests (or a real local cache)
         # must not leak into the fixture run
         st.cache_data.clear()
