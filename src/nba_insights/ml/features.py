@@ -293,7 +293,12 @@ def game_matchup_frame(team_form: pd.DataFrame) -> pd.DataFrame:
     return out.dropna(subset=[*OUTCOME_FEATURES, "home_win"]).reset_index(drop=True)
 
 
-def team_form_snapshot(team_games: pd.DataFrame, window: int | None = None) -> pd.DataFrame:
+def team_form_snapshot(
+    team_games: pd.DataFrame,
+    window: int | None = None,
+    form_priors: pd.DataFrame | None = None,
+    prior_weight: float = FORM_PRIOR_WEIGHT,
+) -> pd.DataFrame:
     """Current form per team (season-to-date, or the most recent *window* games).
 
     Unlike :func:`team_form_features` this is not shifted — it summarises
@@ -301,16 +306,57 @@ def team_form_snapshot(team_games: pd.DataFrame, window: int | None = None) -> p
     The default (``window=None``, season-to-date) matches how the shipped
     outcome model is trained. One row per team, indexed by
     TEAM_ABBREVIATION, columns TEAM_FORM_COLS plus last_game_date.
+
+    With *form_priors* (see :func:`prior_team_form`; season-to-date only)
+    each mean is shrunk toward the team's prior-season mean, the prior
+    counting as *prior_weight* pseudo-games — the same seeding the outcome
+    model is trained with, so early-season serving features match the
+    training distribution instead of being raw small-sample means.
     """
     df = _with_derived_stats(_prepare(team_games))
     df = df.sort_values(["TEAM_ID", "GAME_DATE"])
     tail = df.groupby("TEAM_ABBREVIATION", sort=False)
     scoped = tail.tail(window) if window is not None else df
-    snap = scoped.groupby("TEAM_ABBREVIATION").agg(
+    grouped = scoped.groupby("TEAM_ABBREVIATION")
+    snap = grouped.agg(
         **{form: (source, "mean") for form, source in _FORM_SOURCES.items()},
         last_game_date=("GAME_DATE", "max"),
     )
+    if form_priors is not None and window is None:
+        n = grouped.size()
+        team_ids = grouped["TEAM_ID"].last()
+        league_prior = form_priors.mean()
+        priors = form_priors.reindex(team_ids.to_numpy()).fillna(league_prior)
+        priors.index = team_ids.index
+        for form, source in _FORM_SOURCES.items():
+            snap[form] = (priors[source] * prior_weight + snap[form] * n) / (prior_weight + n)
     return snap
+
+
+def team_rest_features(
+    team_games: pd.DataFrame, tipoff: pd.Timestamp | None = None
+) -> pd.DataFrame:
+    """Rest and fatigue flags per team entering a game on *tipoff*'s date.
+
+    One row per TEAM_ABBREVIATION: rest_days (days since last game, capped
+    at REST_CAP), b2b, three_in_four — the same pre-game flags the outcome
+    model is trained on, computed from each team's last two played games.
+    """
+    df = _prepare(team_games).sort_values("GAME_DATE")
+    when = pd.Timestamp(tipoff) if tipoff is not None else pd.Timestamp.now(tz="UTC")
+    if when.tzinfo is not None:
+        when = when.tz_localize(None)
+    date = when.normalize()
+    rows = {}
+    for team, dates in df.groupby("TEAM_ABBREVIATION")["GAME_DATE"]:
+        recent = dates.tail(2).tolist()
+        gap1 = (date - recent[-1]).days
+        rows[team] = {
+            "rest_days": float(min(max(gap1, 0), REST_CAP)),
+            "b2b": int(gap1 == 1),
+            "three_in_four": int(len(recent) == 2 and (date - recent[-2]).days <= 3),
+        }
+    return pd.DataFrame.from_dict(rows, orient="index")
 
 
 def matchup_features(

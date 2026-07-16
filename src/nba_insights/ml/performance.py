@@ -13,6 +13,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import joblib
+import numpy as np
 import pandas as pd
 from sklearn.linear_model import Ridge
 from sklearn.metrics import mean_absolute_error
@@ -35,17 +36,23 @@ def _pipe() -> Pipeline:
     return make_pipeline(StandardScaler(), Ridge(alpha=1.0))
 
 
+N_INTERVAL_BINS = 4  # residual spread grows with projection level
+
+
 class PlayerPointsModel:
     def __init__(
         self,
         minutes: Pipeline | None = None,
         rate: Pipeline | None = None,
-        resid_quantiles: tuple[float, float] | None = None,
+        resid_quantiles: dict | tuple[float, float] | None = None,
     ):
         self.minutes = minutes or _pipe()
         self.rate = rate or _pipe()
-        # (q10, q90) of training residuals: an empirical 80% interval around
-        # the projection. None on artifacts saved before intervals existed.
+        # Empirical 80% interval around the projection. Residual scatter is
+        # heteroscedastic — a 30ppg projection has far more spread than an
+        # 8ppg one — so training residuals are binned by predicted level:
+        # {"edges": [...], "quantiles": [(q10, q90), ...]}. Old artifacts
+        # carry a pooled (q10, q90) tuple; None predates intervals entirely.
         self.resid_quantiles = resid_quantiles
 
     def fit(self, player_games: pd.DataFrame) -> PlayerPointsModel:
@@ -53,15 +60,28 @@ class PlayerPointsModel:
         self.minutes.fit(player_games[MIN_FEATURES], player_games["MIN"])
         rate_target = player_games["PTS"] / player_games["MIN"].clip(lower=1)
         self.rate.fit(player_games[RATE_FEATURES], rate_target)
-        resid = player_games["PTS"] - self.predict(player_games)
-        self.resid_quantiles = (float(resid.quantile(0.10)), float(resid.quantile(0.90)))
+        pred = self.predict(player_games)
+        resid = player_games["PTS"] - pred
+        edges = pred.quantile([i / N_INTERVAL_BINS for i in range(1, N_INTERVAL_BINS)])
+        bins = np.searchsorted(edges.to_numpy(), pred.to_numpy())
+        self.resid_quantiles = {
+            "edges": [float(e) for e in edges],
+            "quantiles": [
+                (float(resid[bins == b].quantile(0.10)), float(resid[bins == b].quantile(0.90)))
+                for b in range(N_INTERVAL_BINS)
+            ],
+        }
         return self
 
     def interval(self, prediction: float) -> tuple[float, float] | None:
         """Empirical 80% interval around a projection, floored at 0 points."""
         if self.resid_quantiles is None:
             return None
-        lo, hi = self.resid_quantiles
+        if isinstance(self.resid_quantiles, dict):
+            idx = int(np.searchsorted(self.resid_quantiles["edges"], prediction))
+            lo, hi = self.resid_quantiles["quantiles"][idx]
+        else:  # pooled band from a pre-binning artifact
+            lo, hi = self.resid_quantiles
         return (max(0.0, prediction + lo), max(0.0, prediction + hi))
 
     def predict(self, features: pd.DataFrame) -> pd.Series:
@@ -76,11 +96,17 @@ class PlayerPointsModel:
     def evaluate(self, player_games: pd.DataFrame) -> dict:
         y = player_games["PTS"]
         pred = self.predict(player_games)
-        return {
+        out = {
             "n_games": len(player_games),
             "mae": mean_absolute_error(y, pred),
             "baseline_mae": mean_absolute_error(y, player_games["pts_r10"]),
         }
+        if self.resid_quantiles is not None:
+            # measured coverage of the nominal 80% interval on this data
+            bands = np.array([self.interval(p) for p in pred])
+            hit = (y.to_numpy() >= bands[:, 0]) & (y.to_numpy() <= bands[:, 1])
+            out["interval_coverage"] = float(hit.mean())
+        return out
 
     def save(self, path: str | Path) -> None:
         path = Path(path)

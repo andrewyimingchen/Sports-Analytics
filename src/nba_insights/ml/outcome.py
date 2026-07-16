@@ -20,10 +20,12 @@ from nba_insights.ml.features import OUTCOME_FEATURES
 
 
 class GameOutcomeModel:
-    def __init__(self, pipeline: Pipeline | None = None):
-        # C=0.25: the form features are deliberately collinear (net rating,
-        # ratings, four factors); holdout-tuned on 2025-26
-        self.pipeline = pipeline or make_pipeline(StandardScaler(), LogisticRegression(C=0.25))
+    def __init__(self, pipeline: Pipeline | None = None, C: float = 0.25):
+        # Regularization matters: the form features are deliberately
+        # collinear (net rating, ratings, four factors). C is tuned by
+        # ml.train on a dev season carved from the training years — never
+        # on the reported holdout.
+        self.pipeline = pipeline or make_pipeline(StandardScaler(), LogisticRegression(C=C))
 
     def fit(self, matchups: pd.DataFrame) -> GameOutcomeModel:
         """*matchups* is the output of features.game_matchup_frame."""

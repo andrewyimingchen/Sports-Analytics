@@ -8,9 +8,11 @@ the cache: finished seasons never expire, current-season data refreshes daily.
 from __future__ import annotations
 
 import logging
+import re
+import threading
 import time
 from collections.abc import Callable
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 import pandas as pd
 from nba_api.stats.endpoints import (
@@ -53,12 +55,23 @@ class NBAClient:
         self.delay = delay
         self.retries = retries
         self._last_call = 0.0
+        # one client is shared across Streamlit sessions / API worker
+        # threads; the lock keeps the rate limiter honest under concurrency
+        self._rate_lock = threading.Lock()
 
     # -- static lookups (offline) --------------------------------------------
 
     def search_players(self, name: str) -> list[dict]:
-        """Match players by full-name fragment using nba_api's bundled table."""
-        return players.find_players_by_full_name(name)
+        """Match players by full-name fragment using nba_api's bundled table.
+
+        nba_api compiles the query as a regex, so user input is escaped —
+        a stray "(" or "*" in a search box must not raise re.error.
+        """
+        return players.find_players_by_full_name(re.escape(name))
+
+    def find_player(self, player_id: int) -> dict | None:
+        """Look up one player by ID in nba_api's bundled table (offline)."""
+        return players.find_player_by_id(player_id)
 
     # -- remote endpoints (cached) ---------------------------------------------
 
@@ -96,6 +109,7 @@ class NBAClient:
             f"game_log/v2/{player_id}/{season}{_type_suffix(season_type)}",
             lambda: self._fetch_game_log(player_id, season, season_type),
             ttl=self._season_ttl(season),
+            fetched_after=self._season_fetched_after(season),
         )
 
     @staticmethod
@@ -127,6 +141,7 @@ class NBAClient:
                 season=season, per_mode_detailed=per_mode
             ).get_data_frames()[0],
             ttl=self._season_ttl(season),
+            fetched_after=self._season_fetched_after(season),
         )
 
     def league_player_advanced(self, season: str | None = None) -> pd.DataFrame:
@@ -138,6 +153,7 @@ class NBAClient:
                 season=season, measure_type_detailed_defense="Advanced"
             ).get_data_frames()[0],
             ttl=self._season_ttl(season),
+            fetched_after=self._season_fetched_after(season),
         )
 
     def league_player_clutch(self, season: str | None = None) -> pd.DataFrame:
@@ -157,6 +173,7 @@ class NBAClient:
                 point_diff=5,
             ).get_data_frames()[0],
             ttl=self._season_ttl(season),
+            fetched_after=self._season_fetched_after(season),
         )
 
     def shot_chart(
@@ -176,6 +193,7 @@ class NBAClient:
                 context_measure_simple="FGA",
             ).get_data_frames()[0],
             ttl=self._season_ttl(season),
+            fetched_after=self._season_fetched_after(season),
         )
 
     def shot_league_averages(
@@ -197,6 +215,7 @@ class NBAClient:
                 context_measure_simple="FGA",
             ).get_data_frames()[1],
             ttl=self._season_ttl(season),
+            fetched_after=self._season_fetched_after(season),
         )
 
     def team_games(self, season: str | None = None) -> pd.DataFrame:
@@ -217,6 +236,7 @@ class NBAClient:
                 player_or_team_abbreviation=mode,
             ).get_data_frames()[0],
             ttl=self._season_ttl(season),
+            fetched_after=self._season_fetched_after(season),
         )
 
     def standings(self, season: str | None = None) -> pd.DataFrame:
@@ -225,6 +245,7 @@ class NBAClient:
             f"standings/{season}",
             lambda: leaguestandings.LeagueStandings(season=season).get_data_frames()[0],
             ttl=self._season_ttl(season),
+            fetched_after=self._season_fetched_after(season),
         )
 
     # columns kept from PlayByPlayV3: enough for score-timeline analysis
@@ -263,6 +284,7 @@ class NBAClient:
             f"schedule/{season}",
             lambda: scheduleleaguev2.ScheduleLeagueV2(season=season).get_data_frames()[0],
             ttl=self._season_ttl(season),
+            fetched_after=self._season_fetched_after(season),
         )
 
     def lineups(self, season: str | None = None) -> pd.DataFrame:
@@ -277,6 +299,7 @@ class NBAClient:
                 per_mode_detailed="Totals",
             ).get_data_frames()[0],
             ttl=self._season_ttl(season),
+            fetched_after=self._season_fetched_after(season),
         )
 
     # -- plumbing ---------------------------------------------------------------
@@ -284,25 +307,43 @@ class NBAClient:
     def _season_ttl(self, season: str) -> timedelta | None:
         return CURRENT_SEASON_TTL if season == current_season() else None
 
+    def _season_fetched_after(self, season: str) -> datetime | None:
+        """Earliest fetch time a past season's entry may have.
+
+        A finished season is only immutable if it was fetched after the
+        season actually ended; an entry cached mid-season is a partial
+        snapshot and must be refetched once the season rolls over. July 1
+        after the season's end year is safely past the Finals.
+        """
+        if season == current_season():
+            return None
+        end_year = int(season[:4]) + 1
+        return datetime(end_year, 7, 1, tzinfo=UTC)
+
     def _cached(
         self,
         key: str,
         fetch: Callable[[], pd.DataFrame],
         ttl: timedelta | None,
+        fetched_after: datetime | None = None,
     ) -> pd.DataFrame:
-        return self.cache.get_or_fetch(key, lambda: self._call(fetch), ttl=ttl)
+        return self.cache.get_or_fetch(
+            key, lambda: self._call(fetch), ttl=ttl, fetched_after=fetched_after
+        )
 
-    # Empty responses are treated as transient upstream glitches and never
-    # cached, so a later good response can still land (see Cache.get_or_fetch).
+    # Empty responses are cached only briefly (see Cache.get_or_fetch): a
+    # transient upstream glitch can't get pinned for a whole TTL, and a
+    # legitimately empty response doesn't refetch on every render.
 
     def _call(self, fetch: Callable[[], pd.DataFrame]) -> pd.DataFrame:
         """Run a remote fetch with rate limiting and retry with backoff."""
         last_error: Exception | None = None
         for attempt in range(self.retries):
-            wait = self.delay - (time.monotonic() - self._last_call)
-            if wait > 0:
-                time.sleep(wait)
-            self._last_call = time.monotonic()
+            with self._rate_lock:
+                wait = self.delay - (time.monotonic() - self._last_call)
+                if wait > 0:
+                    time.sleep(wait)
+                self._last_call = time.monotonic()
             try:
                 return fetch()
             except Exception as e:  # nba_api raises assorted requests/JSON errors

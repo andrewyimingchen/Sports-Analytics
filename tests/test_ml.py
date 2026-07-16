@@ -23,13 +23,23 @@ from nba_insights.ml.features import (
 )
 
 
-def synthetic_team_games(n_games_per_team: int = 30, seed: int = 7) -> pd.DataFrame:
-    """A tiny league of 4 teams where team strength drives outcomes."""
+def synthetic_team_games(
+    n_games_per_team: int = 30,
+    seed: int = 7,
+    start: str = "2024-11-01",
+    season_id: str = "22024",
+    game_prefix: str = "G",
+) -> pd.DataFrame:
+    """A tiny league of 4 teams where team strength drives outcomes.
+
+    *start*/*season_id*/*game_prefix* let callers build multi-season
+    frames with distinct dates and unique GAME_IDs (e.g. for Elo).
+    """
     rng = np.random.default_rng(seed)
     strength = {1: 8.0, 2: 3.0, 3: -3.0, 4: -8.0}
     teams = list(strength)
     rows = []
-    date = pd.Timestamp("2024-11-01")
+    date = pd.Timestamp(start)
     game_id = 0
     for _ in range(n_games_per_team):
         order = rng.permutation(teams)
@@ -46,10 +56,10 @@ def synthetic_team_games(n_games_per_team: int = 30, seed: int = 7) -> pd.DataFr
                 fgm = (pts - ftm - 3 * fg3m) / 2 + fg3m  # 2s + 3s reproduce PTS
                 rows.append(
                     {
-                        "SEASON_ID": "22024",
+                        "SEASON_ID": season_id,
                         "TEAM_ID": team,
                         "TEAM_ABBREVIATION": f"T{team}",
-                        "GAME_ID": f"G{game_id:04d}",
+                        "GAME_ID": f"{game_prefix}{game_id:04d}",
                         "GAME_DATE": date.strftime("%Y-%m-%d"),
                         "MATCHUP": f"T{team} vs. T{opp}" if home else f"T{team} @ T{opp}",
                         "WL": "W" if pm > 0 else "L",
@@ -478,3 +488,71 @@ def test_lineup_net_estimate():
         lineup_net_estimate(league, five[:4])
     with pytest.raises(KeyError):
         lineup_net_estimate(league, [*five[:4], "Nobody"])
+
+
+def test_points_interval_binned_by_projection_level():
+    feats = player_game_features(synthetic_player_games(60))
+    model = PlayerPointsModel().fit(feats)
+    rq = model.resid_quantiles
+    assert set(rq) == {"edges", "quantiles"}
+    assert len(rq["quantiles"]) == len(rq["edges"]) + 1
+    # a projection above every edge uses the top bin's band
+    top_lo, top_hi = rq["quantiles"][-1]
+    hi_proj = rq["edges"][-1] + 10
+    assert model.interval(hi_proj) == (
+        max(0.0, hi_proj + top_lo),
+        max(0.0, hi_proj + top_hi),
+    )
+    # legacy pooled-tuple artifacts still work
+    legacy = PlayerPointsModel(model.minutes, model.rate, resid_quantiles=(-5.0, 6.0))
+    assert legacy.interval(20.0) == (15.0, 26.0)
+    # the nominal 80% band's coverage is measured, near nominal in-sample
+    cov = model.evaluate(feats)["interval_coverage"]
+    assert 0.7 <= cov <= 0.9
+
+
+def test_tune_outcome_c_uses_dev_season_never_holdout():
+    from nba_insights.ml.train import C_GRID, tune_outcome_c
+
+    matchups = game_matchup_frame(team_form_features(synthetic_team_games(60), window=5))
+    earlier = matchups.copy()
+    earlier["GAME_DATE"] = earlier["GAME_DATE"] - pd.DateOffset(years=1)
+    combined = pd.concat([earlier, matchups], ignore_index=True)
+    c = tune_outcome_c(combined, dev_season_start="2024")
+    assert c in C_GRID
+    # degenerate split (no fit rows before the dev season) falls back safely
+    assert tune_outcome_c(matchups, dev_season_start="2020") == 0.25
+
+
+def test_snapshot_prior_seeding_matches_training_formula():
+    from nba_insights.ml.features import FORM_PRIOR_WEIGHT, prior_team_form
+
+    games = synthetic_team_games(60)
+    priors = prior_team_form(games)  # stand-in for last season's means
+    early = pd.concat(
+        [g.head(4) for _, g in games.groupby("TEAM_ID")], ignore_index=True
+    )
+    raw = team_form_snapshot(early)
+    seeded = team_form_snapshot(early, form_priors=priors)
+    w, n = FORM_PRIOR_WEIGHT, 4
+    expected = (priors.loc[1, "PLUS_MINUS"] * w + raw.loc["T1", "form_net"] * n) / (w + n)
+    assert seeded.loc["T1", "form_net"] == pytest.approx(expected)
+    # unknown teams fall back to the league-mean prior rather than NaN
+    seeded_missing = team_form_snapshot(early, form_priors=priors.drop(index=1))
+    assert not seeded_missing["form_net"].isna().any()
+
+
+def test_team_rest_features_flags():
+    from nba_insights.ml.features import team_rest_features
+
+    games = synthetic_team_games()
+    last_date = pd.to_datetime(games["GAME_DATE"]).max()
+    # every team plays on a two-day cadence ending at last_date
+    day_after = team_rest_features(games, tipoff=last_date + pd.Timedelta(days=1))
+    assert (day_after["rest_days"] == 1).all()
+    assert (day_after["b2b"] == 1).all()
+    assert (day_after["three_in_four"] == 1).all()  # also played 3 days ago
+    rested = team_rest_features(games, tipoff=last_date + pd.Timedelta(days=3))
+    assert (rested["b2b"] == 0).all()
+    assert (rested["three_in_four"] == 0).all()
+    assert (rested["rest_days"] == 3).all()
