@@ -79,6 +79,7 @@ def test_predictions_page_renders_all_tabs():
     )
     at.run()
     assert not at.exception, [e.value for e in at.exception]
+    # outcome tab renders the win-probability duel bar
+    assert any("duel-track" in str(md.value) for md in at.markdown)
     labels = [m.label for m in at.metric]
-    assert any("win probability" in label for label in labels)  # outcome tab
     assert any("10,000 sims" in label for label in labels)  # simulate tab

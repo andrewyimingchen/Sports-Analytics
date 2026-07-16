@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-LEADER_COLUMNS = ["PLAYER_NAME", "TEAM_ABBREVIATION", "GP"]
+LEADER_COLUMNS = ["PLAYER_ID", "PLAYER_NAME", "TEAM_ABBREVIATION", "GP"]
 
 
 def league_leaders(

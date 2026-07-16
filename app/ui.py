@@ -69,6 +69,53 @@ _CSS = """
 }
 [data-testid="stImage"] img:hover { transform: scale(1.03); }
 
+/* app title: tighter tracking + a small brand accent under it */
+h1 { letter-spacing: -0.02em; }
+h1::after {
+  content: "";
+  display: block;
+  width: 72px;
+  height: 4px;
+  border-radius: 2px;
+  margin-top: 0.35rem;
+  background: linear-gradient(90deg, #2a78d6, #1baf7a);
+}
+
+/* skill pills: percentile-derived badges on the player profile */
+.pills { display: flex; flex-wrap: wrap; gap: 6px; margin: 0.1rem 0 0.7rem; }
+.pill {
+  border: 1px solid rgba(128, 128, 128, 0.35);
+  border-radius: 999px;
+  padding: 2px 12px;
+  font-size: 0.85rem;
+  background: rgba(128, 128, 128, 0.08);
+  animation: rise-in 0.45s ease-out both;
+}
+.pill b { font-weight: 600; }
+
+/* duel bar: one shared track for a win probability, home vs away */
+.duel { margin: 0.5rem 0 0.9rem; }
+.duel-labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.95rem;
+  margin-bottom: 6px;
+}
+.duel-track {
+  display: flex;
+  gap: 2px;               /* spacer between adjacent fills */
+  height: 14px;           /* thin mark */
+  border-radius: 4px;     /* rounded data ends */
+  overflow: hidden;
+}
+.duel-track > div { transition: width 0.4s ease; min-width: 4px; }
+
+/* simulated median scoreline */
+.scoreline { font-size: 1.45rem; margin: 0.3rem 0 0.6rem; }
+.scoreline b { font-weight: 700; }
+.scoreline-note { font-size: 0.8rem; opacity: 0.65; margin-left: 0.6rem; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation: none !important;

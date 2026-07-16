@@ -333,6 +333,61 @@ def net_rating_chart(snapshot: pd.DataFrame, n: int = 5) -> go.Figure:
     return fig
 
 
+def win_prob_bar(home: str, away: str, prob: float) -> None:
+    """One shared probability track — home fill vs away fill, labeled ends.
+
+    Replaces twin metrics: a single mark makes the complementarity obvious
+    and the favourite readable at a glance. Colors follow the entity
+    (home=blue, away=red), matching the margin chart's convention.
+    """
+    st.markdown(
+        f"""
+<div class="duel">
+  <div class="duel-labels">
+    <span><b>{home}</b> win probability (home) · <b>{prob:.0%}</b></span>
+    <span><b>{1 - prob:.0%}</b> · {away} (away)</span>
+  </div>
+  <div class="duel-track">
+    <div style="width:{prob * 100:.1f}%; background:{PAL["series"][0]};"></div>
+    <div style="width:{(1 - prob) * 100:.1f}%; background:{PAL["series"][5]};"></div>
+  </div>
+</div>""",
+        unsafe_allow_html=True,
+    )
+
+
+# profile badge labels: stat code -> plain-language skill
+_BADGE_LABELS = {
+    "PTS": "Scoring",
+    "AST": "Playmaking",
+    "REB": "Rebounding",
+    "STL": "Steals",
+    "BLK": "Rim protection",
+    "FG_PCT": "Shooting efficiency",
+    "FG3_PCT": "3-point shooting",
+    "FT_PCT": "Free throws",
+    "NET RTG": "Impact",
+    "CLUTCH NET": "Clutch",
+}
+
+
+def skill_badges(ranks: pd.Series, floor: float = 85.0, top: int = 4) -> None:
+    """Percentile-derived skill pills — the profile's TL;DR.
+
+    Shows up to *top* stats at or above the *floor* percentile; players
+    without an elite skill this season simply get no pill row.
+    """
+    elite = ranks[ranks >= floor].sort_values(ascending=False).head(top)
+    if elite.empty:
+        return
+    pills = "".join(
+        f'<span class="pill"><b>{_BADGE_LABELS.get(str(stat), str(stat))}</b>'
+        f" · {value:.0f}th pct</span>"
+        for stat, value in elite.items()
+    )
+    st.markdown(f'<div class="pills">{pills}</div>', unsafe_allow_html=True)
+
+
 def pick_player(client: NBAClient, label: str, key: str) -> dict | None:
     query = st.text_input(label, key=key, placeholder="e.g. LeBron James")
     if not query:
@@ -481,15 +536,20 @@ def profile_page(client: NBAClient) -> None:
         return
 
     per_game = career_per_game(totals)
-    ratings = None
+    ratings, ranks = None, None
     if player["is_active"]:
         try:
-            row = league_with_ratings(client)
-            row = row[row["PLAYER_ID"] == player["id"]]
+            league = league_with_ratings(client)
+            row = league[league["PLAYER_ID"] == player["id"]]
             ratings = row.iloc[0] if not row.empty else None
+            ranks = percentile_ranks(league, player["full_name"]).rename(RATING_LABELS)
+        except KeyError:
+            ranks = None  # not enough games for league ranks this season
         except Exception:
-            logger.warning("league ratings unavailable for profile header", exc_info=True)
+            logger.warning("league ratings unavailable for profile", exc_info=True)
     profile_header(player, totals, per_game, ratings)
+    if ranks is not None:
+        skill_badges(ranks)
 
     seasons = list(per_game["SEASON_ID"])
     st.plotly_chart(career_chart(per_game), width="stretch")
@@ -497,16 +557,32 @@ def profile_page(client: NBAClient) -> None:
     season_detail(client, player, seasons)
 
     if player["is_active"]:
-        try:
-            league = league_with_ratings(client)
-            ranks = percentile_ranks(league, player["full_name"]).rename(RATING_LABELS)
+        if ranks is not None:
             st.plotly_chart(percentile_chart(ranks), width="stretch")
             with st.expander("Percentile data as table"):
                 st.dataframe(ranks.to_frame("percentile"))
-        except KeyError:
+        else:
             st.caption("Not enough games this season for league percentile ranks.")
-        except Exception as e:
-            st.error(f"Could not load league stats: {e}")
+
+
+# stats where a smaller number wins the row
+_LOWER_BETTER = {"TOV"}
+
+
+def _best_value_style(table: pd.DataFrame):
+    """Tint the best value in each stat row so the table answers 'who wins
+    this stat' without reading every number. Ink stays the text color; the
+    tinted background carries the highlight."""
+    tint = f"background: {PAL['series'][0]}22; font-weight: 600;"
+
+    def highlight(row: pd.Series) -> list[str]:
+        values = row.dropna()
+        if values.empty:
+            return ["" for _ in row]
+        best = values.min() if row.name in _LOWER_BETTER else values.max()
+        return [tint if pd.notna(v) and v == best else "" for v in row]
+
+    return table.style.apply(highlight, axis=1)
 
 
 def compare_page(client: NBAClient) -> None:
@@ -529,7 +605,7 @@ def compare_page(client: NBAClient) -> None:
     try:
         league = league_with_ratings(client)
         table = comparison_table(league, [p["full_name"] for p in players])
-        st.dataframe(table.rename(index=RATING_LABELS), width="stretch")
+        st.dataframe(_best_value_style(table.rename(index=RATING_LABELS)), width="stretch")
 
         ranks = pd.concat(
             [percentile_ranks(league, p["full_name"]).rename(RATING_LABELS) for p in players],
@@ -636,9 +712,7 @@ def outcome_tab(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> None
         away_missing_min=missing[away],
     )
     prob = float(models["outcome"].predict_proba(x).iloc[0])
-    m = st.columns(2)
-    m[0].metric(f"{home} win probability (home)", f"{prob:.0%}")
-    m[1].metric(f"{away} win probability (away)", f"{1 - prob:.0%}")
+    win_prob_bar(home, away, prob)
     st.caption(
         "Logistic regression on season-to-date form differentials — win%, net "
         "rating, four factors (eFG%, TOV%, OREB%, FT rate), pace, ORtg/DRtg, "
@@ -693,10 +767,19 @@ def slate_section(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> No
             {
                 "matchup": f"{g['away']} @ {g['home']}",
                 "tipoff (ET)": tipoff.strftime("%b %d, %I:%M %p"),
-                "home win prob": f"{p:.0%}",
+                "home win prob": p * 100,
             }
         )
-    st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+    st.dataframe(
+        pd.DataFrame(rows),
+        width="stretch",
+        hide_index=True,
+        column_config={
+            "home win prob": st.column_config.ProgressColumn(
+                "home win prob", min_value=0.0, max_value=100.0, format="%.0f%%"
+            ),
+        },
+    )
     st.caption(
         "Slate probabilities account for rest and back-to-backs, and assume "
         "both teams at full strength."
@@ -757,6 +840,13 @@ def simulate_tab(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> Non
     )
     s = sim_summary(sims)
 
+    home_med = int(sims["home_pts"].median())
+    away_med = int(sims["away_pts"].median())
+    st.markdown(
+        f'<div class="scoreline">{home} <b>{home_med}</b> — <b>{away_med}</b> {away}'
+        '<span class="scoreline-note">median of 10,000 simulations</span></div>',
+        unsafe_allow_html=True,
+    )
     m = st.columns(4)
     m[0].metric(f"{home} wins (10,000 sims)", f"{s['home_win_prob']:.0%}")
     favorite = home if s["median_margin"] >= 0 else away
@@ -1000,12 +1090,22 @@ def team_detail(client: NBAClient, games: pd.DataFrame, snapshot: pd.DataFrame) 
                 width="stretch",
                 hide_index=True,
                 height=390,
+                column_config={
+                    "MIN": st.column_config.ProgressColumn(
+                        "MIN", min_value=0.0, max_value=40.0, format="%.1f"
+                    ),
+                    "PTS": st.column_config.NumberColumn(format="%.1f"),
+                    "AST": st.column_config.NumberColumn(format="%.1f"),
+                    "REB": st.column_config.NumberColumn(format="%.1f"),
+                    "NET RTG": st.column_config.NumberColumn(format="%.1f"),
+                },
             )
         except Exception as e:
             st.error(f"Could not load roster: {e}")
     with right:
         st.subheader("Last 10 games")
-        recent = log.tail(10).iloc[::-1]
+        recent = log.tail(10).iloc[::-1].copy()
+        recent["GAME_DATE"] = pd.to_datetime(recent["GAME_DATE"]).dt.date
         st.dataframe(
             recent[["GAME_DATE", "MATCHUP", "WL", "PTS", "PLUS_MINUS"]].rename(
                 columns={"PLUS_MINUS": "MARGIN"}
@@ -1013,6 +1113,10 @@ def team_detail(client: NBAClient, games: pd.DataFrame, snapshot: pd.DataFrame) 
             width="stretch",
             hide_index=True,
             height=390,
+            column_config={
+                "GAME_DATE": st.column_config.DateColumn("DATE", format="MMM DD"),
+                "MARGIN": st.column_config.NumberColumn(format="%+d"),
+            },
         )
 
 
@@ -1053,7 +1157,17 @@ def teams_page(client: NBAClient) -> None:
         )
         with col:
             st.caption(conf)
-            st.dataframe(table, width="stretch", hide_index=True, height=390)
+            st.dataframe(
+                table,
+                width="stretch",
+                hide_index=True,
+                height=390,
+                column_config={
+                    "Win%": st.column_config.ProgressColumn(
+                        "Win%", min_value=0.0, max_value=1.0, format="%.3f"
+                    ),
+                },
+            )
 
 
 def home_page(client: NBAClient) -> None:
@@ -1096,13 +1210,22 @@ def home_page(client: NBAClient) -> None:
         row = board.iloc[0]
         team = row.get("TEAM_ABBREVIATION", "")
         value = f"{row[stat]:+.1f}" if "RATING" in stat else f"{row[stat]:.1f}"
-        col.metric(label, value)
-        col.caption(f"{row['PLAYER_NAME']} · {team}")
+        with col:
+            if "PLAYER_ID" in row.index:  # face the number: the leader's headshot
+                photo = fetch_headshot(int(row["PLAYER_ID"]))
+                if photo:
+                    st.image(photo, width=76)
+            st.metric(label, value)
+            st.caption(f"{row['PLAYER_NAME']} · {team}")
     if boards:
         with st.expander("Top-ten leaderboards"):
             for tab, label in zip(st.tabs(list(boards)), boards, strict=True):
                 with tab:
-                    st.dataframe(boards[label].round(1), width="stretch", hide_index=True)
+                    st.dataframe(
+                        boards[label].drop(columns="PLAYER_ID", errors="ignore").round(1),
+                        width="stretch",
+                        hide_index=True,
+                    )
     else:
         st.info("No league stats yet this season — leaderboards appear after opening night.")
 
@@ -1127,6 +1250,7 @@ def home_page(client: NBAClient) -> None:
                 ),
                 width="stretch",
             )
+        st.caption(f"Data through {snapshot['last_game_date'].max():%b %d, %Y}.")
 
     models = load_models()
     if models is not None and not snapshot.empty:
