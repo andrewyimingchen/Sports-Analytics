@@ -1,16 +1,25 @@
 # NBA Insights 🏀
 
-A Streamlit app in six pages:
+A Streamlit app in seven pages:
 
 - **League pulse** — the landing page: per-game and net/clutch-rating leaders,
   Elo power rankings, best/worst net ratings, and the next slate with win
-  probabilities
+  probabilities; a season selector rewinds the leaders and team form to any
+  season back to 1996-97 (Elo and the slate stay current — they're "now"
+  widgets)
 - **Player profile** — career trajectory, form trends, shot chart (raw or
-  zone-efficiency-vs-league view, regular season or playoffs), league
-  percentile ranks incl. net and clutch rating
-- **Compare players** — side-by-side stats and percentile bars
+  zone-efficiency-vs-league view, regular season or playoffs) with shot
+  quality (xeFG%: selection vs making), team on/off splits, league
+  percentile ranks incl. net rating, clutch rating, and DARKO DPM — with a
+  season picker, so retired players rank against their own era (1996-97
+  onward)
+- **Compare players** — side-by-side stats, percentile bars, shot quality, and
+  a downloadable share poster (the Predictions page has one per matchup too)
 - **Teams** — record/ratings/Elo tiles, season margin trend, roster with
-  ratings, last ten games, and conference standings
+  ratings, per-player on/off impact, last ten games, and conference standings
+- **Draft** — every draft class back to 1947 with combine measurements
+  (wingspan, standing reach, athletic testing) from 2000 on; drafted players
+  carry their pick pedigree on the profile header
 - **Predictions** — game outcome probabilities, a 10,000-run Monte Carlo game
   simulator (margin/total distributions), player points projections with 80%
   intervals, and starting-five estimates
@@ -46,7 +55,7 @@ src/nba_insights/
 ├── ml/          # features, Elo, outcome/points/lineup models, game simulator
 ├── pbp/         # play-by-play corpus utilities
 └── api/         # FastAPI JSON endpoints + PWA
-app/             # Streamlit UI (six pages; ui.py holds the CSS motion layer)
+app/             # Streamlit UI (seven pages; ui.py holds the CSS motion layer)
 tests/           # unit + AppTest smoke tests — no network required
 ```
 
@@ -116,6 +125,8 @@ The same FastAPI service exposes the data as JSON:
 | `/players/{id}/percentiles` | current-season league percentile ranks |
 | `/compare?names=A&names=B` | side-by-side per-game stats (2–4 players) |
 | `/players/{id}/card` | self-contained HTML share card |
+| `/posters/compare?names=A&names=B` | 1:1 share poster of a comparison (`&format=png` for an image) |
+| `/posters/game?home=LAL&away=BOS` | 16:9 share poster of a game prediction (`&format=png`) |
 | `/teams` | tricodes of all teams this season |
 | `/predict/game?home=LAL&away=BOS` | home-team win probability |
 | `/players/{id}/headshot` | headshot proxy (CDN blocks hotlinking) |
@@ -130,6 +141,14 @@ league dashboard, standings, and the top players by minutes:
 
 ```bash
 uv run python -m nba_insights.warm --top 20
+```
+
+Historical seasons load live the first time someone selects them; to
+pre-seed the era features instead (finished seasons cache forever, so this
+is a one-time cost per season):
+
+```bash
+uv run python -m nba_insights.warm --seasons 1996-97 1997-98 2015-16
 ```
 
 Schedule it nightly with cron (run from the repo root so it fills the same
@@ -162,6 +181,18 @@ does **not** scrape Basketball-Reference.com — their terms of service prohibit
 scraping and commercial reuse (the previous incarnation of this repo did; that
 code has been removed). For a commercial deployment at scale, budget for a
 licensed provider such as SportsDataIO or Sportradar.
+
+Salary/contract data is deliberately absent: every free source (Spotrac,
+HoopsHype, Basketball-Reference, and the public CSVs derived from them)
+prohibits scraping or reuse, so that feature waits on a licensed provider.
+
+One external dataset is displayed with attribution: **DARKO** daily
+plus-minus projections (DPM) by Kostya Medvedovsky and Andrew Patton, from
+[darko.app](https://darko.app) — a free public site with data export and no
+formal license published. The numbers are shown as-is for personal and
+educational use and are never used as model features; remove
+`NBAClient.darko_dpm` (one cache key) if the creators ever object, or
+license the data before any commercial use.
 
 Data is the property of NBA Media Ventures, LLC. This tool is for personal and
 educational use.

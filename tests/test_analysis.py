@@ -164,6 +164,129 @@ def test_zone_efficiency_diffs_against_league():
         zone_efficiency(shots.drop(columns=["SHOT_MADE_FLAG"]), league)
 
 
+def test_shot_quality_separates_selection_from_making():
+    from nba_insights.analysis import shot_quality
+
+    shots = pd.DataFrame(
+        {
+            "SHOT_ZONE_BASIC": ["Restricted Area"] * 4 + ["Right Corner 3"] * 2,
+            "SHOT_ZONE_AREA": ["Center(C)"] * 4 + ["Right Side(R)"] * 2,
+            "SHOT_ZONE_RANGE": ["Less Than 8 ft."] * 4 + ["24+ ft."] * 2,
+            "SHOT_TYPE": ["2PT Field Goal"] * 4 + ["3PT Field Goal"] * 2,
+            "SHOT_MADE_FLAG": [1, 1, 1, 0, 1, 0],
+        }
+    )
+    league = pd.DataFrame(
+        {
+            "SHOT_ZONE_BASIC": ["Restricted Area", "Right Corner 3"],
+            "SHOT_ZONE_AREA": ["Center(C)", "Right Side(R)"],
+            "SHOT_ZONE_RANGE": ["Less Than 8 ft.", "24+ ft."],
+            "FG_PCT": [0.65, 0.40],
+            "FGA": [100, 50],
+            "FGM": [65, 20],
+        }
+    )
+    sq = shot_quality(shots, league)
+    assert sq["FGA"] == 6
+    # expected: (4 * 0.65 + 2 * 0.40 * 1.5) / 6
+    assert sq["XEFG"] == pytest.approx((4 * 0.65 + 2 * 0.40 * 1.5) / 6)
+    # actual: (3 makes * 1.0 + 1 three * 1.5) / 6
+    assert sq["EFG"] == pytest.approx(4.5 / 6)
+    assert sq["MAKING"] == pytest.approx(sq["EFG"] - sq["XEFG"])
+    # league: (65 * 1.0 + 20 * 1.5) / 150
+    assert sq["LEAGUE_EFG"] == pytest.approx(95 / 150)
+
+
+def test_shot_quality_drops_unmatched_zones_from_both_sides():
+    from nba_insights.analysis import shot_quality
+
+    shots = pd.DataFrame(
+        {
+            "SHOT_ZONE_BASIC": ["Restricted Area", "Backcourt"],
+            "SHOT_ZONE_AREA": ["Center(C)", "Back Court(BC)"],
+            "SHOT_ZONE_RANGE": ["Less Than 8 ft.", "Back Court Shot"],
+            "SHOT_TYPE": ["2PT Field Goal", "3PT Field Goal"],
+            "SHOT_MADE_FLAG": [1, 0],
+        }
+    )
+    league = pd.DataFrame(
+        {
+            "SHOT_ZONE_BASIC": ["Restricted Area"],
+            "SHOT_ZONE_AREA": ["Center(C)"],
+            "SHOT_ZONE_RANGE": ["Less Than 8 ft."],
+            "FG_PCT": [0.65],
+        }
+    )
+    sq = shot_quality(shots, league)
+    assert sq["FGA"] == 1  # the backcourt heave is not scored
+    assert sq["EFG"] == pytest.approx(1.0)
+    assert pd.isna(sq["LEAGUE_EFG"])  # no FGA/FGM in the league table
+    with pytest.raises(KeyError, match="SHOT_TYPE"):
+        shot_quality(shots.drop(columns=["SHOT_TYPE"]), league)
+
+
+@pytest.fixture
+def onoff_table():
+    # concatenated on/off frames: Alice both sides, Bob on-court only
+    return pd.DataFrame(
+        {
+            "VS_PLAYER_ID": [1, 2, 1],
+            "VS_PLAYER_NAME": ["Alice", "Bob", "Alice"],
+            "COURT_STATUS": ["On", "On", "Off"],
+            "MIN": [1200.0, 300.0, 800.0],
+            "OFF_RATING": [118.0, 110.0, 112.0],
+            "DEF_RATING": [108.0, 112.0, 114.0],
+            "NET_RATING": [10.0, -2.0, -2.0],
+        }
+    )
+
+
+def test_team_on_off_pivots_and_diffs(onoff_table):
+    from nba_insights.analysis import team_on_off
+
+    out = team_on_off(onoff_table).set_index("PLAYER_NAME")
+    alice = out.loc["Alice"]
+    assert alice["MIN_ON"] == 1200.0
+    assert alice["MIN_OFF"] == 800.0
+    assert alice["NET_ON"] == 10.0
+    assert alice["NET_OFF"] == -2.0
+    assert alice["NET_DIFF"] == pytest.approx(12.0)
+    assert alice["ORTG_ON"] == 118.0
+    assert alice["DRTG_OFF"] == 114.0
+    # Bob never sat: no off row, NaN diff, and Alice sorts first
+    assert pd.isna(out.loc["Bob", "NET_DIFF"])
+    assert list(out.index) == ["Alice", "Bob"]
+
+
+def test_team_on_off_missing_column_raises(onoff_table):
+    from nba_insights.analysis import team_on_off
+
+    with pytest.raises(KeyError, match="COURT_STATUS"):
+        team_on_off(onoff_table.drop(columns=["COURT_STATUS"]))
+
+
+def test_attach_dpm_merges_and_keeps_everyone(league_stats):
+    from nba_insights.analysis import attach_dpm
+
+    league = league_stats.assign(PLAYER_ID=[1, 2, 3, 4, 5])
+    darko = pd.DataFrame({"PLAYER_ID": [1, 2], "DPM": [5.5, -1.2], "O_DPM": [4.0, 0.3]})
+    out = attach_dpm(league, darko)
+    assert len(out) == len(league)
+    assert out.loc[out["PLAYER_NAME"] == "Alice", "DPM"].iloc[0] == 5.5
+    assert out.loc[out["PLAYER_NAME"] == "Alice", "O_DPM"].iloc[0] == 4.0
+    assert pd.isna(out.loc[out["PLAYER_NAME"] == "Carol", "DPM"].iloc[0])
+
+
+def test_attach_dpm_tolerates_missing_table(league_stats):
+    from nba_insights.analysis import attach_dpm
+
+    league = league_stats.assign(PLAYER_ID=range(5))
+    assert attach_dpm(league, None) is league
+    assert attach_dpm(league, pd.DataFrame({"PLAYER_ID": [1]})) is league  # no DPM column
+    with pytest.raises(KeyError, match="PLAYER_ID"):
+        attach_dpm(league_stats, None)
+
+
 def test_attach_ratings_tolerates_missing_tables(league_stats):
     league = league_stats.assign(PLAYER_ID=range(5))
     out = attach_ratings(league, None, None)

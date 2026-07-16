@@ -15,6 +15,7 @@ DEFAULT_STATS = [
     "FT_PCT",
     "NET_RATING",
     "CLUTCH_NET_RATING",
+    "DPM",
 ]
 
 

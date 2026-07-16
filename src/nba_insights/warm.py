@@ -49,13 +49,45 @@ def warm(client: NBAClient, top: int = 20) -> int:
     return failures
 
 
+def warm_season(client: NBAClient, season: str) -> int:
+    """One-time historical prefetch: the league dashboards for *season*.
+
+    Finished seasons cache as immutable, so re-runs are free. Returns the
+    number of failed fetches.
+    """
+    failures = 0
+    for label, fetch in [
+        ("per-game", client.league_player_stats),
+        ("advanced", client.league_player_advanced),
+        ("clutch", client.league_player_clutch),
+        ("team games", client.team_games),
+    ]:
+        try:
+            fetch(season)
+        except Exception as e:
+            failures += 1
+            logger.warning("skipping %s dashboard for %s: %s", label, season, e)
+    logger.info("warmed %s", season)
+    return failures
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     parser = argparse.ArgumentParser(description="Prefetch NBA data into the local cache")
     parser.add_argument("--top", type=int, default=20, help="players to warm, by minutes per game")
+    parser.add_argument(
+        "--seasons",
+        nargs="*",
+        default=[],
+        metavar="YYYY-YY",
+        help="historical seasons to prefetch league dashboards for (e.g. 1996-97 2010-11)",
+    )
     args = parser.parse_args()
 
-    failures = warm(NBAClient(), top=args.top)
+    client = NBAClient()
+    failures = warm(client, top=args.top)
+    for season in args.seasons:
+        failures += warm_season(client, season)
     if failures:
         logger.warning("done with %d failed fetches", failures)
         sys.exit(1)

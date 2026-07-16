@@ -17,6 +17,7 @@ DEFAULT_STATS = [
     "FG3_PCT",
     "NET_RATING",
     "CLUTCH_NET_RATING",
+    "DPM",
 ]
 
 
