@@ -1,12 +1,16 @@
 from nba_insights.analysis.compare import comparison_table
 from nba_insights.analysis.leaders import league_leaders
 from nba_insights.analysis.percentiles import percentile_ranks
+from nba_insights.analysis.ratings import attach_ratings
+from nba_insights.analysis.shots import zone_efficiency
 from nba_insights.analysis.trends import career_per_game, rolling_form
 
 __all__ = [
+    "attach_ratings",
     "career_per_game",
     "comparison_table",
     "league_leaders",
     "percentile_ranks",
     "rolling_form",
+    "zone_efficiency",
 ]

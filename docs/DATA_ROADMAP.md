@@ -180,3 +180,15 @@ Decision: the model keeps the headline win probability; the simulator is
 shipped for what the model cannot produce — margin/total distributions,
 overtime rates, and score-level what-ifs. Closed-form check: the Gaussian
 margin implies p = Φ(μ/σ); MC at 200k sims agreed within 0.007.
+
+## Status update (2026-07-16, round 5): projection intervals
+
+The points projection now ships an **empirical 80% interval**: the 10th and
+90th percentiles of training-set residuals (fitted in `PlayerPointsModel.fit`,
+stored in the artifact) added to the point prediction, floored at zero. The
+fitted quantiles are asymmetric (−6.7 / +8.1) — single-game scoring is
+right-skewed, and the empirical approach keeps that rather than assuming a
+symmetric band. Training-residual quantiles are a mild underestimate of
+held-out spread in principle; with a 2-parameter-per-feature ridge on 21k
+rows the optimism is negligible, and the method stays strictly train-only
+per the evaluation protocol.

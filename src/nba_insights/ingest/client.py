@@ -15,6 +15,7 @@ from datetime import timedelta
 import pandas as pd
 from nba_api.stats.endpoints import (
     leaguedashlineups,
+    leaguedashplayerclutch,
     leaguedashplayerstats,
     leaguegamefinder,
     leaguestandings,
@@ -34,6 +35,11 @@ from nba_insights.store import Cache
 logger = logging.getLogger(__name__)
 
 CURRENT_SEASON_TTL = timedelta(hours=24)
+
+
+def _type_suffix(season_type: str) -> str:
+    """Cache-key suffix for non-default season types ('' for Regular Season)."""
+    return "" if season_type == "Regular Season" else f"/{season_type.lower().replace(' ', '-')}"
 
 
 class NBAClient:
@@ -77,27 +83,36 @@ class NBAClient:
             ).season_totals_regular_season.get_data_frame()
         return df
 
-    def game_log(self, player_id: int, season: str | None = None) -> pd.DataFrame:
+    def game_log(
+        self,
+        player_id: int,
+        season: str | None = None,
+        season_type: str = "Regular Season",
+    ) -> pd.DataFrame:
         season = season or current_season()
         return self._cached(
-            f"game_log/v2/{player_id}/{season}",  # v2: key bumped when fetcher changed
-            lambda: self._fetch_game_log(player_id, season),
+            # v2: key bumped when fetcher changed; regular-season keys keep
+            # their historical shape so the existing cache stays valid
+            f"game_log/v2/{player_id}/{season}{_type_suffix(season_type)}",
+            lambda: self._fetch_game_log(player_id, season, season_type),
             ttl=self._season_ttl(season),
         )
 
     @staticmethod
-    def _fetch_game_log(player_id: int, season: str) -> pd.DataFrame:
+    def _fetch_game_log(
+        player_id: int, season: str, season_type: str = "Regular Season"
+    ) -> pd.DataFrame:
         # PlayerGameLogs (plural) is primary: the singular endpoint serves
         # truncated logs for some player IDs (same upstream per-ID corruption
         # as career stats — see _fetch_career_stats).
         df = playergamelogs.PlayerGameLogs(
             player_id_nullable=player_id,
             season_nullable=season,
-            season_type_nullable="Regular Season",
+            season_type_nullable=season_type,
         ).get_data_frames()[0]
         if df.empty:
             df = playergamelog.PlayerGameLog(
-                player_id=player_id, season=season
+                player_id=player_id, season=season, season_type_all_star=season_type
             ).get_data_frames()[0]
         return df
 
@@ -114,16 +129,73 @@ class NBAClient:
             ttl=self._season_ttl(season),
         )
 
-    def shot_chart(self, player_id: int, season: str | None = None) -> pd.DataFrame:
+    def league_player_advanced(self, season: str | None = None) -> pd.DataFrame:
+        """One row per player: advanced metrics (net/off/def rating, usage)."""
         season = season or current_season()
         return self._cached(
-            f"shot_chart/{player_id}/{season}",
+            f"league_player_advanced/{season}",
+            lambda: leaguedashplayerstats.LeagueDashPlayerStats(
+                season=season, measure_type_detailed_defense="Advanced"
+            ).get_data_frames()[0],
+            ttl=self._season_ttl(season),
+        )
+
+    def league_player_clutch(self, season: str | None = None) -> pd.DataFrame:
+        """Per-player advanced stats in the clutch (last 5 min, margin <= 5).
+
+        GP and MIN in this table are clutch games and clutch minutes per
+        game, not season-wide values.
+        """
+        season = season or current_season()
+        return self._cached(
+            f"league_player_clutch/{season}",
+            lambda: leaguedashplayerclutch.LeagueDashPlayerClutch(
+                season=season,
+                measure_type_detailed_defense="Advanced",
+                clutch_time="Last 5 Minutes",
+                ahead_behind="Ahead or Behind",
+                point_diff=5,
+            ).get_data_frames()[0],
+            ttl=self._season_ttl(season),
+        )
+
+    def shot_chart(
+        self,
+        player_id: int,
+        season: str | None = None,
+        season_type: str = "Regular Season",
+    ) -> pd.DataFrame:
+        season = season or current_season()
+        return self._cached(
+            f"shot_chart/{player_id}/{season}{_type_suffix(season_type)}",
             lambda: shotchartdetail.ShotChartDetail(
                 team_id=0,
                 player_id=player_id,
                 season_nullable=season,
+                season_type_all_star=season_type,
                 context_measure_simple="FGA",
             ).get_data_frames()[0],
+            ttl=self._season_ttl(season),
+        )
+
+    def shot_league_averages(
+        self, season: str | None = None, season_type: str = "Regular Season"
+    ) -> pd.DataFrame:
+        """League FG% by shot zone (~20 rows) for a season.
+
+        Same endpoint as shot_chart with player_id=0; only the small
+        LeagueAverages frame is kept — the league-wide shot rows are not.
+        """
+        season = season or current_season()
+        return self._cached(
+            f"shot_league_avg/{season}{_type_suffix(season_type)}",
+            lambda: shotchartdetail.ShotChartDetail(
+                team_id=0,
+                player_id=0,
+                season_nullable=season,
+                season_type_all_star=season_type,
+                context_measure_simple="FGA",
+            ).get_data_frames()[1],
             ttl=self._season_ttl(season),
         )
 

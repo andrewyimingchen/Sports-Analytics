@@ -1,8 +1,20 @@
 # NBA Insights 🏀
 
-Type any NBA player's name and get a live profile: career trajectory, recent
-form, shot chart, and league percentile ranks — plus side-by-side player
-comparisons.
+A Streamlit app in six pages:
+
+- **League pulse** — the landing page: per-game and net/clutch-rating leaders,
+  Elo power rankings, best/worst net ratings, and the next slate with win
+  probabilities
+- **Player profile** — career trajectory, form trends, shot chart (raw or
+  zone-efficiency-vs-league view, regular season or playoffs), league
+  percentile ranks incl. net and clutch rating
+- **Compare players** — side-by-side stats and percentile bars
+- **Teams** — record/ratings/Elo tiles, season margin trend, roster with
+  ratings, last ten games, and conference standings
+- **Predictions** — game outcome probabilities, a 10,000-run Monte Carlo game
+  simulator (margin/total distributions), player points projections with 80%
+  intervals, and starting-five estimates
+- **Methodology** — how every model is built, judged, and what was rejected
 
 Built on the official-ish [`nba_api`](https://github.com/swar/nba_api)
 (stats.nba.com). Every response is cached locally in SQLite, so repeat views
@@ -26,9 +38,12 @@ Then open http://localhost:8501, search a player, and explore.
 src/nba_insights/
 ├── ingest/      # NBAClient: rate-limited, retrying nba_api wrapper
 ├── store/       # SQLite DataFrame cache with per-endpoint TTLs
-└── analysis/    # pure pandas: trends, percentiles, comparisons
-app/             # Streamlit UI (profile + compare pages)
-tests/           # unit tests — no network required
+├── analysis/    # pure pandas: trends, percentiles, comparisons, ratings, zones
+├── ml/          # features, Elo, outcome/points/lineup models, game simulator
+├── pbp/         # play-by-play corpus utilities
+└── api/         # FastAPI JSON endpoints + PWA
+app/             # Streamlit UI (six pages; ui.py holds the CSS motion layer)
+tests/           # unit + AppTest smoke tests — no network required
 ```
 
 The layers are strictly separated: **ingest** is the only code that touches the
@@ -55,8 +70,9 @@ uv run python -m nba_insights.ml.train
 | Model | Approach | Holdout result (2025-26) |
 |---|---|---|
 | Game outcome | Logistic regression on prior-seeded season-to-date form differentials (win%, net rating, four factors, pace, ORtg/DRtg), rest/back-to-backs, expected minutes out (derived absences), carried-over Elo + home court | 70.2% accuracy, log loss 0.589 over the **full season** incl. opening weeks (55% baseline: always pick home) |
-| Player points | Two-stage: minutes model (rotation trend, rest, roster availability) × per-minute rate model (EWMA form, opponent context, teammate absences) | MAE 4.58 (4.72 baseline: 10-game average) |
+| Player points | Two-stage: minutes model (rotation trend, rest, roster availability) × per-minute rate model (EWMA form, opponent context, teammate absences); ships an empirical 80% interval from training residual quantiles | MAE 4.58 (4.72 baseline: 10-game average) |
 | Starting five | Observed lineup net rating (weighted by minutes together) blended with a per-36 plus-minus proxy, through a fitted win curve | blend; pure proxy when the five never played together |
+| Game simulator | Monte Carlo over pace and ratings (10,000 sims: shared possessions, per-100 scoring vs opponent defense, home court, minutes out, overtime); parameters fitted on the training seasons | log loss 0.601 / 68.6% — the logistic model keeps the headline number; the simulator supplies margin/total distributions |
 
 Evaluation is a true temporal holdout: trained on 2022-25, scored on the
 current season. Retrain whenever you want fresher form; artifacts live in
@@ -110,6 +126,12 @@ Schedule it nightly with cron (run from the repo root so it fills the same
 ```cron
 0 6 * * * cd /path/to/Sports-Analytics && uv run python -m nba_insights.warm --top 20
 ```
+
+## Deployment
+
+Local-first by design — stats.nba.com blocks most datacenter IPs, so remote
+deployments ship a warmed cache. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+for the workflow, options, and the provided Dockerfile.
 
 ## Development
 
