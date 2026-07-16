@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent))  # sibling modules (methodology, 
 
 from nba_insights import serve
 from nba_insights.analysis import (
+    attach_salary,
     career_per_game,
     comparison_table,
     draft_class,
@@ -25,8 +26,10 @@ from nba_insights.analysis import (
     percentile_ranks,
     player_draft_line,
     rolling_form,
+    salary_seasons,
     shot_quality,
     team_on_off,
+    team_payroll,
     zone_efficiency,
 )
 from nba_insights.analysis.shots import ZONE_KEY
@@ -126,6 +129,20 @@ def prediction_snapshot(_client: NBAClient) -> pd.DataFrame:
                        exc_info=True)
         priors = None
     return team_form_snapshot(games, form_priors=priors)
+
+
+@st.cache_data(ttl=86400, show_spinner=False)
+def contracts_table(_client: NBAClient) -> pd.DataFrame | None:
+    """Scraped contracts (weekly cache underneath); None when unavailable.
+
+    Personal-use data — surfaced only in this local app, never through
+    the public API/PWA (see ingest.salaries).
+    """
+    try:
+        return _client.player_contracts()
+    except Exception:
+        logger.warning("contracts unavailable", exc_info=True)
+        return None
 
 
 @st.cache_data(ttl=86400, show_spinner=False)
@@ -421,6 +438,7 @@ def profile_header(
     per_game: pd.DataFrame,
     ratings: pd.Series | None = None,
     draft_note: str | None = None,
+    salary_note: str | None = None,
 ) -> None:
     """Headshot, team context, and headline stat tiles with career deltas."""
     latest_totals = totals[totals["GP"] > 0].sort_values("SEASON_ID").iloc[-1]
@@ -437,6 +455,8 @@ def profile_header(
         context = f"{team} · {latest['SEASON_ID']} · {int(latest['GP'])} games"
         if draft_note:
             context += f" · {draft_note}"
+        if salary_note:
+            context += f" · {salary_note}"
         st.caption(context)
 
         has_ratings = ratings is not None and pd.notna(ratings.get("NET_RATING"))
@@ -637,7 +657,17 @@ def profile_page(client: NBAClient) -> None:
         draft_note = player_draft_line(client.draft_history(), player["id"])
     except Exception:
         logger.warning("draft history unavailable for profile", exc_info=True)
-    profile_header(player, totals, per_game, ratings, draft_note)
+    salary_note = None
+    contracts = contracts_table(client)
+    if contracts is not None:
+        try:
+            row = attach_salary(pd.DataFrame({"PLAYER_NAME": [player["full_name"]]}), contracts)
+            salary = row["SALARY"].iloc[0] if "SALARY" in row.columns else None
+            if pd.notna(salary):
+                salary_note = f"${salary / 1e6:.1f}M in {salary_seasons(contracts)[0]}"
+        except Exception:
+            logger.warning("salary lookup failed for profile", exc_info=True)
+    profile_header(player, totals, per_game, ratings, draft_note, salary_note)
     if ranks is not None:
         skill_badges(ranks)
     if player["is_active"]:
@@ -1233,13 +1263,29 @@ def team_detail(client: NBAClient, games: pd.DataFrame, snapshot: pd.DataFrame) 
             roster = league[league["TEAM_ABBREVIATION"] == team].sort_values(
                 "MIN", ascending=False
             )
+            contracts = contracts_table(client)
+            if contracts is not None:
+                try:
+                    roster = attach_salary(roster, contracts)
+                    roster["SALARY"] = roster["SALARY"] / 1e6  # display in $M
+                    payroll = team_payroll(contracts)
+                    if team in payroll.index:
+                        st.caption(
+                            f"Committed payroll, {salary_seasons(contracts)[0]}: "
+                            f"${payroll[team] / 1e6:.0f}M"
+                        )
+                except Exception:
+                    logger.warning("salary columns unavailable for roster", exc_info=True)
             keep = [
                 c
-                for c in ("PLAYER_NAME", "GP", "MIN", "PTS", "AST", "REB", "NET_RATING", "DPM")
+                for c in (
+                    "PLAYER_NAME", "GP", "MIN", "PTS", "AST", "REB",
+                    "NET_RATING", "DPM", "SALARY",
+                )
                 if c in roster.columns
             ]
             st.dataframe(
-                roster[keep].rename(columns=RATING_LABELS),
+                roster[keep].rename(columns={**RATING_LABELS, "SALARY": "SAL ($M)"}),
                 width="stretch",
                 hide_index=True,
                 height=390,
@@ -1252,6 +1298,7 @@ def team_detail(client: NBAClient, games: pd.DataFrame, snapshot: pd.DataFrame) 
                     "REB": st.column_config.NumberColumn(format="%.1f"),
                     "NET RTG": st.column_config.NumberColumn(format="%.1f"),
                     "DARKO DPM": st.column_config.NumberColumn(format="%+.1f"),
+                    "SAL ($M)": st.column_config.NumberColumn(format="$%.1f"),
                 },
             )
         except Exception as e:

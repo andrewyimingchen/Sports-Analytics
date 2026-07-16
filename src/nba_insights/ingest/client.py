@@ -36,11 +36,15 @@ from nba_api.stats.static import players
 
 from nba_insights.config import CACHE_DB, current_season
 from nba_insights.ingest.darko import fetch_darko
+from nba_insights.ingest.salaries import fetch_contracts
 from nba_insights.store import Cache
 
 logger = logging.getLogger(__name__)
 
 CURRENT_SEASON_TTL = timedelta(hours=24)
+# contracts change rarely outside July; a weekly refresh keeps scrape
+# volume at the guardrailed minimum (one page/week — see ingest.salaries)
+CONTRACTS_TTL = timedelta(days=7)
 
 
 def _type_suffix(season_type: str) -> str:
@@ -351,6 +355,12 @@ class NBAClient:
             ).get_data_frames()[0],
             ttl=None if past else CURRENT_SEASON_TTL,
         )
+
+    def player_contracts(self) -> pd.DataFrame:
+        """Current contracts (scraped, weekly refresh): one row per player,
+        salary per forward season plus guaranteed total. Personal use only —
+        never serve through the public API/PWA (see ingest.salaries)."""
+        return self._cached("contracts/bref", fetch_contracts, ttl=CONTRACTS_TTL)
 
     def darko_dpm(self) -> pd.DataFrame:
         """Today's DARKO plus-minus projections (darko.app), one row per
