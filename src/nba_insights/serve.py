@@ -12,7 +12,8 @@ import logging
 
 import pandas as pd
 
-from nba_insights.analysis import attach_ratings
+from nba_insights.analysis import attach_dpm, attach_ratings
+from nba_insights.config import current_season
 from nba_insights.ingest import NBAClient
 
 logger = logging.getLogger(__name__)
@@ -20,22 +21,29 @@ logger = logging.getLogger(__name__)
 HEADSHOT_URL = "https://cdn.nba.com/headshots/nba/latest/1040x760/{player_id}.png"
 
 
-def league_with_ratings(client: NBAClient) -> pd.DataFrame:
+def league_with_ratings(client: NBAClient, season: str | None = None) -> pd.DataFrame:
     """League per-game stats enriched with net and clutch ratings.
 
+    Works for any season the dashboards cover (1996-97 onward); DARKO DPM
+    is today's projection, so it is only attached to the current season.
     Falls back to the plain per-game table if the rating endpoints are
     unreachable — downstream defaults skip the missing columns.
     """
-    league = client.league_player_stats()
+    league = client.league_player_stats(season)
     try:
-        return attach_ratings(
-            league, client.league_player_advanced(), client.league_player_clutch()
+        league = attach_ratings(
+            league, client.league_player_advanced(season), client.league_player_clutch(season)
         )
     except Exception:
         logger.warning(
             "rating endpoints unavailable; serving plain per-game table", exc_info=True
         )
-        return league
+    if season is None or season == current_season():
+        try:
+            league = attach_dpm(league, client.darko_dpm())
+        except Exception:
+            logger.warning("DARKO unavailable; serving table without DPM", exc_info=True)
+    return league
 
 
 def fetch_headshot(player_id: int) -> bytes | None:

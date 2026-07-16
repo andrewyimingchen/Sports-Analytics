@@ -16,6 +16,8 @@ from datetime import UTC, datetime, timedelta
 
 import pandas as pd
 from nba_api.stats.endpoints import (
+    draftcombinestats,
+    drafthistory,
     leaguedashlineups,
     leaguedashplayerclutch,
     leaguedashplayerstats,
@@ -28,10 +30,12 @@ from nba_api.stats.endpoints import (
     playerprofilev2,
     scheduleleaguev2,
     shotchartdetail,
+    teamplayeronoffsummary,
 )
 from nba_api.stats.static import players
 
 from nba_insights.config import CACHE_DB, current_season
+from nba_insights.ingest.darko import fetch_darko
 from nba_insights.store import Cache
 
 logger = logging.getLogger(__name__)
@@ -301,6 +305,58 @@ class NBAClient:
             ttl=self._season_ttl(season),
             fetched_after=self._season_fetched_after(season),
         )
+
+    def team_player_on_off(self, team_id: int, season: str | None = None) -> pd.DataFrame:
+        """Per-player on/off splits for one team: total minutes and team
+        ORtg/DRtg/net rating with each player on vs off the floor
+        (COURT_STATUS "On"/"Off"; the on and off frames are concatenated)."""
+        season = season or current_season()
+        return self._cached(
+            f"team_on_off/{team_id}/{season}",
+            lambda: self._fetch_team_on_off(team_id, season),
+            ttl=self._season_ttl(season),
+            fetched_after=self._season_fetched_after(season),
+        )
+
+    @staticmethod
+    def _fetch_team_on_off(team_id: int, season: str) -> pd.DataFrame:
+        frames = teamplayeronoffsummary.TeamPlayerOnOffSummary(
+            team_id=team_id, season=season
+        ).get_data_frames()
+        # frames[1] and [2] are the per-player splits (one per court status);
+        # frame[0] is the team's overall line and is not kept
+        return pd.concat(frames[1:3], ignore_index=True)
+
+    def draft_history(self) -> pd.DataFrame:
+        """Every NBA draft pick ever, one row per pick (~8k rows).
+
+        The table only grows on draft night, but a daily TTL keeps the
+        newest class appearing without a bespoke invalidation rule."""
+        return self._cached(
+            "draft_history",
+            lambda: drafthistory.DraftHistory(league_id="00").get_data_frames()[0],
+            ttl=CURRENT_SEASON_TTL,
+        )
+
+    def draft_combine(self, year: str) -> pd.DataFrame:
+        """Combine measurements for one draft year (e.g. "2014").
+
+        Past years are immutable; the current season's year stays on the
+        daily TTL while its combine results are still being published."""
+        past = int(year) < int(current_season()[:4])
+        return self._cached(
+            f"draft_combine/{year}",
+            lambda: draftcombinestats.DraftCombineStats(
+                season_all_time=year
+            ).get_data_frames()[0],
+            ttl=None if past else CURRENT_SEASON_TTL,
+        )
+
+    def darko_dpm(self) -> pd.DataFrame:
+        """Today's DARKO plus-minus projections (darko.app), one row per
+        active player. Not a stats.nba.com endpoint, but fetched through
+        the same cache/rate limiter so the app stays offline-friendly."""
+        return self._cached("darko/dpm", fetch_darko, ttl=CURRENT_SEASON_TTL)
 
     # -- plumbing ---------------------------------------------------------------
 

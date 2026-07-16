@@ -20,13 +20,17 @@ from nba_insights import serve
 from nba_insights.analysis import (
     career_per_game,
     comparison_table,
+    draft_class,
     league_leaders,
     percentile_ranks,
+    player_draft_line,
     rolling_form,
+    shot_quality,
+    team_on_off,
     zone_efficiency,
 )
 from nba_insights.analysis.shots import ZONE_KEY
-from nba_insights.config import current_season, past_seasons
+from nba_insights.config import current_season, past_seasons, seasons_since
 from nba_insights.ingest import NBAClient
 from nba_insights.ml import (
     GameOutcomeModel,
@@ -46,6 +50,7 @@ from nba_insights.ml.features import (
     upcoming_games,
 )
 from nba_insights.ml.train import METRICS_PATH, OUTCOME_PATH, POINTS_PATH, WIN_CURVE_PATH
+from nba_insights.posters import compare_poster_png, prediction_poster_png
 from nba_insights.viz import half_court_trace
 from ui import inject_css
 
@@ -84,15 +89,19 @@ def get_client() -> NBAClient:
 
 
 # display names for the rating columns on charts and tables
-RATING_LABELS = {"NET_RATING": "NET RTG", "CLUTCH_NET_RATING": "CLUTCH NET"}
+RATING_LABELS = {
+    "NET_RATING": "NET RTG",
+    "CLUTCH_NET_RATING": "CLUTCH NET",
+    "DPM": "DARKO DPM",
+}
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def league_with_ratings(_client: NBAClient) -> pd.DataFrame:
+def league_with_ratings(_client: NBAClient, season: str | None = None) -> pd.DataFrame:
     """Ratings-attached league table (see serve.league_with_ratings),
     cached at the app layer: pages call this several times per rerun and
     the frame shouldn't be re-read from SQLite each time."""
-    return serve.league_with_ratings(_client)
+    return serve.league_with_ratings(_client, season)
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -411,6 +420,7 @@ def profile_header(
     totals: pd.DataFrame,
     per_game: pd.DataFrame,
     ratings: pd.Series | None = None,
+    draft_note: str | None = None,
 ) -> None:
     """Headshot, team context, and headline stat tiles with career deltas."""
     latest_totals = totals[totals["GP"] > 0].sort_values("SEASON_ID").iloc[-1]
@@ -424,10 +434,14 @@ def profile_header(
     with info:
         st.subheader(player["full_name"])
         team = latest_totals.get("TEAM_ABBREVIATION", "")
-        st.caption(f"{team} · {latest['SEASON_ID']} · {int(latest['GP'])} games")
+        context = f"{team} · {latest['SEASON_ID']} · {int(latest['GP'])} games"
+        if draft_note:
+            context += f" · {draft_note}"
+        st.caption(context)
 
         has_ratings = ratings is not None and pd.notna(ratings.get("NET_RATING"))
-        tiles = st.columns(5 if has_ratings else 3)
+        has_dpm = ratings is not None and pd.notna(ratings.get("DPM"))
+        tiles = st.columns(3 + (2 if has_ratings else 0) + (1 if has_dpm else 0))
         career_games = totals["GP"].sum()
         for col, stat in zip(tiles, ("PTS", "AST", "REB"), strict=False):
             career_avg = totals[stat].sum() / career_games if career_games else 0
@@ -444,6 +458,75 @@ def profile_header(
                 f"{clutch:+.1f}" if pd.notna(clutch) else "—",
                 help="Net rating in the last 5 minutes with the score within 5 points.",
             )
+        if has_dpm:
+            tiles[-1].metric(
+                "DARKO DPM",
+                f"{ratings['DPM']:+.1f}",
+                help="Daily plus-minus projection from darko.app "
+                "(K. Medvedovsky & A. Patton).",
+            )
+
+
+def shot_quality_tiles(
+    client: NBAClient, shots: pd.DataFrame, season: str, season_type: str
+) -> None:
+    """Expected vs actual eFG% under the shot chart: selection vs making."""
+    try:
+        sq = shot_quality(
+            shots, client.shot_league_averages(season=season, season_type=season_type)
+        )
+    except Exception:
+        logger.warning("shot quality unavailable", exc_info=True)
+        return
+    if not sq["FGA"] or pd.isna(sq["EFG"]):
+        return
+    cols = st.columns(3)
+    cols[0].metric(
+        "Shot diet (xeFG%)",
+        f"{sq['XEFG'] * 100:.1f}%",
+        help="The eFG% a league-average shooter would post on this player's "
+        "shot locations — higher means better shot selection.",
+    )
+    cols[1].metric("Actual eFG%", f"{sq['EFG'] * 100:.1f}%")
+    cols[2].metric(
+        "Shot making",
+        f"{sq['MAKING'] * 100:+.1f}",
+        help="Actual minus expected eFG%, in points of eFG — finishing above "
+        "or below what the shot locations alone predict.",
+    )
+    if pd.notna(sq["LEAGUE_EFG"]):
+        st.caption(f"League eFG% this {season_type.lower()}: {sq['LEAGUE_EFG'] * 100:.1f}%.")
+
+
+def on_off_tiles(client: NBAClient, player: dict, totals: pd.DataFrame) -> None:
+    """Team net rating with the player on vs off the floor this season."""
+    try:
+        latest = totals[totals["GP"] > 0].sort_values("SEASON_ID").iloc[-1]
+        team_id = int(latest.get("TEAM_ID", 0))
+        if not team_id:  # a TOT row after a mid-season trade has no team
+            return
+        table = team_on_off(client.team_player_on_off(team_id))
+        row = table[table["PLAYER_ID"] == player["id"]]
+    except Exception:
+        logger.warning("on/off splits unavailable for profile", exc_info=True)
+        return
+    if row.empty:
+        return
+    r = row.iloc[0]
+    if pd.isna(r["NET_DIFF"]):
+        return
+    cols = st.columns(3)
+    cols[0].metric("Team net, on floor", f"{r['NET_ON']:+.1f}")
+    cols[1].metric("Team net, off floor", f"{r['NET_OFF']:+.1f}")
+    cols[2].metric(
+        "On/off swing",
+        f"{r['NET_DIFF']:+.1f}",
+        help="Team net rating with the player on court minus off court. "
+        "Raw minutes, no lineup adjustment — bench context matters.",
+    )
+    st.caption(
+        f"{current_season()} · {r['MIN_ON']:,.0f} min on / {r['MIN_OFF']:,.0f} min off."
+    )
 
 
 @st.fragment
@@ -488,6 +571,8 @@ def season_detail(client: NBAClient, player: dict, seasons: list[str]) -> None:
                 )
             else:
                 st.plotly_chart(shot_chart_fig(shots), width="stretch")
+            if not shots.empty:
+                shot_quality_tiles(client, shots, season, season_type)
         except Exception as e:
             st.error(f"Could not load shot chart: {e}")
 
@@ -547,22 +632,50 @@ def profile_page(client: NBAClient) -> None:
             ranks = None  # not enough games for league ranks this season
         except Exception:
             logger.warning("league ratings unavailable for profile", exc_info=True)
-    profile_header(player, totals, per_game, ratings)
+    draft_note = None
+    try:
+        draft_note = player_draft_line(client.draft_history(), player["id"])
+    except Exception:
+        logger.warning("draft history unavailable for profile", exc_info=True)
+    profile_header(player, totals, per_game, ratings, draft_note)
     if ranks is not None:
         skill_badges(ranks)
+    if player["is_active"]:
+        on_off_tiles(client, player, totals)
 
     seasons = list(per_game["SEASON_ID"])
     st.plotly_chart(career_chart(per_game), width="stretch")
 
     season_detail(client, player, seasons)
 
-    if player["is_active"]:
-        if ranks is not None:
-            st.plotly_chart(percentile_chart(ranks), width="stretch")
-            with st.expander("Percentile data as table"):
-                st.dataframe(ranks.to_frame("percentile"))
-        else:
-            st.caption("Not enough games this season for league percentile ranks.")
+    percentile_section(client, player, seasons)
+
+
+@st.fragment
+def percentile_section(client: NBAClient, player: dict, seasons: list[str]) -> None:
+    """League percentile ranks for any of the player's seasons since 1996-97.
+
+    Retired players get their historical seasons too — the league
+    dashboards go back that far, so 1997-98 Jordan ranks against the
+    1997-98 league.
+    """
+    options = [s for s in seasons if s in set(seasons_since())]
+    if not options:
+        st.caption("League percentile ranks cover seasons from 1996-97 onward.")
+        return
+    season = st.selectbox("Percentile season", list(reversed(options)), key="pct_season")
+    try:
+        league = league_with_ratings(client, None if season == current_season() else season)
+        ranks = percentile_ranks(league, player["full_name"]).rename(RATING_LABELS)
+    except KeyError:
+        st.caption(f"Not enough games in {season} for league percentile ranks.")
+        return
+    except Exception as e:
+        st.caption(f"Percentiles unavailable: {e}")
+        return
+    st.plotly_chart(percentile_chart(ranks), width="stretch")
+    with st.expander("Percentile data as table"):
+        st.dataframe(ranks.to_frame("percentile"))
 
 
 # stats where a smaller number wins the row
@@ -627,11 +740,44 @@ def compare_page(client: NBAClient) -> None:
         fig.update_xaxes(range=[0, 100])
         fig.update_yaxes(autorange="reversed", automargin=True)
         st.plotly_chart(fig, width="stretch")
+
+        st.download_button(
+            "Download share poster (PNG)",
+            compare_poster_png(table, current_season()),
+            file_name=f"{' vs '.join(table.columns)}.png",
+            mime="image/png",
+            help="1080×1080 image of this comparison, ready to post.",
+        )
     except KeyError as e:
         st.warning(f"Comparison needs every player active this season: {e}")
     except Exception as e:
         st.error(f"Could not load comparison: {e}")
         return
+
+    with st.expander("Shot quality (xeFG)"):
+        try:
+            league_avgs = client.shot_league_averages()
+            quality = pd.concat(
+                {
+                    p["full_name"]: shot_quality(client.shot_chart(p["id"]), league_avgs)
+                    for p in players
+                },
+                axis=1,
+            )
+            table = (quality.loc[["XEFG", "EFG", "MAKING"]] * 100).rename(
+                index={
+                    "XEFG": "Shot diet (xeFG%)",
+                    "EFG": "Actual eFG%",
+                    "MAKING": "Shot making (eFG pts)",
+                }
+            )
+            st.dataframe(_best_value_style(table.round(1)), width="stretch")
+            st.caption(
+                "xeFG% is the eFG% a league-average shooter would post on each "
+                "player's shot locations; shot making is actual minus expected."
+            )
+        except Exception as e:
+            st.caption(f"Shot quality unavailable: {e}")
 
     try:
         careers = {
@@ -718,6 +864,13 @@ def outcome_tab(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> None
         "rating, four factors (eFG%, TOV%, OREB%, FT rate), pace, ORtg/DRtg, "
         "rest, back-to-backs, and expected minutes out — plus home court."
         + _outcome_record(models)
+    )
+    st.download_button(
+        "Download share poster (PNG)",
+        prediction_poster_png(home, away, prob, current_season()),
+        file_name=f"{home}-vs-{away}.png",
+        mime="image/png",
+        help="1200×675 image of this prediction, ready to post.",
     )
     with st.expander("Season-to-date form"):
         st.dataframe(
@@ -1082,7 +1235,7 @@ def team_detail(client: NBAClient, games: pd.DataFrame, snapshot: pd.DataFrame) 
             )
             keep = [
                 c
-                for c in ("PLAYER_NAME", "GP", "MIN", "PTS", "AST", "REB", "NET_RATING")
+                for c in ("PLAYER_NAME", "GP", "MIN", "PTS", "AST", "REB", "NET_RATING", "DPM")
                 if c in roster.columns
             ]
             st.dataframe(
@@ -1098,6 +1251,7 @@ def team_detail(client: NBAClient, games: pd.DataFrame, snapshot: pd.DataFrame) 
                     "AST": st.column_config.NumberColumn(format="%.1f"),
                     "REB": st.column_config.NumberColumn(format="%.1f"),
                     "NET RTG": st.column_config.NumberColumn(format="%.1f"),
+                    "DARKO DPM": st.column_config.NumberColumn(format="%+.1f"),
                 },
             )
         except Exception as e:
@@ -1118,6 +1272,40 @@ def team_detail(client: NBAClient, games: pd.DataFrame, snapshot: pd.DataFrame) 
                 "MARGIN": st.column_config.NumberColumn(format="%+d"),
             },
         )
+
+    st.subheader("On/off impact")
+    try:
+        onoff = team_on_off(client.team_player_on_off(int(log["TEAM_ID"].iloc[0])))
+    except Exception as e:
+        st.caption(f"On/off splits unavailable: {e}")
+        return
+    onoff = onoff[onoff["MIN_ON"] >= 100]
+    if onoff.empty:
+        st.caption("Not enough on-court minutes yet this season.")
+        return
+    st.dataframe(
+        onoff[["PLAYER_NAME", "MIN_ON", "NET_ON", "NET_OFF", "NET_DIFF"]].rename(
+            columns={
+                "PLAYER_NAME": "PLAYER",
+                "MIN_ON": "MIN ON",
+                "NET_ON": "TEAM NET, ON",
+                "NET_OFF": "TEAM NET, OFF",
+                "NET_DIFF": "SWING",
+            }
+        ),
+        width="stretch",
+        hide_index=True,
+        column_config={
+            "MIN ON": st.column_config.NumberColumn(format="%.0f"),
+            "TEAM NET, ON": st.column_config.NumberColumn(format="%+.1f"),
+            "TEAM NET, OFF": st.column_config.NumberColumn(format="%+.1f"),
+            "SWING": st.column_config.NumberColumn(format="%+.1f"),
+        },
+    )
+    st.caption(
+        "Team net rating with each player on vs off the floor (raw minutes, "
+        "no lineup adjustment). Players under 100 on-court minutes excluded."
+    )
 
 
 def teams_page(client: NBAClient) -> None:
@@ -1172,10 +1360,16 @@ def teams_page(client: NBAClient) -> None:
 
 def home_page(client: NBAClient) -> None:
     """League pulse: the app opens with content, not an empty search box."""
-    st.caption(f"League pulse · {current_season()}")
+    head = st.columns([5, 1])
+    season = head[1].selectbox(
+        "Season", seasons_since(), key="pulse_season", label_visibility="collapsed",
+        help="Dashboards go back to 1996-97. Past seasons load live on first view.",
+    )
+    is_current = season == current_season()
+    head[0].caption(f"League pulse · {season}")
     try:
         with st.spinner("Loading the league dashboard (first view fetches live)…"):
-            league = league_with_ratings(client)
+            league = league_with_ratings(client, None if is_current else season)
     except Exception as e:
         st.error(f"Could not load league stats: {e}")
         return
@@ -1227,21 +1421,25 @@ def home_page(client: NBAClient) -> None:
                         hide_index=True,
                     )
     else:
-        st.info("No league stats yet this season — leaderboards appear after opening night.")
+        st.info(f"No league stats for {season} — leaderboards appear after opening night.")
 
     try:
-        snapshot = team_form_snapshot(client.team_games())
+        snapshot = team_form_snapshot(client.team_games(None if is_current else season))
     except Exception:
         logger.warning("team form unavailable on home page", exc_info=True)
         snapshot = pd.DataFrame()
     if not snapshot.empty:
-        left, right = st.columns(2)
-        with left:
-            try:
-                st.plotly_chart(elo_dot_chart(league_elo()), width="stretch")
-            except Exception as e:
-                st.caption(f"Elo rankings unavailable: {e}")
-        with right:
+        if is_current:
+            left, right = st.columns(2)
+            with left:
+                try:
+                    st.plotly_chart(elo_dot_chart(league_elo()), width="stretch")
+                except Exception as e:
+                    st.caption(f"Elo rankings unavailable: {e}")
+            with right:
+                st.plotly_chart(net_rating_chart(snapshot), width="stretch")
+        else:
+            # Elo and the slate are "now" widgets; a past season keeps form only
             st.plotly_chart(net_rating_chart(snapshot), width="stretch")
         with st.expander("Full team form table"):
             st.dataframe(
@@ -1253,7 +1451,7 @@ def home_page(client: NBAClient) -> None:
         st.caption(f"Data through {snapshot['last_game_date'].max():%b %d, %Y}.")
 
     models = load_models()
-    if models is not None and not snapshot.empty:
+    if models is not None and not snapshot.empty and is_current:
         try:
             slate_snapshot = prediction_snapshot(client)  # prior-seeded, like training
         except Exception:
@@ -1265,6 +1463,69 @@ def home_page(client: NBAClient) -> None:
             logger.warning("Elo unavailable for the slate", exc_info=True)
         st.divider()
         slate_section(client, models, slate_snapshot)
+
+
+def draft_page(client: NBAClient) -> None:
+    """Draft classes with combine measurements, back to the first draft."""
+    try:
+        history = client.draft_history()
+    except Exception as e:
+        st.error(f"Could not load draft history: {e}")
+        return
+    years = sorted(history["SEASON"].astype(str).unique(), reverse=True)
+    head = st.columns([2, 4])
+    year = head[0].selectbox("Draft year", years, key="draft_year")
+    combine = None
+    try:
+        combine = client.draft_combine(year)
+    except Exception:
+        logger.warning("combine data unavailable for %s", year, exc_info=True)
+    try:
+        table = draft_class(history, combine, year)
+    except KeyError as e:
+        st.error(f"Draft table has an unexpected shape: {e}")
+        return
+    if table.empty:
+        st.info(f"No picks recorded for {year}.")
+        return
+
+    show = table.drop(columns=["PERSON_ID", "SEASON"], errors="ignore").rename(
+        columns={
+            "PLAYER_NAME": "PLAYER",
+            "ROUND_NUMBER": "RD",
+            "OVERALL_PICK": "PICK",
+            "TEAM_ABBREVIATION": "TEAM",
+            "ORGANIZATION": "FROM",
+            "POSITION": "POS",
+            "HEIGHT_WO_SHOES": "HEIGHT",
+            "WEIGHT": "LBS",
+            "STANDING_REACH": "REACH",
+            "MAX_VERTICAL_LEAP": "VERT",
+            "THREE_QUARTER_SPRINT": "SPRINT",
+            "WINGSPAN_DIFF": "WING±",
+        }
+    )
+    st.dataframe(
+        show,
+        width="stretch",
+        hide_index=True,
+        height=620,
+        column_config={
+            "HEIGHT": st.column_config.NumberColumn(format="%.2f"),
+            "WINGSPAN": st.column_config.NumberColumn(format="%.2f"),
+            "REACH": st.column_config.NumberColumn(format="%.2f"),
+            "VERT": st.column_config.NumberColumn(format="%.1f"),
+            "SPRINT": st.column_config.NumberColumn(format="%.2f"),
+            "WING±": st.column_config.NumberColumn(
+                format="%+.2f", help="Wingspan minus barefoot height, in inches."
+            ),
+        },
+    )
+    st.caption(
+        "Measurements from the NBA Draft Combine (inches, pounds, seconds; "
+        "combine data starts in 2000). Blank cells: the player skipped the "
+        "combine or the drill."
+    )
 
 
 def methodology_page(client: NBAClient) -> None:
@@ -1293,6 +1554,7 @@ def main() -> None:
                 url_path="compare",
             ),
             st.Page(lambda: teams_page(client), title="Teams", icon="🏟️", url_path="teams"),
+            st.Page(lambda: draft_page(client), title="Draft", icon="🎓", url_path="draft"),
             st.Page(
                 lambda: predictions_page(client),
                 title="Predictions",

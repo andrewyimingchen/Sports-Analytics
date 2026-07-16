@@ -27,3 +27,18 @@ def attach_ratings(
         )
         out = out.merge(cl, on="PLAYER_ID", how="left")
     return out
+
+
+def attach_dpm(league: pd.DataFrame, darko: pd.DataFrame | None) -> pd.DataFrame:
+    """League table plus DARKO DPM (daily plus-minus projection) columns.
+
+    Joins on PLAYER_ID; players missing from the DARKO table get NaN,
+    never dropped. Returns the table unchanged when *darko* is None or
+    lacks the join/metric columns.
+    """
+    if "PLAYER_ID" not in league.columns:
+        raise KeyError("league table has no PLAYER_ID column")
+    if darko is None or not {"PLAYER_ID", "DPM"} <= set(darko.columns):
+        return league
+    cols = [c for c in ("PLAYER_ID", "DPM", "O_DPM", "D_DPM") if c in darko.columns]
+    return league.merge(darko[cols], on="PLAYER_ID", how="left")

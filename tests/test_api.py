@@ -157,6 +157,38 @@ def test_mobile_app_shell_served(api):
     assert api.get("/", follow_redirects=False).status_code in (302, 307)
 
 
+def test_compare_poster_endpoint(api):
+    params = {"names": ["Alice Hooper", "Bob Rimson"]}
+    html = api.get("/posters/compare", params=params)
+    assert html.status_code == 200
+    assert html.headers["content-type"].startswith("text/html")
+    assert "Alice Hooper" in html.text
+
+    png = api.get("/posters/compare", params={**params, "format": "png"})
+    assert png.status_code == 200
+    assert png.headers["content-type"] == "image/png"
+    assert png.content[:8] == b"\x89PNG\r\n\x1a\n"
+
+    missing = api.get("/posters/compare", params={"names": ["Alice Hooper", "Zelda"]})
+    assert missing.status_code == 404
+    assert api.get("/posters/compare", params={**params, "format": "gif"}).status_code == 422
+
+
+def test_game_poster_endpoint(api_with_model):
+    html = api_with_model.get("/posters/game", params={"home": "T1", "away": "T4"})
+    assert html.status_code == 200
+    assert "T1" in html.text and "T4" in html.text
+
+    png = api_with_model.get(
+        "/posters/game", params={"home": "T1", "away": "T4", "format": "png"}
+    )
+    assert png.status_code == 200
+    assert png.content[:8] == b"\x89PNG\r\n\x1a\n"
+
+    bad = api_with_model.get("/posters/game", params={"home": "T1", "away": "ZZZ"})
+    assert bad.status_code == 404
+
+
 def test_card_html(api):
     r = api.get("/players/1/card")
     assert r.status_code == 200

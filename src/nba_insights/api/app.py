@@ -31,6 +31,12 @@ from nba_insights.ml.features import (
     team_form_snapshot,
 )
 from nba_insights.ml.train import OUTCOME_PATH
+from nba_insights.posters import (
+    compare_poster_html,
+    compare_poster_png,
+    prediction_poster_html,
+    prediction_poster_png,
+)
 from nba_insights.serve import fetch_headshot, league_with_ratings
 
 logger = logging.getLogger(__name__)
@@ -103,21 +109,26 @@ def _find_player(client: NBAClient, player_id: int) -> dict:
 @app.get("/teams")
 def teams(client: Client) -> list[str]:
     """Tricodes of all teams with games this season."""
-    day = pd.Timestamp.utcnow().date().isoformat()
+    day = pd.Timestamp.now("UTC").date().isoformat()
     return sorted(_snapshot_for_day(day, client).index)
 
 
-@app.get("/predict/game")
-def predict_game(home: str, away: str, client: Client, model: OutcomeModel) -> dict:
-    """Home-team win probability for a matchup, both sides at full strength."""
-    day = pd.Timestamp.utcnow().date().isoformat()
+def _matchup_prob(client: NBAClient, model: GameOutcomeModel, home: str, away: str) -> float:
+    """Home-team win probability, validating the matchup (404/422)."""
+    day = pd.Timestamp.now("UTC").date().isoformat()
     snapshot = _snapshot_for_day(day, client)
     for team in (home, away):
         if team not in snapshot.index:
             raise HTTPException(404, f"unknown team {team!r}")
     if home == away:
         raise HTTPException(422, "home and away must differ")
-    prob = float(model.predict_proba(matchup_features(snapshot, home, away)).iloc[0])
+    return float(model.predict_proba(matchup_features(snapshot, home, away)).iloc[0])
+
+
+@app.get("/predict/game")
+def predict_game(home: str, away: str, client: Client, model: OutcomeModel) -> dict:
+    """Home-team win probability for a matchup, both sides at full strength."""
+    prob = _matchup_prob(client, model, home, away)
     return {"home": home, "away": away, "home_win_prob": round(prob, 3)}
 
 
@@ -204,3 +215,44 @@ def player_card(player_id: int, client: Client) -> str:
             ranks = None
 
     return render_player_card(player["full_name"], latest, ranks)
+
+
+PosterFormat = Annotated[str, Query(pattern="^(html|png)$")]
+
+
+def _poster_response(html: str, png: bytes | None, format: str) -> Response:
+    if format == "png":
+        return Response(content=png, media_type="image/png")
+    return HTMLResponse(content=html)
+
+
+@app.get("/posters/compare")
+def compare_poster(
+    names: Annotated[list[str], Query(min_length=2, max_length=4)],
+    client: Client,
+    format: PosterFormat = "html",
+) -> Response:
+    """1:1 share poster of a player comparison (HTML, or PNG with format=png)."""
+    league = league_with_ratings(client)
+    try:
+        table = comparison_table(league, names)
+    except KeyError as e:
+        raise HTTPException(404, str(e)) from e
+    season = current_season()
+    png = compare_poster_png(table, season) if format == "png" else None
+    return _poster_response(compare_poster_html(table, season), png, format)
+
+
+@app.get("/posters/game")
+def game_poster(
+    home: str,
+    away: str,
+    client: Client,
+    model: OutcomeModel,
+    format: PosterFormat = "html",
+) -> Response:
+    """16:9 share poster of a game prediction (HTML, or PNG with format=png)."""
+    prob = _matchup_prob(client, model, home, away)
+    season = current_season()
+    png = prediction_poster_png(home, away, prob, season) if format == "png" else None
+    return _poster_response(prediction_poster_html(home, away, prob, season), png, format)

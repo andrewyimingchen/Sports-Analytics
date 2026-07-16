@@ -150,6 +150,32 @@ strictly pre-game; availability expectations use only prior games.
     )
 
     st.divider()
+    st.markdown("### Descriptive metrics on the player and team pages")
+    st.markdown(
+        """
+**On/off splits.** Team offensive/defensive/net rating with a player on
+vs off the floor, straight from stats.nba.com's team on/off dashboard
+(total minutes, no adjustment). The swing is a *description*, not an
+impact estimate: it inherits whoever else shared or replaced those
+minutes, so small samples and bench context can dominate — the teams
+table floors it at 100 on-court minutes.
+
+**Shot quality (xeFG%).** Each attempt is scored at the league's FG% for
+its zone (threes weighted 1.5×), giving the eFG% a league-average
+shooter would post on the same shot diet. Actual eFG% minus that
+expectation isolates *shot making* from *shot selection*. Zone-level
+expectation is deliberately coarse — no defender distance or shot clock —
+so treat it as a first-order split, not a full shot-quality model.
+
+**DARKO DPM.** The daily plus-minus projection from
+[darko.app](https://darko.app) (Kostya Medvedovsky & Andrew Patton),
+shown alongside our net/clutch ratings as an external reference point.
+It is displayed, never used as a model feature, and refreshed daily
+through the same cache as everything else.
+"""
+    )
+
+    st.divider()
     st.markdown("### Game outcome model")
     st.markdown(
         """

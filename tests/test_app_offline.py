@@ -49,12 +49,20 @@ def build_fixture_cache(db_path: Path, gp: int = 55, empty_league: bool = False)
     cache = Cache(db_path)
     cur = current_season()
     if empty_league:
-        league = advanced = clutch = pd.DataFrame()
+        league = advanced = clutch = darko = pd.DataFrame()
     else:
         league, advanced, clutch = synthetic_league(gp)
+        darko = pd.DataFrame(
+            {
+                "PLAYER_ID": league["PLAYER_ID"],
+                "PLAYER_NAME": league["PLAYER_NAME"],
+                "DPM": [5.0 - i for i in range(len(league))],
+            }
+        )
     cache.put(f"league_player_stats/{cur}/PerGame", league)
     cache.put(f"league_player_advanced/{cur}", advanced)
     cache.put(f"league_player_clutch/{cur}", clutch)
+    cache.put("darko/dpm", darko)
     seasons = [*past_seasons(2), cur]
     for n, season in enumerate(seasons):
         games = synthetic_team_games(

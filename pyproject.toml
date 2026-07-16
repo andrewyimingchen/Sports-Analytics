@@ -8,6 +8,7 @@ dependencies = [
     "fastapi>=0.115",
     "nba_api>=1.7",
     "pandas>=2.0",
+    "pillow>=12.3.0",
     "plotly>=5.20",
     "pyarrow>=15",
     "scikit-learn>=1.5",

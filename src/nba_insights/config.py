@@ -17,6 +17,17 @@ def past_seasons(n: int, today: date | None = None) -> list[str]:
     return [f"{y}-{(y + 1) % 100:02d}" for y in range(current_start - n, current_start)]
 
 
+# stats.nba.com league dashboards (and shot locations) go back to 1996-97;
+# earlier seasons return empty tables, so the app never offers them
+FIRST_DASHBOARD_SEASON = 1996
+
+
+def seasons_since(start_year: int = FIRST_DASHBOARD_SEASON, today: date | None = None) -> list[str]:
+    """Every season from *start_year* through the current one, newest first."""
+    current_start = int(current_season(today)[:4])
+    return [f"{y}-{(y + 1) % 100:02d}" for y in range(current_start, start_year - 1, -1)]
+
+
 def current_season(today: date | None = None) -> str:
     """Return the NBA season string (e.g. "2025-26") for a given date.
 
