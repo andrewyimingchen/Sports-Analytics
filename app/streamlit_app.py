@@ -53,6 +53,7 @@ from nba_insights.ml.features import (
     upcoming_games,
 )
 from nba_insights.ml.train import METRICS_PATH, OUTCOME_PATH, POINTS_PATH, WIN_CURVE_PATH
+from nba_insights.pbp.lineups import load_season as load_stint_lineups
 from nba_insights.posters import compare_poster_png, prediction_poster_png
 from nba_insights.viz import half_court_trace
 from ui import inject_css
@@ -1152,6 +1153,20 @@ def _points_record(models: dict) -> str:
     return sentence
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def stint_lineup_table(_client: NBAClient) -> pd.DataFrame | None:
+    """Prebuilt stint-level lineup table (garbage-time filtered), if built.
+
+    Built offline by `python -m nba_insights.pbp.lineups`; the app only
+    loads it, so a missing table just means the season-aggregate fallback.
+    """
+    try:
+        return load_stint_lineups(_client.cache)
+    except Exception:
+        logger.warning("stint lineup table unavailable", exc_info=True)
+        return None
+
+
 @st.fragment
 def lineup_tab(client: NBAClient, models: dict) -> None:
     league = league_with_ratings(client)
@@ -1166,17 +1181,28 @@ def lineup_tab(client: NBAClient, models: dict) -> None:
         st.info("Select exactly five players.")
         return
     ids = [int(roster.loc[roster["PLAYER_NAME"] == n, "PLAYER_ID"].iloc[0]) for n in five]
-    try:
-        lineups = client.lineups()
-    except Exception:
-        lineups = pd.DataFrame(columns=["GROUP_ID", "MIN", "NET_RATING"])
+    stint_based = stint_lineup_table(client)
+    if stint_based is not None:
+        lineups = stint_based
+    else:
+        try:
+            lineups = client.lineups()
+        except Exception:
+            lineups = pd.DataFrame(columns=["GROUP_ID", "MIN", "NET_RATING"])
     net, minutes = blended_lineup_estimate(lineups, league, five, ids)
     prob = models["curve"].win_probability(net)
     m = st.columns(3)
     m[0].metric("Estimated net rating", f"{net:+.1f}")
     m[1].metric("Win probability vs average opponent", f"{prob:.0%}")
     m[2].metric("Minutes together", f"{minutes:.0f}")
-    if minutes > 0:
+    if minutes > 0 and stint_based is not None:
+        st.caption(
+            "Blend of this lineup's stint-level net rating this season — exact "
+            "shared-floor spans from rotation data, garbage time stripped — "
+            "weighted by minutes together, with the per-36 plus-minus proxy, "
+            "mapped through a win curve fitted on three seasons of team results."
+        )
+    elif minutes > 0:
         st.caption(
             "Blend of this lineup's observed net rating this season (weighted by "
             "minutes played together) and the per-36 plus-minus proxy, mapped "

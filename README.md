@@ -54,7 +54,7 @@ src/nba_insights/
 ├── store/       # SQLite DataFrame cache with per-endpoint TTLs
 ├── analysis/    # pure pandas: trends, percentiles, comparisons, ratings, zones
 ├── ml/          # features, Elo, outcome/points/lineup models, game simulator
-├── pbp/         # play-by-play corpus utilities
+├── pbp/         # play-by-play corpus: backfill, garbage time, stint lineups
 └── api/         # FastAPI JSON endpoints + PWA
 app/             # Streamlit UI (seven pages; ui.py holds the CSS motion layer)
 tests/           # unit + AppTest smoke tests — no network required
@@ -89,7 +89,7 @@ uv run python -m nba_insights.ml.train
 |---|---|---|
 | Game outcome | Logistic regression on prior-seeded season-to-date form differentials (win%, net rating, four factors, pace, ORtg/DRtg), rest/back-to-backs, expected minutes out (derived absences), carried-over Elo + home court | 70.2% accuracy, log loss 0.589 over the **full season** incl. opening weeks (55% baseline: always pick home) |
 | Player points | Two-stage: minutes model (rotation trend, rest, roster availability) × per-minute rate model (EWMA form, opponent context, teammate absences); ships an empirical 80% interval from training residual quantiles, binned by projection level | MAE 4.58 (4.72 baseline: 10-game average); the 80% interval covered 80.4% of holdout games |
-| Starting five | Observed lineup net rating (weighted by minutes together) blended with a per-36 plus-minus proxy, through a fitted win curve | blend; pure proxy when the five never played together |
+| Starting five | Observed lineup net rating blended with a per-36 plus-minus proxy through a fitted win curve; the observed side prefers our stint table (exact rotation intervals, garbage time stripped, estimated possessions) over the season-aggregate dashboard | blend; pure proxy when the five never played together |
 | Game simulator | Monte Carlo over pace and ratings (10,000 sims: shared possessions, per-100 scoring vs opponent defense, home court, minutes out, overtime); parameters fitted on the training seasons | log loss 0.601 / 68.6% — the logistic model keeps the headline number; the simulator supplies margin/total distributions |
 
 Evaluation is a temporal holdout: trained on 2022-25, scored on the current
@@ -151,6 +151,29 @@ is a one-time cost per season):
 ```bash
 uv run python -m nba_insights.warm --seasons 1996-97 1997-98 2015-16
 ```
+
+The stint-level lineup table (used by the Predictions page's starting-five
+tab) is built offline from play-by-play and rotation data:
+
+```bash
+uv run python -m nba_insights.pbp.backfill --seasons 2025-26  # fetch corpus
+uv run python -m nba_insights.pbp.lineups --season 2025-26    # aggregate
+```
+
+The build is cache-only and instant, but it refuses to store a table
+below 90% game coverage (a partial corpus would understate every
+lineup's minutes; `--min-coverage` overrides). All the patience lives in
+the backfill: stats.nba.com tar-pits the rotation endpoint (~20 seconds
+per response, and empty responses when hit faster — hence the gentle
+`--delay 3` default), so **backfilling a historical season is an
+overnight run**. It's fully resumable — cached games are skipped, so
+interrupted runs just continue where they stopped. During the season the
+nightly increment is a handful of games (~5 minutes), which is the
+intended steady state. Quirks handled: a few games per season have no
+rotation rows at all (skipped), and a whole season can lag upstream (as
+of July 2026, 2025-26 returns nothing — a failure-rate breaker gives up
+cleanly and the app falls back to the season-aggregate lineup dashboard
+until the data appears).
 
 Schedule it nightly with cron (run from the repo root so it fills the same
 `data/` directory the app reads):

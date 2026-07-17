@@ -312,6 +312,17 @@ curve fitted on three seasons of team results (~2.8% win probability per
 net point). Lineups that never shared the floor fall back to the mean of
 the players' per-36 plus-minus — a proxy that ignores fit and synergy,
 and is labelled as such in the UI.
+
+**Where the observed net rating comes from.** Preferred source is our own
+stint table: the rotation feed gives each player's exact on/off intervals,
+so slicing the game at every substitution boundary yields spans where all
+ten players are fixed. Each stint carries its score change and an
+estimated possession count (FGA − OREB + TOV + 0.44·FTA, offensive
+rebounds inferred from the preceding miss), and **garbage time is
+stripped** with the same fourth-quarter blowout rule the form features
+use. Built offline (`python -m nba_insights.pbp.lineups`); when the table
+hasn't been built the tab falls back to the league's season-aggregate
+lineup dashboard, which counts garbage time.
 """
     )
 
