@@ -82,4 +82,9 @@ See README.md for details.
 - All remote fetches go through `Cache.get_or_fetch`; never call nba_api
   endpoints directly from the app layer.
 - Column names follow stats.nba.com conventions (PTS, GP, SEASON_ID, ...).
-- Do not add Basketball-Reference scraping — their ToS prohibits it.
+- Scraping public reference pages (e.g. Basketball-Reference contracts) is
+  permitted by owner decision (2026-07-16), accepting the ToS tension, under
+  these guardrails: minimal volume (single pages, long TTLs, always through
+  `Cache.get_or_fetch`), personal/educational use only, and scraped data must
+  never be exposed through the public API/PWA or redistributed. Licensed
+  providers (e.g. BALLDONTLIE) remain the path for anything commercial.

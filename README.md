@@ -12,11 +12,12 @@ A Streamlit app in seven pages:
   quality (xeFG%: selection vs making), team on/off splits, league
   percentile ranks incl. net rating, clutch rating, and DARKO DPM — with a
   season picker, so retired players rank against their own era (1996-97
-  onward)
+  onward); the header carries draft pedigree and current salary
 - **Compare players** — side-by-side stats, percentile bars, shot quality, and
   a downloadable share poster (the Predictions page has one per matchup too)
 - **Teams** — record/ratings/Elo tiles, season margin trend, roster with
-  ratings, per-player on/off impact, last ten games, and conference standings
+  ratings and salaries (plus committed payroll), per-player on/off impact,
+  last ten games, and conference standings
 - **Draft** — every draft class back to 1947 with combine measurements
   (wingspan, standing reach, athletic testing) from 2000 on; drafted players
   carry their pick pedigree on the profile header
@@ -176,15 +177,15 @@ CI runs both on every push and pull request. Issue tracking uses
 
 ## Data source & legal
 
-This project uses **only** `nba_api` against stats.nba.com. It deliberately
-does **not** scrape Basketball-Reference.com — their terms of service prohibit
-scraping and commercial reuse (the previous incarnation of this repo did; that
-code has been removed). For a commercial deployment at scale, budget for a
-licensed provider such as SportsDataIO or Sportradar.
-
-Salary/contract data is deliberately absent: every free source (Spotrac,
-HoopsHype, Basketball-Reference, and the public CSVs derived from them)
-prohibits scraping or reuse, so that feature waits on a licensed provider.
+Game and player statistics come from `nba_api` against stats.nba.com.
+Salary/contract context is scraped at minimal volume from public reference
+pages (a single summary page, cached long-term) for **personal, educational
+use only** — those sites' terms of service discourage scraping, a tension
+the project owner has knowingly accepted for local use. Scraped data is
+never served through the public API/PWA and must not be redistributed or
+used commercially. For a commercial deployment, license the data instead
+(BALLDONTLIE's GOAT tier carries contracts, injuries, and odds;
+SportsDataIO and Sportradar are the heavier options).
 
 One external dataset is displayed with attribution: **DARKO** daily
 plus-minus projections (DPM) by Kostya Medvedovsky and Andrew Patton, from

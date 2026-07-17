@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115",
+    "lxml>=6.1.1",
     "nba_api>=1.7",
     "pandas>=2.0",
     "pillow>=12.3.0",
