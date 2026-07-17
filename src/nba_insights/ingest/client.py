@@ -18,6 +18,7 @@ import pandas as pd
 from nba_api.stats.endpoints import (
     draftcombinestats,
     drafthistory,
+    gamerotation,
     leaguedashlineups,
     leaguedashplayerclutch,
     leaguedashplayerstats,
@@ -284,6 +285,33 @@ class NBAClient:
     def _fetch_pbp(self, game_id: str) -> pd.DataFrame:
         df = playbyplayv3.PlayByPlayV3(game_id=game_id).get_data_frames()[0]
         return df[[c for c in self._PBP_COLS if c in df.columns]]
+
+    def game_rotation(self, game_id: str) -> pd.DataFrame:
+        """Exact on-court intervals per player for one finished game.
+
+        One row per player-stint with IN/OUT_TIME_REAL in tenths of game
+        seconds, plus IS_HOME. Immutable once played, like play-by-play."""
+        return self._cached(
+            f"rotation/{game_id}",
+            lambda: self._fetch_rotation(game_id),
+            ttl=None,
+        )
+
+    @staticmethod
+    def _fetch_rotation(game_id: str) -> pd.DataFrame:
+        r = gamerotation.GameRotation(game_id=game_id)
+        cols = ["TEAM_ID", "PERSON_ID", "IN_TIME_REAL", "OUT_TIME_REAL"]
+        home = r.home_team.get_data_frame()[cols].assign(IS_HOME=True)
+        away = r.away_team.get_data_frame()[cols].assign(IS_HOME=False)
+        return pd.concat([home, away], ignore_index=True)
+
+    def cached_rotation(self, game_id: str) -> pd.DataFrame | None:
+        """The cached rotation for a game, or None — never fetches.
+
+        The stint builder reads through this so a half-backfilled corpus
+        builds in seconds instead of inheriting the rotation endpoint's
+        crawl (upstream tar-pits it to ~20s per request under load)."""
+        return self.cache.get(f"rotation/{game_id}")
 
     def schedule(self, season: str | None = None) -> pd.DataFrame:
         """Full season schedule (all games with dates, tricodes, status)."""
