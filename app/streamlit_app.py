@@ -33,6 +33,7 @@ from nba_insights.analysis import (
     salary_seasons,
     shot_breakdown,
     shot_quality,
+    similar_players,
     team_contracts,
     team_on_off,
     team_payroll,
@@ -1183,6 +1184,11 @@ def leader_suggestions(client: NBAClient, *keys: str) -> None:
 
 
 def profile_page(client: NBAClient) -> None:
+    # a drill-down (leaderboard/roster/comps click) stashes the target here;
+    # seed the search widget before it's created (its key can't be set after)
+    pending = st.session_state.pop("_pending_profile", None)
+    if pending is not None:
+        st.session_state["profile_search"] = pending
     player = pick_player(client, "Search for a player", "profile_search")
     if not player:
         st.info("Type a player name to build their profile.")
@@ -1240,6 +1246,49 @@ def profile_page(client: NBAClient) -> None:
     season_detail(client, player, seasons)
 
     percentile_section(client, player, seasons)
+
+    comps_section(client, player)
+
+
+def comps_section(client: NBAClient, player: dict) -> None:
+    """Statistical comparables — 'players like X' — with click-through to
+    each comp's profile. Current-season only, so retired players get none."""
+    try:
+        league = league_with_ratings(client)
+        comps = similar_players(league, player["full_name"], n=8)
+    except KeyError:
+        return  # not in this season's pool (retired / too few minutes)
+    except Exception:
+        logger.warning("player comps unavailable", exc_info=True)
+        return
+    if comps.empty:
+        return
+    st.subheader("Similar players")
+    st.caption(
+        "Statistical comps by per-36 rates and shooting profile, standardized "
+        "across the league. Click a player to open their profile."
+    )
+    display = comps.rename(
+        columns={"PLAYER_NAME": "PLAYER", "TEAM_ABBREVIATION": "TEAM", "SIMILARITY": "MATCH"}
+    )
+    event = st.dataframe(
+        display[["PLAYER", "TEAM", "MATCH", "PTS", "REB", "AST"]],
+        width="stretch",
+        hide_index=True,
+        on_select="rerun",
+        selection_mode="single-row",
+        key="comps_table",
+        column_config={
+            "MATCH": st.column_config.ProgressColumn(
+                "MATCH", min_value=0.0, max_value=100.0, format="%.0f%%"
+            ),
+            "PTS": st.column_config.NumberColumn(format="%.1f"),
+            "REB": st.column_config.NumberColumn(format="%.1f"),
+            "AST": st.column_config.NumberColumn(format="%.1f"),
+        },
+    )
+    if event.selection.rows:
+        open_profile(str(comps.iloc[event.selection.rows[0]]["PLAYER_NAME"]))
 
 
 @st.fragment
@@ -2378,10 +2427,13 @@ PAGES: dict = {}
 
 
 def open_profile(name: str) -> None:
-    """Jump to a player's profile with the search box pre-filled. Safe from a
-    fragment: it stashes the target and triggers a full app rerun that main()
-    turns into the page switch (st.switch_page can't be called in a fragment)."""
-    st.session_state["profile_search"] = name
+    """Jump to a player's profile with the search box pre-filled. Stashes the
+    target in _pending_profile (profile_page seeds the search widget from it
+    before the widget exists — the widget's own key can't be written once
+    instantiated, which matters when the jump comes from the profile page
+    itself, e.g. a comps click) and triggers a full app rerun that main()
+    turns into the page switch."""
+    st.session_state["_pending_profile"] = name
     st.session_state["_nav_to"] = "profile"
     st.rerun(scope="app")
 

@@ -18,6 +18,7 @@ from nba_insights.analysis.shots import (
     shot_quality,
     zone_efficiency,
 )
+from nba_insights.analysis.similarity import similar_players
 from nba_insights.analysis.trends import career_averages, career_per_game, rolling_form
 
 __all__ = [
@@ -38,6 +39,7 @@ __all__ = [
     "salary_seasons",
     "shot_breakdown",
     "shot_quality",
+    "similar_players",
     "team_contracts",
     "team_on_off",
     "team_scouting_take",
