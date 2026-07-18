@@ -20,11 +20,13 @@ sys.path.insert(0, str(Path(__file__).parent))  # sibling modules (methodology, 
 from nba_insights import serve
 from nba_insights.analysis import (
     COLUMN_GLOSSARY,
+    FACTOR_LABELS,
     attach_salary,
     career_averages,
     career_per_game,
     draft_class,
     filter_players,
+    four_factors_table,
     game_log_table,
     hex_bins,
     league_leaders,
@@ -1983,6 +1985,46 @@ def predictions_page(client: NBAClient) -> None:
         lineup_tab(client, models)
 
 
+# which factors read as a percentage vs. a raw ratio (FT rate)
+_FF_PCT = {"off_efg", "off_tov_pct", "off_oreb_pct", "def_efg", "def_tov_pct", "def_dreb_pct"}
+_FF_OFFENSE = ["off_efg", "off_tov_pct", "off_oreb_pct", "off_ft_rate"]
+_FF_DEFENSE = ["def_efg", "def_tov_pct", "def_dreb_pct", "def_ft_rate"]
+
+
+def four_factors_panel(games: pd.DataFrame, team: str) -> None:
+    """Dean Oliver's four factors as a team identity, offense vs defense.
+
+    Each factor carries its league rank (1 = best) so a value reads in context —
+    the same way NBA.com and Cleaning the Glass frame team profiles.
+    """
+    try:
+        ff = four_factors_table(games)
+    except Exception:
+        logger.warning("four factors unavailable", exc_info=True)
+        return
+    if team not in ff.index:
+        return
+    row = ff.loc[team]
+    n = len(ff)
+
+    st.subheader("Four factors")
+    st.caption(
+        "Shooting, turnovers, rebounding, and free throws — what wins games, "
+        f"with each team's league rank (of {n}). Green = a strength."
+    )
+    for title, factors in (("Offense", _FF_OFFENSE), ("Defense", _FF_DEFENSE)):
+        st.caption(title)
+        cols = st.columns(4)
+        for col, factor in zip(cols, factors, strict=True):
+            value = row[factor]
+            shown = f"{value * 100:.1f}%" if factor in _FF_PCT else f"{value:.3f}"
+            rank = int(row[f"{factor}_rank"])
+            # top third is a strength (green), bottom third a weakness (red)
+            tone = "green" if rank <= n / 3 else "red" if rank > 2 * n / 3 else "gray"
+            col.metric(FACTOR_LABELS[factor], shown)
+            col.markdown(f":{tone}[**#{rank}** of {n}]")
+
+
 @st.fragment
 def team_detail(client: NBAClient, games: pd.DataFrame, snapshot: pd.DataFrame) -> None:
     """One team's season at a glance; a fragment so switching teams is light."""
@@ -2034,6 +2076,8 @@ def team_detail(client: NBAClient, games: pd.DataFrame, snapshot: pd.DataFrame) 
         width="stretch",
         key="team_form",
     )
+
+    four_factors_panel(games, team)
 
     st.subheader("Roster")
     try:
