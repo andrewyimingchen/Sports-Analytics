@@ -19,6 +19,7 @@ from nba_insights.ingest import NBAClient
 logger = logging.getLogger(__name__)
 
 HEADSHOT_URL = "https://cdn.nba.com/headshots/nba/latest/1040x760/{player_id}.png"
+TEAM_LOGO_URL = "https://cdn.nba.com/logos/nba/{team_id}/global/L/logo.svg"
 
 
 def league_with_ratings(client: NBAClient, season: str | None = None) -> pd.DataFrame:
@@ -48,16 +49,21 @@ def league_with_ratings(client: NBAClient, season: str | None = None) -> pd.Data
 
 def fetch_headshot(player_id: int) -> bytes | None:
     """Fetch a headshot server-side; None when the CDN has none."""
+    return _fetch_cdn(HEADSHOT_URL.format(player_id=player_id))
+
+
+def fetch_team_logo(team_id: int) -> bytes | None:
+    """Fetch a team logo (SVG) server-side; None when the CDN has none."""
+    return _fetch_cdn(TEAM_LOGO_URL.format(team_id=team_id))
+
+
+def _fetch_cdn(url: str) -> bytes | None:
     import requests
 
     try:
-        r = requests.get(
-            HEADSHOT_URL.format(player_id=player_id),
-            headers={"User-Agent": "Mozilla/5.0"},
-            timeout=10,
-        )
+        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
         r.raise_for_status()
         return r.content
     except Exception:
-        logger.warning("headshot fetch failed for player %s", player_id, exc_info=True)
+        logger.warning("CDN fetch failed for %s", url, exc_info=True)
         return None

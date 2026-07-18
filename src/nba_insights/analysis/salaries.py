@@ -53,6 +53,38 @@ def attach_salary(league: pd.DataFrame, contracts: pd.DataFrame) -> pd.DataFrame
     return out.drop(columns=["key_0", "_KEY"], errors="ignore")
 
 
+def player_contract(contracts: pd.DataFrame, name: str) -> pd.Series:
+    """One player's contract row: per-season salaries plus GUARANTEED.
+
+    Looks up by normalized name (the contracts source has no NBA IDs); a
+    traded player appearing under two teams keeps the first row. Raises
+    KeyError when the player has no listed contract.
+    """
+    if "PLAYER_NAME" not in contracts.columns:
+        raise KeyError("contracts table has no PLAYER_NAME column")
+    key = normalize_name(name)
+    rows = contracts[contracts["PLAYER_NAME"].map(normalize_name) == key]
+    if rows.empty:
+        raise KeyError(f"no contract listed for {name}")
+    return rows.iloc[0]
+
+
+def team_contracts(contracts: pd.DataFrame, team: str) -> pd.DataFrame:
+    """One team's contract book: player rows × season salary columns.
+
+    Sorted by nearest-season salary, largest first; GUARANTEED kept when
+    present. Raises KeyError when the table lacks team or season columns.
+    """
+    seasons = salary_seasons(contracts)
+    if not seasons or "TEAM_ABBREVIATION" not in contracts.columns:
+        raise KeyError("contracts table lacks team or season columns")
+    cols = ["PLAYER_NAME", *seasons]
+    if "GUARANTEED" in contracts.columns:
+        cols.append("GUARANTEED")
+    rows = contracts.loc[contracts["TEAM_ABBREVIATION"] == team, cols]
+    return rows.sort_values(seasons[0], ascending=False).reset_index(drop=True)
+
+
 def team_payroll(contracts: pd.DataFrame) -> pd.Series:
     """Nearest-season committed payroll per team, largest first."""
     seasons = salary_seasons(contracts)

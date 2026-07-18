@@ -1,0 +1,8 @@
+# App chrome. The primary color matches the chart palette's blue (slot 1)
+# so focus rings, radios, and progress columns stop rendering in Streamlit's
+# default alarm-red; base stays unset so light/dark follows the viewer.
+[theme]
+primaryColor = "#2a78d6"
+
+[client]
+toolbarMode = "minimal"
