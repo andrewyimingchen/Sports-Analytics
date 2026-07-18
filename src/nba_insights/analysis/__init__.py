@@ -1,4 +1,5 @@
 from nba_insights.analysis.ask import COLUMN_GLOSSARY, query_players
+from nba_insights.analysis.clutch import clutch_shooting_line
 from nba_insights.analysis.compare import comparison_table
 from nba_insights.analysis.draft import draft_class, player_draft_line
 from nba_insights.analysis.explore import filter_players, per_minutes_table
@@ -43,6 +44,7 @@ __all__ = [
     "attach_salary",
     "career_averages",
     "career_per_game",
+    "clutch_shooting_line",
     "comparison_table",
     "draft_class",
     "filter_players",

@@ -185,6 +185,32 @@ class NBAClient:
             fetched_after=self._season_fetched_after(season),
         )
 
+    def league_player_clutch_base(
+        self, season: str | None = None, season_type: str = "Regular Season"
+    ) -> pd.DataFrame:
+        """Per-player traditional box stats in the clutch (last 5 min, margin <= 5).
+
+        The Base counterpart to league_player_clutch (which is Advanced): this
+        carries shooting — FGM/FGA/FG_PCT, FG3M/FG3A/FG3_PCT, FTM/FTA/FT_PCT,
+        PTS — in clutch minutes. GP and MIN are clutch games and clutch minutes,
+        not season-wide.
+        """
+        season = season or current_season()
+        return self._cached(
+            f"league_player_clutch_base/{season}{_type_suffix(season_type)}",
+            lambda: leaguedashplayerclutch.LeagueDashPlayerClutch(
+                season=season,
+                season_type_all_star=season_type,
+                measure_type_detailed_defense="Base",
+                per_mode_detailed="PerGame",  # PTS/MIN per clutch game, not season totals
+                clutch_time="Last 5 Minutes",
+                ahead_behind="Ahead or Behind",
+                point_diff=5,
+            ).get_data_frames()[0],
+            ttl=self._season_ttl(season),
+            fetched_after=self._season_fetched_after(season),
+        )
+
     def shot_chart(
         self,
         player_id: int,

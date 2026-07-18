@@ -24,6 +24,7 @@ from nba_insights.analysis import (
     attach_salary,
     career_averages,
     career_per_game,
+    clutch_shooting_line,
     draft_class,
     filter_players,
     four_factors_table,
@@ -1106,6 +1107,46 @@ def splits_section(log: pd.DataFrame) -> None:
     )
 
 
+def clutch_shooting_section(
+    client: NBAClient, player: dict, season: str, season_type: str
+) -> None:
+    """A clutch shooting line — how a player shoots in the last 5 min, margin <=5.
+
+    The one situational split the game log can't give us (clutch is per-possession
+    within games), so it comes from the league clutch (Base) table.
+    """
+    try:
+        clutch = client.league_player_clutch_base(season=season, season_type=season_type)
+        line = clutch_shooting_line(clutch, player["id"])
+    except Exception:
+        logger.warning("clutch shooting unavailable", exc_info=True)
+        return
+    if not line:
+        return
+
+    st.subheader("Clutch shooting")
+    st.caption(
+        "Shooting in the last 5 minutes with the score within 5 points"
+        + (f" · {int(line['GP'])} clutch games" if line.get("GP") else "")
+        + "."
+    )
+    cells = [
+        ("eFG%", line.get("EFG_PCT")),
+        ("FG%", line.get("FG_PCT")),
+        ("3P%", line.get("FG3_PCT")),
+        ("FT%", line.get("FT_PCT")),
+        ("PTS", line.get("PTS")),
+    ]
+    cols = st.columns(len(cells))
+    for col, (label, value) in zip(cols, cells, strict=True):
+        if value is None:
+            col.metric(label, "—")
+        elif label == "PTS":
+            col.metric(label, f"{value:.1f}")
+        else:
+            col.metric(label, f"{value * 100:.1f}%")
+
+
 @st.fragment
 def season_detail(client: NBAClient, player: dict, seasons: list[str]) -> None:
     """Season-scoped charts; a fragment so switching season or stat only
@@ -1141,6 +1182,7 @@ def season_detail(client: NBAClient, player: dict, seasons: list[str]) -> None:
                     },
                 )
             splits_section(log)
+            clutch_shooting_section(client, player, season, season_type)
     except Exception as e:
         st.error(f"Could not load game log: {e}")
 
