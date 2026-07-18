@@ -27,6 +27,7 @@ from nba_insights.analysis import (
     game_log_table,
     hex_bins,
     league_leaders,
+    most_used_lineups,
     per_minutes_table,
     percentile_ranks,
     player_contract,
@@ -1867,6 +1868,12 @@ def stint_lineup_table(_client: NBAClient) -> pd.DataFrame | None:
         return None
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def all_lineups(_client: NBAClient) -> pd.DataFrame:
+    """League 5-man lineup dashboard (~2k rows), cached at the app layer."""
+    return _client.lineups()
+
+
 @st.fragment
 def lineup_tab(client: NBAClient, models: dict) -> None:
     league = league_with_ratings(client)
@@ -2124,6 +2131,53 @@ def team_detail(client: NBAClient, games: pd.DataFrame, snapshot: pd.DataFrame) 
                 "personal use only. Blank cells: no committed money that season."
             )
 
+    st.subheader("Lineups")
+    try:
+        lineups = all_lineups(client)
+        team_players = league_with_ratings(client)
+        team_players = team_players[team_players["TEAM_ABBREVIATION"] == team].sort_values(
+            "MIN", ascending=False
+        )
+        roster_ids = dict(
+            zip(team_players["PLAYER_NAME"], team_players["PLAYER_ID"], strict=False)
+        )
+        on_court = st.multiselect(
+            "Players on court", list(roster_ids), key="lineup_filter",
+            help="Show only five-man units containing every selected player.",
+        )
+        min_min = st.slider("Min minutes together", 0, 200, 20, step=10, key="lineup_minmin")
+        board = most_used_lineups(
+            lineups, team,
+            must_include_ids=[int(roster_ids[n]) for n in on_court] or None,
+            min_minutes=float(min_min),
+        )
+        if board.empty:
+            st.caption("No five-man units meet these filters.")
+        else:
+            st.dataframe(
+                board.rename(columns={
+                    "GROUP_NAME": "LINEUP", "NET_RATING": "NET", "OFF_RATING": "ORtg",
+                    "DEF_RATING": "DRtg", "EFG_PCT": "eFG%", "POSS": "POSS",
+                }),
+                width="stretch",
+                hide_index=True,
+                height=380,
+                column_config={
+                    "MIN": st.column_config.NumberColumn(format="%.0f"),
+                    "NET": st.column_config.NumberColumn(format="%+.1f"),
+                    "ORtg": st.column_config.NumberColumn(format="%.1f"),
+                    "DRtg": st.column_config.NumberColumn(format="%.1f"),
+                    "eFG%": st.column_config.NumberColumn(format="%.3f"),
+                    "POSS": st.column_config.NumberColumn(format="%d"),
+                },
+            )
+            st.caption(
+                f"{team}'s most-used five-man lineups this season (net/off/def rating, "
+                "possessions). Filter by a player to see only the units they play in."
+            )
+    except Exception as e:
+        st.caption(f"Lineup data unavailable: {e}")
+
     st.subheader("On/off impact")
     try:
         onoff = team_on_off(client.team_player_on_off(int(log["TEAM_ID"].iloc[0])))
@@ -2160,7 +2214,9 @@ def team_detail(client: NBAClient, games: pd.DataFrame, snapshot: pd.DataFrame) 
 
 
 def teams_page(client: NBAClient) -> None:
-    st.caption(f"Team form, roster, contracts, and on/off impact · {current_season()}")
+    st.caption(
+        f"Team form, roster, contracts, lineups, and on/off impact · {current_season()}"
+    )
     try:
         games = client.team_games()
         snapshot = team_form_snapshot(games)

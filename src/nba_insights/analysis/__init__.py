@@ -4,6 +4,7 @@ from nba_insights.analysis.explore import filter_players, per_minutes_table
 from nba_insights.analysis.games import game_log_table, scoreboard
 from nba_insights.analysis.insights import player_scouting_take, team_scouting_take
 from nba_insights.analysis.leaders import league_leaders
+from nba_insights.analysis.lineups import most_used_lineups
 from nba_insights.analysis.onoff import team_on_off
 from nba_insights.analysis.percentiles import percentile_ranks
 from nba_insights.analysis.ratings import attach_dpm, attach_ratings
@@ -35,6 +36,7 @@ __all__ = [
     "game_log_table",
     "hex_bins",
     "league_leaders",
+    "most_used_lineups",
     "per_minutes_table",
     "percentile_ranks",
     "player_contract",
