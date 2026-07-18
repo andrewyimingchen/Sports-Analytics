@@ -24,6 +24,7 @@ from nba_insights.analysis import (
     career_per_game,
     draft_class,
     filter_players,
+    game_log_table,
     hex_bins,
     league_leaders,
     per_minutes_table,
@@ -33,6 +34,7 @@ from nba_insights.analysis import (
     player_scouting_take,
     rolling_form,
     salary_seasons,
+    scoreboard,
     shot_breakdown,
     shot_quality,
     similar_players,
@@ -1075,6 +1077,17 @@ def season_detail(client: NBAClient, player: dict, seasons: list[str]) -> None:
                 width="stretch",
                 key="profile_form",
             )
+            with st.expander(f"Game log ({len(log)} games)"):
+                st.dataframe(
+                    game_log_table(log),
+                    width="stretch",
+                    hide_index=True,
+                    height=380,
+                    column_config={
+                        "DATE": st.column_config.DateColumn("DATE", format="MMM DD"),
+                        "+/-": st.column_config.NumberColumn(format="%+d"),
+                    },
+                )
     except Exception as e:
         st.error(f"Could not load game log: {e}")
 
@@ -2210,6 +2223,63 @@ def teams_page(client: NBAClient) -> None:
                     open_team(str(id_to_tri.loc[team_id]))
 
 
+def games_page(client: NBAClient) -> None:
+    """Scores & schedule: every game's final and top scorer, plus what's next."""
+    st.caption("Every game — final scores and top scorer, plus upcoming tip-offs.")
+    head = st.columns([2, 3])
+    season = head[0].selectbox("Season", seasons_since(), key="games_season")
+    is_current = season == current_season()
+    try:
+        with st.spinner("Loading the schedule (first view fetches live)…"):
+            board = scoreboard(client.schedule(None if is_current else season))
+    except Exception as e:
+        st.error(f"Could not load the schedule: {e}")
+        return
+    if board.empty:
+        st.info(f"No games scheduled for {season}.")
+        return
+
+    teams = sorted(set(board["HOME"]) | set(board["AWAY"]))
+    pick = head[1].multiselect("Filter by team", teams, key="games_team")
+    if pick:
+        board = board[board["HOME"].isin(pick) | board["AWAY"].isin(pick)]
+
+    upcoming = board[board["STATUS"].isin(["Scheduled", "Live"])].sort_values("GAME_DATE")
+    finals = board[board["STATUS"] == "Final"].sort_values("GAME_DATE", ascending=False)
+
+    if not upcoming.empty:
+        st.subheader("Upcoming")
+        up = pd.DataFrame(
+            {
+                "Date": upcoming["GAME_DATE"],
+                "Matchup": upcoming["AWAY"] + " @ " + upcoming["HOME"],
+                "Tip / status": upcoming["STATUS_TEXT"],
+            }
+        )
+        st.dataframe(up, width="stretch", hide_index=True, height=min(360, 40 + 36 * len(up)))
+
+    if finals.empty:
+        return
+    st.subheader("Scores")
+    if upcoming.empty:
+        st.caption(f"Offseason — showing the completed {season} season. Sort by any column.")
+    scores = pd.DataFrame(
+        {
+            "Date": finals["GAME_DATE"],
+            "Matchup": finals["AWAY"] + " @ " + finals["HOME"],
+            "Score": (
+                finals["AWAY_PTS"].astype("Int64").astype(str)
+                + "–"
+                + finals["HOME_PTS"].astype("Int64").astype(str)
+            ),
+            "Winner": finals["WINNER"],
+            "Top scorer": finals["TOP_SCORER"],
+        }
+    )
+    st.caption(f"{len(scores)} games.")
+    st.dataframe(scores, width="stretch", hide_index=True, height=560)
+
+
 # Explore page column presets (raw stat codes). Base columns always lead.
 _EXPLORE_BASE = ["PLAYER_NAME", "TEAM_ABBREVIATION", "GP", "MIN"]
 _EXPLORE_GROUPS = {
@@ -2574,6 +2644,9 @@ def main() -> None:
     )
     PAGES["teams"] = st.Page(
         lambda: teams_page(client), title="Teams", icon="🏆", url_path="teams"
+    )
+    PAGES["games"] = st.Page(
+        lambda: games_page(client), title="Games", icon="📅", url_path="games"
     )
     # Draft page hidden for now (owner request, 2026-07-17); the page code
     # stays so re-enabling is uncommenting this line.
