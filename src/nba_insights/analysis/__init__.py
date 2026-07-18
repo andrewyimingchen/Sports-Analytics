@@ -31,10 +31,12 @@ from nba_insights.analysis.shots import (
     zone_efficiency,
 )
 from nba_insights.analysis.similarity import similar_players
+from nba_insights.analysis.splits import DIMENSIONS, player_splits
 from nba_insights.analysis.trends import career_averages, career_per_game, rolling_form
 
 __all__ = [
     "COLUMN_GLOSSARY",
+    "DIMENSIONS",
     "FACTOR_LABELS",
     "attach_dpm",
     "attach_ratings",
@@ -56,6 +58,7 @@ __all__ = [
     "positional_percentile_ranks",
     "player_draft_line",
     "player_scouting_take",
+    "player_splits",
     "query_players",
     "rolling_form",
     "salary_seasons",
