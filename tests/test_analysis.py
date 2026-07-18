@@ -3,6 +3,7 @@ import pytest
 
 from nba_insights.analysis import (
     attach_ratings,
+    career_averages,
     career_per_game,
     comparison_table,
     league_leaders,
@@ -81,6 +82,40 @@ def test_career_per_game_collapses_trade_season_rows():
 def test_career_per_game_drops_zero_gp_seasons():
     totals = pd.DataFrame({"SEASON_ID": ["2024-25"], "GP": [0], "PTS": [0]})
     assert career_per_game(totals, ["PTS"]).empty
+
+
+def test_career_averages_weights_percentages_by_volume():
+    totals = pd.DataFrame(
+        {
+            "SEASON_ID": ["2023-24", "2024-25"],
+            "GP": [50, 100],
+            "PTS": [1000, 2500],
+            "FGM": [400, 900],
+            "FGA": [800, 1800],
+            "FTM": [100, 300],
+            "FTA": [120, 360],
+        }
+    )
+    avg = career_averages(totals)
+    assert avg["GP"] == 150
+    assert avg["PTS"] == pytest.approx((1000 + 2500) / 150, abs=0.05)  # per game
+    # career FG% is total makes over total attempts (volume-weighted), not a
+    # mean of the two season percentages
+    assert avg["FG_PCT"] == pytest.approx((400 + 900) / (800 + 1800), abs=0.001)
+    assert avg["FT_PCT"] == pytest.approx((100 + 300) / (120 + 360), abs=0.001)
+
+
+def test_career_averages_dedupes_trade_rows():
+    totals = pd.DataFrame(
+        {
+            "SEASON_ID": ["2024-25", "2024-25", "2024-25"],
+            "GP": [30, 20, 50],
+            "PTS": [600, 500, 1100],
+        }
+    )
+    avg = career_averages(totals)
+    assert avg["GP"] == 50  # TOT row only, not 100
+    assert avg["PTS"] == pytest.approx(22.0)
 
 
 def test_percentile_ranks_orders_players(league_stats):
@@ -162,6 +197,73 @@ def test_zone_efficiency_diffs_against_league():
     assert out.loc["Above the Break 3", "DIFF"] == pytest.approx(-0.35)
     with pytest.raises(KeyError, match="SHOT_MADE_FLAG"):
         zone_efficiency(shots.drop(columns=["SHOT_MADE_FLAG"]), league)
+
+
+def test_shot_breakdown_buckets_ranges_with_value_and_league():
+    from nba_insights.analysis import shot_breakdown
+
+    shots = pd.DataFrame(
+        {
+            "SHOT_ZONE_BASIC": (
+                ["Restricted Area"] * 10 + ["Above the Break 3"] * 8 + ["Backcourt"] * 1
+            ),
+            "SHOT_MADE_FLAG": [1] * 6 + [0] * 4 + [1] * 3 + [0] * 5 + [0],
+            "SHOT_TYPE": ["2PT Field Goal"] * 10 + ["3PT Field Goal"] * 8 + ["3PT Field Goal"],
+        }
+    )
+    league = pd.DataFrame(
+        {
+            "SHOT_ZONE_BASIC": ["Restricted Area", "Above the Break 3"],
+            "FGA": [1000, 800],
+            "FGM": [650, 290],
+        }
+    )
+    out = shot_breakdown(shots, league).set_index("ZONE")
+    assert list(out.index) == ["At rim", "Above-break 3"]  # backcourt dropped, ordered
+    assert out.loc["At rim", "FGA"] == 10
+    assert out.loc["At rim", "FG_PCT"] == pytest.approx(0.6)
+    assert out.loc["At rim", "SHARE"] == pytest.approx(10 / 18)  # 18 bucketed shots
+    assert out.loc["At rim", "PPS"] == pytest.approx(1.2)  # 60% * 2
+    # a made three is worth 3: 3/8 * 3
+    assert out.loc["Above-break 3", "PPS"] == pytest.approx(3 / 8 * 3)
+    assert out.loc["At rim", "DIFF"] == pytest.approx(0.6 - 0.65)
+    with pytest.raises(KeyError, match="SHOT_TYPE"):
+        shot_breakdown(shots.drop(columns=["SHOT_TYPE"]))
+
+
+def test_hex_bins_aggregates_nearby_shots_vs_league():
+    from nba_insights.analysis import hex_bins
+
+    # four rim shots within one hex radius of each other, one deep shot
+    # alone in its hex (dropped by the min_fga floor)
+    shots = pd.DataFrame(
+        {
+            "SHOT_ZONE_BASIC": ["Restricted Area"] * 4 + ["Above the Break 3"],
+            "SHOT_ZONE_AREA": ["Center(C)"] * 5,
+            "SHOT_ZONE_RANGE": ["Less Than 8 ft."] * 4 + ["24+ ft."],
+            "SHOT_MADE_FLAG": [1, 1, 1, 0, 1],
+            "LOC_X": [0, 5, -5, 3, 0],
+            "LOC_Y": [0, 4, 2, -3, 250],
+        }
+    )
+    league = pd.DataFrame(
+        {
+            "SHOT_ZONE_BASIC": ["Restricted Area", "Above the Break 3"],
+            "SHOT_ZONE_AREA": ["Center(C)", "Center(C)"],
+            "SHOT_ZONE_RANGE": ["Less Than 8 ft.", "24+ ft."],
+            "FG_PCT": [0.65, 0.35],
+        }
+    )
+    bins = hex_bins(shots, league, size=22.0, min_fga=2)
+    assert len(bins) == 1  # rim cluster kept, lone three dropped
+    rim = bins.iloc[0]
+    assert rim["FGA"] == 4
+    assert rim["PCT"] == pytest.approx(0.75)
+    assert rim["DIFF"] == pytest.approx(0.75 - 0.65)
+    # hex center stays near the cluster
+    assert abs(rim["X"]) < 22 and abs(rim["Y"]) < 22
+    with pytest.raises(KeyError, match="LOC_X"):
+        hex_bins(shots.drop(columns=["LOC_X"]), league)
 
 
 def test_shot_quality_separates_selection_from_making():

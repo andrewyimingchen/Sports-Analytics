@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import sys
 from pathlib import Path
 
@@ -19,17 +20,23 @@ sys.path.insert(0, str(Path(__file__).parent))  # sibling modules (methodology, 
 from nba_insights import serve
 from nba_insights.analysis import (
     attach_salary,
+    career_averages,
     career_per_game,
-    comparison_table,
     draft_class,
+    hex_bins,
     league_leaders,
     percentile_ranks,
+    player_contract,
     player_draft_line,
+    player_scouting_take,
     rolling_form,
     salary_seasons,
+    shot_breakdown,
     shot_quality,
+    team_contracts,
     team_on_off,
     team_payroll,
+    team_scouting_take,
     zone_efficiency,
 )
 from nba_insights.analysis.shots import ZONE_KEY
@@ -55,25 +62,56 @@ from nba_insights.ml.features import (
 from nba_insights.ml.train import METRICS_PATH, OUTCOME_PATH, POINTS_PATH, WIN_CURVE_PATH
 from nba_insights.pbp.lineups import load_season as load_stint_lineups
 from nba_insights.posters import compare_poster_png, prediction_poster_png
-from nba_insights.viz import half_court_trace
+from nba_insights.viz import half_court_path, half_court_trace, team_color
 from ui import inject_css
 
 logger = logging.getLogger(__name__)
 
-# Reference dataviz palette: categorical slots in fixed order, chrome inks.
-# Dark values are the same hues re-stepped for the dark surface, not a flip.
+# Reference dataviz palette: categorical slots in fixed order, chrome inks,
+# a blue sequential ramp (near-zero end recedes toward each surface), and the
+# diverging blue↔red midpoint gray. Dark values are the same hues re-stepped
+# for the dark surface, not a flip.
 _LIGHT = {
     "series": ["#2a78d6", "#1baf7a", "#eda100", "#008300", "#4a3aa7", "#e34948"],
     "grid": "#e1e0d9",
     "muted": "#898781",
     "ink2": "#52514e",
+    "mid": "#f0efec",
+    "seq": ["#cde2fb", "#86b6ef", "#3987e5", "#1c5cab", "#0d366b"],
+    "surface": "#fcfcfb",
 }
 _DARK = {
     "series": ["#3987e5", "#199e70", "#c98500", "#008300", "#9085e9", "#e66767"],
     "grid": "#2c2c2a",
     "muted": "#898781",
     "ink2": "#c3c2b7",
+    "mid": "#383835",
+    "seq": ["#104281", "#1c5cab", "#3987e5", "#6da7ec", "#b7d3f6"],
+    "surface": "#1a1a19",
 }
+
+
+def _rgba(hex_color: str, alpha: float) -> str:
+    r, g, b = (int(hex_color[i : i + 2], 16) for i in (1, 3, 5))
+    return f"rgba({r},{g},{b},{alpha})"
+
+
+def _diverging_colorscale() -> list[tuple[float, str]]:
+    """Red (below) → neutral gray → blue (above), per the palette's pair."""
+    return [(0.0, PAL["series"][5]), (0.5, PAL["mid"]), (1.0, PAL["series"][0])]
+
+
+def _diverging_color(value: float, span: float) -> str:
+    """One color off the diverging scale, for marks drawn as shapes
+    (layout shapes can't use a trace colorscale)."""
+    t = (max(-span, min(span, value)) / span + 1) / 2
+    lo, hi = (PAL["series"][5], PAL["mid"]) if t < 0.5 else (PAL["mid"], PAL["series"][0])
+    f = t * 2 if t < 0.5 else t * 2 - 1
+    channels = (
+        round(int(lo[i : i + 2], 16) + f * (int(hi[i : i + 2], 16) - int(lo[i : i + 2], 16)))
+        for i in (1, 3, 5)
+    )
+    return "#" + "".join(f"{c:02x}" for c in channels)
 
 st.set_page_config(page_title="NBA Insights", page_icon="🏀", layout="wide")
 
@@ -92,8 +130,14 @@ def get_client() -> NBAClient:
     return NBAClient()
 
 
-# display names for the rating columns on charts and tables
-RATING_LABELS = {
+# plain-language display names for stats.nba.com column codes — raw API
+# names (FG_PCT, PLAYER_NAME) never reach the UI
+STAT_LABELS = {
+    "PLAYER_NAME": "PLAYER",
+    "TEAM_ABBREVIATION": "TEAM",
+    "FG_PCT": "FG%",
+    "FG3_PCT": "3P%",
+    "FT_PCT": "FT%",
     "NET_RATING": "NET RTG",
     "CLUTCH_NET_RATING": "CLUTCH NET",
     "DPM": "DARKO DPM",
@@ -152,9 +196,20 @@ def fetch_headshot(player_id: int) -> bytes | None:
     return serve.fetch_headshot(player_id)
 
 
+@st.cache_data(ttl=86400, show_spinner=False)
+def fetch_team_logo(team_id: int) -> str | None:
+    """Team logo as SVG markup — st.image renders SVG from the markup string."""
+    raw = serve.fetch_team_logo(team_id)
+    if not raw:
+        return None
+    svg = raw.decode(errors="ignore")
+    start = svg.find("<svg")
+    return svg[start:] if start >= 0 else None
+
+
 def base_layout(fig: go.Figure, title: str) -> go.Figure:
     fig.update_layout(
-        title=title,
+        title=dict(text=title, x=0.0, font=dict(size=15, color=PAL["ink2"])),
         template="none",
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="rgba(0,0,0,0)",
@@ -162,6 +217,11 @@ def base_layout(fig: go.Figure, title: str) -> go.Figure:
         margin=dict(l=40, r=20, t=50, b=40),
         legend=dict(orientation="h", yanchor="bottom", y=1.0, xanchor="right", x=1.0),
         hovermode="x unified",
+        hoverlabel=dict(
+            bgcolor=PAL["surface"],
+            bordercolor=PAL["grid"],
+            font=dict(color=PAL["ink2"], size=13),
+        ),
         transition=dict(duration=350, easing="cubic-in-out"),
     )
     fig.update_xaxes(showgrid=False, linecolor=PAL["grid"], tickcolor=PAL["muted"])
@@ -171,41 +231,126 @@ def base_layout(fig: go.Figure, title: str) -> go.Figure:
 
 def career_chart(per_game: pd.DataFrame) -> go.Figure:
     fig = go.Figure()
-    for i, stat in enumerate(["PTS", "AST", "REB"]):
-        if stat in per_game.columns:
-            fig.add_trace(
-                go.Scatter(
-                    x=per_game["SEASON_ID"],
-                    y=per_game[stat],
-                    name=stat,
-                    mode="lines+markers",
-                    line=dict(color=PAL["series"][i], width=2),
-                    marker=dict(size=8),
-                )
+    stats = [s for s in ("PTS", "AST", "REB") if s in per_game.columns]
+    for i, stat in enumerate(stats):
+        fig.add_trace(
+            go.Scatter(
+                x=per_game["SEASON_ID"],
+                y=per_game[stat],
+                name=stat,
+                mode="lines+markers",
+                line=dict(color=PAL["series"][i], width=2.5, shape="spline", smoothing=0.6),
+                marker=dict(size=7, line=dict(color=PAL["surface"], width=1.5)),
             )
+        )
+        # direct label at the line's end so identity never rides on color alone
+        fig.add_annotation(
+            x=per_game["SEASON_ID"].iloc[-1],
+            y=float(per_game[stat].iloc[-1]),
+            text=stat,
+            showarrow=False,
+            xanchor="left",
+            xshift=10,
+            font=dict(color=PAL["ink2"], size=12),
+        )
+    if "PTS" in per_game.columns and len(per_game) > 2:
+        peak = per_game["PTS"].idxmax()
+        fig.add_annotation(
+            x=per_game.loc[peak, "SEASON_ID"],
+            y=float(per_game.loc[peak, "PTS"]),
+            text=f"career-high {per_game.loc[peak, 'PTS']:.1f}",
+            showarrow=True,
+            arrowhead=0,
+            arrowcolor=PAL["muted"],
+            ay=-28,
+            ax=0,
+            font=dict(color=PAL["muted"], size=11),
+        )
     fig = base_layout(fig, "Career per-game trajectory")
+    fig.update_layout(margin=dict(r=48))  # room for the end-of-line labels
     fig.update_xaxes(type="category")  # "2003-04" is a season label, not a date
     return fig
 
 
-def form_chart(form: pd.DataFrame, stat: str, window: int, label: str | None = None) -> go.Figure:
+def form_chart(
+    form: pd.DataFrame,
+    stat: str,
+    window: int,
+    label: str | None = None,
+    signed: bool = False,
+    accent: str | None = None,
+) -> go.Figure:
+    """Game-by-game form: raw per-game values plus a rolling average.
+
+    Two things keep this readable at real season length:
+
+    * Density. Past ~32 games, bars in a half-width column collapse into a
+      barcode of needles, so the mark switches to dots — the rolling line
+      then carries the trend and the dots just show spread.
+    * *signed*. For a point margin, each game is colored by the sign of its
+      value (win blue / loss red, diverging around a zero baseline) rather
+      than above/below the rolling average — a fan reads a margin chart by
+      win and loss, not by "above his own average".
+    """
     label = label or stat
+    values = form[stat]
+    dense = len(form) > 32
+    if signed:
+        colors = [PAL["series"][0] if v >= 0 else PAL["series"][5] for v in values]
+    else:
+        # games above the rolling average pick up a soft sequential step; the
+        # rest recede to the grid tone, so hot streaks pop without a legend read
+        above = values >= form["ROLLING"]
+        colors = [PAL["seq"][1] if a else PAL["grid"] for a in above]
+
     fig = go.Figure()
-    fig.add_trace(
-        go.Bar(
-            x=form["GAME_DATE"], y=form[stat], name=f"{label} per game", marker_color=PAL["grid"]
+    if dense:
+        fig.add_trace(
+            go.Scatter(
+                x=form["GAME_DATE"],
+                y=values,
+                name=f"{label} per game",
+                mode="markers",
+                marker=dict(color=colors, size=6, line=dict(color=PAL["surface"], width=0.5)),
+            )
         )
-    )
-    fig.add_trace(
-        go.Scatter(
-            x=form["GAME_DATE"],
-            y=form["ROLLING"],
-            name=f"{window}-game rolling avg",
-            mode="lines",
-            line=dict(color=PAL["series"][0], width=2),
+    else:
+        fig.add_trace(
+            go.Bar(
+                x=form["GAME_DATE"],
+                y=values,
+                name=f"{label} per game",
+                marker=dict(color=colors, cornerradius=3),
+            )
         )
+    # the rolling line rides on top; for a margin it defaults to neutral ink
+    # (reads as "trend", not another blue "good" cue beside the win bars) but
+    # an accent (e.g. the team's color) gives the trend line identity
+    default_line = PAL["ink2"] if signed else PAL["series"][0]
+    line = dict(width=2.5, shape="spline", smoothing=0.5, color=accent or default_line)
+    roll = go.Scatter(
+        x=form["GAME_DATE"],
+        y=form["ROLLING"],
+        name=f"{window}-game rolling avg",
+        mode="lines",
+        line=line,
     )
-    return base_layout(fig, f"{label} form, game by game")
+    if not signed:  # a faint fill anchors the scoring trend; skip it for margins
+        roll.update(
+            fill="tozeroy",
+            fillgradient=dict(
+                type="vertical",
+                colorscale=[
+                    (0.0, _rgba(PAL["series"][0], 0.0)),
+                    (1.0, _rgba(PAL["series"][0], 0.08)),
+                ],
+            ),
+        )
+    fig.add_trace(roll)
+    fig = base_layout(fig, f"{label} form, game by game")
+    if signed:
+        fig.add_hline(y=0, line_color=PAL["muted"], line_width=1)
+    return fig
 
 
 def shot_chart_fig(shots: pd.DataFrame) -> go.Figure:
@@ -267,22 +412,195 @@ def shot_zone_fig(shots: pd.DataFrame, zones: pd.DataFrame) -> go.Figure:
     return fig
 
 
-def percentile_chart(ranks: pd.Series) -> go.Figure:
+def hex_shot_fig(bins: pd.DataFrame, size: float = 22.0) -> go.Figure:
+    """Hot zones, hexbin-style: hexagon size = shot volume, diverging color =
+    hex FG% vs the league's expected FG% from those spots.
+
+    Hexes are drawn as layout shapes in court coordinates, so at full
+    volume they tile the grid edge-to-edge instead of floating as loose
+    pixel-sized markers; an invisible scatter at the centers carries hover
+    and the colorbar. *size* must match the hex_bins() grid.
+    """
+    span = 0.15  # ±15 FG points saturates the scale
+    max_fga = float(bins["FGA"].max())
+    # shrink each hex's diff toward neutral by its volume: a 2-shot hex at
+    # 0-for-2 shouldn't scream as red as a 30-shot cold spot (8 pseudo-shots
+    # of league-average shooting mixed into every hex)
+    shrunk = bins["DIFF"].fillna(0.0) * (bins["FGA"] / (bins["FGA"] + 8.0))
+    corners = [math.radians(90 + 60 * k) for k in range(6)]  # pointy-top
+    shapes = []
+    for row, diff in zip(bins.itertuples(), shrunk, strict=True):
+        r = size * (0.40 + 0.60 * (row.FGA / max_fga) ** 0.5)
+        pts = [(row.X + r * math.cos(a), row.Y + r * math.sin(a)) for a in corners]
+        shapes.append(
+            dict(
+                type="path",
+                path="M " + " L ".join(f"{x:.1f},{y:.1f}" for x, y in pts) + " Z",
+                fillcolor=_diverging_color(diff, span),
+                line=dict(color=PAL["surface"], width=1),
+                layer="above",
+            )
+        )
+    # court ink LAST, so the lines read on top of the tiles instead of ghosting
+    # underneath them — a trace can't do this, but shapes stack in array order
+    shapes.append(
+        dict(
+            type="path",
+            path=half_court_path(),
+            line=dict(color=PAL["ink2"], width=1.3),
+            layer="above",
+        )
+    )
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=bins["X"],
+            y=bins["Y"],
+            mode="markers",
+            showlegend=False,
+            marker=dict(
+                size=18,
+                opacity=0,
+                color=bins["DIFF"].fillna(0.0),
+                cmin=-span,
+                cmax=span,
+                colorscale=_diverging_colorscale(),
+                showscale=True,
+                colorbar=dict(
+                    title=dict(text="FG% vs league", side="top", font=dict(size=12)),
+                    orientation="h",
+                    y=-0.04,
+                    yanchor="top",
+                    x=0.5,
+                    len=0.6,
+                    thickness=13,
+                    tickformat="+.0%",
+                    tickvals=[-span, 0, span],
+                    ticklabelposition="outside bottom",
+                    outlinewidth=0,
+                ),
+            ),
+            customdata=bins[["FGA", "PCT"]].assign(D=bins["DIFF"].fillna(0.0) * 100),
+            hovertemplate=(
+                "%{customdata[0]:.0f} shots · %{customdata[1]:.0%} FG "
+                "(%{customdata[2]:+.0f} vs league)<extra></extra>"
+            ),
+        )
+    )
+    fig = base_layout(fig, "Hot zones — size is volume, color is FG% vs league")
+    fig.update_layout(hovermode="closest", height=560, shapes=shapes)
+
+    # call out the standout strength: the highest shot-value hot spot (volume ×
+    # how far above league), so the chart states its headline instead of making
+    # the reader decode every hexagon
+    hot = bins[(bins["DIFF"] > 0.03) & (bins["FGA"] >= max(4, 0.15 * max_fga))]
+    if not hot.empty:
+        pick = hot.loc[(hot["FGA"] * hot["DIFF"]).idxmax()]
+        fig.add_annotation(
+            x=float(pick["X"]),
+            y=float(pick["Y"]),
+            text=f"<b>{pick['PCT']:.0%}</b> on {int(pick['FGA'])} shots<br>"
+            f"+{pick['DIFF'] * 100:.0f} vs league",
+            showarrow=True,
+            arrowhead=0,
+            arrowwidth=1.2,
+            arrowcolor=PAL["ink2"],
+            ax=0,
+            ay=-46,
+            align="center",
+            bgcolor=_rgba(PAL["surface"], 0.9),
+            bordercolor=PAL["grid"],
+            borderpad=4,
+            font=dict(color=PAL["ink2"], size=11),
+        )
+    # crop above the break: heaves past y≈330 are noise, and the tighter
+    # frame lets the paint fill the figure
+    fig.update_xaxes(range=[-260, 260], visible=False)
+    fig.update_yaxes(range=[-55, 330], visible=False, scaleanchor="x", scaleratio=1)
+    return fig
+
+
+def shot_breakdown_fig(breakdown: pd.DataFrame) -> go.Figure:
+    """Shot diet by range: bar length is the share of the player's shots,
+    color is accuracy vs league (when known), labels carry FG% and points
+    per shot — so volume, accuracy, and value read in one glance."""
+    df = breakdown.iloc[::-1]  # rim at the top
+    has_diff = "DIFF" in df.columns and df["DIFF"].notna().any()
+    span = 0.10
+    if has_diff:
+        colors = [
+            _diverging_color(0.0 if pd.isna(d) else float(d), span) for d in df["DIFF"]
+        ]
+    else:
+        colors = PAL["series"][0]
+    labels = [
+        f"{pct:.0%} · {pps:.2f} PPS" for pct, pps in zip(df["FG_PCT"], df["PPS"], strict=True)
+    ]
     fig = go.Figure(
         go.Bar(
-            x=ranks.values,
-            y=ranks.index,
+            x=df["SHARE"],
+            y=df["ZONE"],
             orientation="h",
-            marker_color=PAL["series"][0],
+            marker=dict(color=colors, cornerradius=4),
+            text=labels,
+            textposition="outside",
+            cliponaxis=False,
+            customdata=df[["FGA", "FGM"]],
+            hovertemplate="%{y}: %{customdata[1]:.0f}/%{customdata[0]:.0f}<extra></extra>",
+        )
+    )
+    fig = base_layout(fig, "Shot diet by range")
+    fig.update_layout(hovermode="closest", showlegend=False, height=300, margin=dict(r=110))
+    fig.update_xaxes(range=[0, float(df["SHARE"].max()) * 1.35], tickformat=".0%",
+                     title="share of shots", gridcolor=PAL["grid"])
+    fig.update_yaxes(showgrid=False, automargin=True)  # keep "Above-break 3" from clipping
+    return fig
+
+
+def percentile_chart(ranks: pd.Series) -> go.Figure:
+    # a full bar to 100 crushes a star's every-stat-elite profile into a wall
+    # of near-full bars; a dot on a 0–100 track discriminates by position, so
+    # 96 vs 88 reads at a glance, and the dot's color says above/below median
+    ranks = ranks.dropna()  # a missing rating would otherwise render a "nan" label
+    stats = list(ranks.index)
+    fig = go.Figure()
+    # the faint 0–100 track each dot sits on — the scale, always in view
+    track_x: list[float | None] = []
+    track_y: list[str | None] = []
+    for s in stats:
+        track_x.extend([0.0, 100.0, None])
+        track_y.extend([s, s, None])
+    fig.add_trace(
+        go.Scatter(
+            x=track_x, y=track_y, mode="lines", hoverinfo="skip", showlegend=False,
+            line=dict(color=PAL["grid"], width=5),
+        )
+    )
+    colors = [PAL["series"][0] if v >= 50 else PAL["series"][5] for v in ranks.values]
+    fig.add_trace(
+        go.Scatter(
+            x=ranks.values,
+            y=stats,
+            mode="markers+text",
+            showlegend=False,
+            marker=dict(color=colors, size=15, line=dict(color=PAL["surface"], width=1.5)),
             text=[f"{v:.0f}" for v in ranks.values],
-            # a percentile axis must stop at 100; long bars carry their
-            # label inside instead of stretching the scale to fit it
-            textposition=["inside" if v > 90 else "outside" for v in ranks.values],
+            # label inside-left for near-max dots so it never clips past 100
+            textposition=["middle left" if v > 92 else "middle right" for v in ranks.values],
+            textfont=dict(color=PAL["ink2"], size=11),
+            cliponaxis=False,
+            hovertemplate="%{x:.0f}th percentile<extra></extra>",
         )
     )
     fig = base_layout(fig, f"League percentile, {current_season()}")
-    fig.update_layout(hovermode="closest", showlegend=False)
-    fig.update_xaxes(range=[0, 100], showgrid=True, gridcolor=PAL["grid"])
+    fig.add_vline(x=50, line_dash="dot", line_color=PAL["muted"], line_width=1)
+    fig.add_annotation(
+        x=50, y=1.02, yref="paper", text="league median", showarrow=False,
+        font=dict(color=PAL["muted"], size=11),
+    )
+    fig.update_layout(hovermode="closest", showlegend=False, height=110 + 32 * len(ranks))
+    fig.update_xaxes(range=[-2, 106], showgrid=False, tickvals=[0, 25, 50, 75, 100])
     fig.update_yaxes(autorange="reversed", showgrid=False, automargin=True)
     return fig
 
@@ -296,8 +614,8 @@ def compare_careers_chart(careers: dict[str, pd.DataFrame], stat: str = "PTS") -
                 y=per_game[stat],
                 name=name,
                 mode="lines+markers",
-                line=dict(color=PAL["series"][i], width=2),
-                marker=dict(size=8),
+                line=dict(color=PAL["series"][i], width=2.5, shape="spline", smoothing=0.6),
+                marker=dict(size=7, line=dict(color=PAL["surface"], width=1.5)),
             )
         )
     fig = base_layout(fig, f"Career {stat} per game, by season")
@@ -316,7 +634,10 @@ def elo_dot_chart(elo: pd.Series, top: int = 10) -> go.Figure:
             x=ranked.values,
             y=ranked.index,
             mode="markers+text",
-            marker=dict(color=PAL["series"][0], size=10),
+            marker=dict(
+                color=PAL["series"][0], size=12,
+                line=dict(color=PAL["surface"], width=1.5),
+            ),
             text=[f"{v:.0f}" for v in ranked.values],
             textposition="middle right",
             textfont=dict(color=PAL["muted"]),
@@ -331,6 +652,64 @@ def elo_dot_chart(elo: pd.Series, top: int = 10) -> go.Figure:
     return fig
 
 
+def league_landscape_chart(snapshot: pd.DataFrame) -> go.Figure:
+    """Every team on offense (x) vs defense (y), the classic NBA quadrant.
+
+    Defense axis is inverted so better defense is *up*: the top-right corner
+    is elite on both ends. Dots wear team colors and tricode labels, with
+    reference lines at the league averages splitting the four identities.
+    """
+    df = snapshot.dropna(subset=["form_ortg", "form_drtg"]).copy()
+    df["tri"] = df.index.astype(str)
+    ox, oy = df["form_ortg"].mean(), df["form_drtg"].mean()
+
+    fig = go.Figure()
+    fig.add_vline(x=ox, line_dash="dot", line_color=PAL["muted"], line_width=1)
+    fig.add_hline(y=oy, line_dash="dot", line_color=PAL["muted"], line_width=1)
+    fig.add_trace(
+        go.Scatter(
+            x=df["form_ortg"],
+            y=df["form_drtg"],
+            mode="markers+text",
+            text=df["tri"],
+            textposition="top center",
+            textfont=dict(size=9, color=PAL["ink2"]),
+            marker=dict(
+                size=14,
+                color=[team_color(t) for t in df["tri"]],
+                line=dict(color=PAL["surface"], width=1.5),
+            ),
+            customdata=df[["form_net"]] if "form_net" in df.columns else None,
+            hovertemplate=(
+                "%{text} — ORtg %{x:.1f}, DRtg %{y:.1f}"
+                + (" (net %{customdata[0]:+.1f})" if "form_net" in df.columns else "")
+                + "<extra></extra>"
+            ),
+        )
+    )
+    # name the four corners (y is reversed, so "top" = strong defense)
+    span_x, span_y = df["form_ortg"], df["form_drtg"]
+    for xq, yq, ax, ay, txt in [
+        (span_x.max(), span_y.min(), "right", "top", "elite both ends"),
+        (span_x.min(), span_y.min(), "left", "top", "defense-first"),
+        (span_x.max(), span_y.max(), "right", "bottom", "offense-first"),
+        (span_x.min(), span_y.max(), "left", "bottom", "rebuilding"),
+    ]:
+        fig.add_annotation(
+            x=xq, y=yq, text=txt, showarrow=False, xanchor=ax, yanchor=ay,
+            font=dict(size=10, color=PAL["muted"]),
+        )
+    fig = base_layout(fig, "League landscape — offense vs defense")
+    fig.update_layout(hovermode="closest", showlegend=False, height=520)
+    fig.update_xaxes(title="Offensive rating →", gridcolor=PAL["grid"])
+    fig.update_yaxes(
+        title="← Defensive rating (better is up)",
+        autorange="reversed",
+        gridcolor=PAL["grid"],
+    )
+    return fig
+
+
 def net_rating_chart(snapshot: pd.DataFrame, n: int = 5) -> go.Figure:
     """Best and worst teams by season-to-date net rating; diverging around 0."""
     net = snapshot["form_net"].dropna().sort_values(ascending=False)
@@ -341,7 +720,7 @@ def net_rating_chart(snapshot: pd.DataFrame, n: int = 5) -> go.Figure:
             x=ends.values,
             y=ends.index,
             orientation="h",
-            marker_color=colors,
+            marker=dict(color=colors, cornerradius=3),
             text=[f"{v:+.1f}" for v in ends.values],
             textposition="outside",
             cliponaxis=False,
@@ -364,8 +743,9 @@ def win_prob_bar(home: str, away: str, prob: float) -> None:
     """One shared probability track — home fill vs away fill, labeled ends.
 
     Replaces twin metrics: a single mark makes the complementarity obvious
-    and the favourite readable at a glance. Colors follow the entity
-    (home=blue, away=red), matching the margin chart's convention.
+    and the favourite readable at a glance. The away side is neutral gray,
+    not red — red stays reserved for "below/negative" app-wide, and an away
+    team isn't bad.
     """
     st.markdown(
         f"""
@@ -376,11 +756,54 @@ def win_prob_bar(home: str, away: str, prob: float) -> None:
   </div>
   <div class="duel-track">
     <div style="width:{prob * 100:.1f}%; background:{PAL["series"][0]};"></div>
-    <div style="width:{(1 - prob) * 100:.1f}%; background:{PAL["series"][5]};"></div>
+    <div style="width:{(1 - prob) * 100:.1f}%; background:{PAL["muted"]};"></div>
   </div>
 </div>""",
         unsafe_allow_html=True,
     )
+
+
+def matchup_header(
+    home: str, away: str, prob: float, tri_to_id: pd.Series, snapshot: pd.DataFrame
+) -> None:
+    """A matchup card: both team logos flanking the win probability, then the
+    shared probability track and a compact home-vs-away form comparison — so
+    the prediction reads as a game, not a lone bar."""
+    left, center, right = st.columns([3, 2, 3], vertical_alignment="center")
+    for col, team, side in ((left, home, "home"), (right, away, "away")):
+        with col:
+            logo_col, name_col = st.columns([1, 2], vertical_alignment="center")
+            logo = fetch_team_logo(int(tri_to_id[team])) if team in tri_to_id.index else None
+            if logo:
+                logo_col.image(logo, width=72)
+            name_col.markdown(
+                f"<div class='mu-abbr' style='color:{team_color(team)}'>{team}</div>"
+                f"<div class='mu-side'>{side}</div>",
+                unsafe_allow_html=True,
+            )
+    center.markdown(
+        f"<div class='mu-prob'>{prob:.0%}</div>"
+        f"<div class='mu-vs'>{home} win probability</div>",
+        unsafe_allow_html=True,
+    )
+    win_prob_bar(home, away, prob)
+
+    # compact form context — lower Def rating is better, so no "winner" tint
+    rows = {
+        "Net rating": ("form_net", "{:+.1f}"),
+        "Off rating": ("form_ortg", "{:.1f}"),
+        "Def rating": ("form_drtg", "{:.1f}"),
+        "Elo": ("elo", "{:.0f}"),
+    }
+    data = {}
+    for team in (home, away):
+        data[team] = [
+            fmt.format(snapshot.loc[team, col])
+            if col in snapshot.columns and pd.notna(snapshot.loc[team, col])
+            else "—"
+            for col, fmt in rows.values()
+        ]
+    st.dataframe(pd.DataFrame(data, index=list(rows)), width="stretch")
 
 
 # profile badge labels: stat code -> plain-language skill
@@ -390,9 +813,9 @@ _BADGE_LABELS = {
     "REB": "Rebounding",
     "STL": "Steals",
     "BLK": "Rim protection",
-    "FG_PCT": "Shooting efficiency",
-    "FG3_PCT": "3-point shooting",
-    "FT_PCT": "Free throws",
+    "FG%": "Shooting efficiency",
+    "3P%": "3-point shooting",
+    "FT%": "Free throws",
     "NET RTG": "Impact",
     "CLUTCH NET": "Clutch",
 }
@@ -412,7 +835,26 @@ def skill_badges(ranks: pd.Series, floor: float = 85.0, top: int = 4) -> None:
         f" · {value:.0f}th pct</span>"
         for stat, value in elite.items()
     )
-    st.markdown(f'<div class="pills">{pills}</div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="pills"><span class="pills-lead">Elite this season</span>{pills}</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def scouting_callout(text: str, accent: str | None = None) -> None:
+    """A one-line rule-based read of the entity, in an accented card — the
+    'so what' the numbers add up to (see analysis.insights). *accent* tints
+    the border and tag (e.g. a team's color) for identity."""
+    style = ""
+    if accent:
+        style = (
+            f' style="border-left-color:{accent}; '
+            f'background:{_rgba(accent, 0.07)};"'
+        )
+        tag = f'<span class="scout-tag" style="color:{accent}">Scouting take</span>'
+    else:
+        tag = '<span class="scout-tag">Scouting take</span>'
+    st.markdown(f'<div class="scout"{style}>{tag}{text}</div>', unsafe_allow_html=True)
 
 
 def pick_player(client: NBAClient, label: str, key: str) -> dict | None:
@@ -445,11 +887,11 @@ def profile_header(
     latest_totals = totals[totals["GP"] > 0].sort_values("SEASON_ID").iloc[-1]
     latest = per_game.iloc[-1]
 
-    photo, info = st.columns([1, 5])
+    photo, info = st.columns([1, 4], vertical_alignment="center")
     with photo:
         headshot = fetch_headshot(player["id"])
         if headshot:
-            st.image(headshot, width=130)
+            st.image(headshot, width=190)
     with info:
         st.subheader(player["full_name"])
         team = latest_totals.get("TEAM_ABBREVIATION", "")
@@ -462,7 +904,9 @@ def profile_header(
 
         has_ratings = ratings is not None and pd.notna(ratings.get("NET_RATING"))
         has_dpm = ratings is not None and pd.notna(ratings.get("DPM"))
-        tiles = st.columns(3 + (2 if has_ratings else 0) + (1 if has_dpm else 0))
+        # two rows of three, not one cramped row of six — the delta text
+        # ("+5.8 vs career") truncates below ~180px per tile
+        tiles = st.columns(3)
         career_games = totals["GP"].sum()
         for col, stat in zip(tiles, ("PTS", "AST", "REB"), strict=False):
             career_avg = totals[stat].sum() / career_games if career_games else 0
@@ -471,21 +915,23 @@ def profile_header(
                 f"{latest[stat]:.1f}",
                 delta=f"{latest[stat] - career_avg:+.1f} vs career",
             )
-        if has_ratings:
-            tiles[3].metric("Net rating", f"{ratings['NET_RATING']:+.1f}")
-            clutch = ratings.get("CLUTCH_NET_RATING")
-            tiles[4].metric(
-                "Clutch net",
-                f"{clutch:+.1f}" if pd.notna(clutch) else "—",
-                help="Net rating in the last 5 minutes with the score within 5 points.",
-            )
-        if has_dpm:
-            tiles[-1].metric(
-                "DARKO DPM",
-                f"{ratings['DPM']:+.1f}",
-                help="Daily plus-minus projection from darko.app "
-                "(K. Medvedovsky & A. Patton).",
-            )
+        if has_ratings or has_dpm:
+            row = st.columns(3)
+            if has_ratings:
+                row[0].metric("Net rating", f"{ratings['NET_RATING']:+.1f}")
+                clutch = ratings.get("CLUTCH_NET_RATING")
+                row[1].metric(
+                    "Clutch net",
+                    f"{clutch:+.1f}" if pd.notna(clutch) else "—",
+                    help="Net rating in the last 5 minutes with the score within 5 points.",
+                )
+            if has_dpm:
+                row[2].metric(
+                    "DARKO DPM",
+                    f"{ratings['DPM']:+.1f}",
+                    help="Daily plus-minus projection from darko.app "
+                    "(K. Medvedovsky & A. Patton).",
+                )
 
 
 def shot_quality_tiles(
@@ -550,6 +996,59 @@ def on_off_tiles(client: NBAClient, player: dict, totals: pd.DataFrame) -> None:
     )
 
 
+def contract_section(player: dict, contracts: pd.DataFrame | None) -> None:
+    """Season-by-season contract breakdown from the scraped B-Ref table.
+
+    Local personal-use data (see ingest.salaries) — shown only in this app.
+    """
+    if contracts is None:
+        return
+    try:
+        row = player_contract(contracts, player["full_name"])
+    except KeyError:
+        return
+    seasons = salary_seasons(contracts)
+    salaries = pd.to_numeric(row[seasons], errors="coerce").dropna()
+    if salaries.empty:
+        return
+    # surfaced inline (not tucked in an expander) so the salary chart is visible
+    st.subheader("Contract & salary")
+    tiles = st.columns(3)
+    tiles[0].metric(f"Salary, {salaries.index[0]}", f"${salaries.iloc[0] / 1e6:.2f}M")
+    tiles[1].metric(
+        "Committed total",
+        f"${salaries.sum() / 1e6:.2f}M",
+        delta=f"{len(salaries)} season{'s' if len(salaries) > 1 else ''}",
+        delta_color="off",
+    )
+    guaranteed = row.get("GUARANTEED")
+    tiles[2].metric(
+        "Guaranteed",
+        f"${guaranteed / 1e6:.2f}M" if pd.notna(guaranteed) else "—",
+        help="Total guaranteed money remaining on the deal.",
+    )
+    fig = go.Figure(
+        go.Bar(
+            x=list(salaries.index),
+            y=salaries.values / 1e6,
+            marker=dict(color=PAL["series"][0], cornerradius=4),
+            text=[f"${v / 1e6:.1f}M" for v in salaries.values],
+            textposition="outside",
+            cliponaxis=False,
+            hovertemplate="%{x}: $%{y:.2f}M<extra></extra>",
+        )
+    )
+    fig = base_layout(fig, "Salary by season")
+    fig.update_layout(hovermode="closest", showlegend=False, height=300, margin=dict(t=60))
+    fig.update_xaxes(type="category")
+    fig.update_yaxes(tickprefix="$", ticksuffix="M", gridcolor=PAL["grid"])
+    st.plotly_chart(fig, width="stretch", key="profile_contract")
+    st.caption(
+        "Contract data scraped weekly from Basketball-Reference; "
+        "personal use only. Blank future seasons mean no committed money."
+    )
+
+
 @st.fragment
 def season_detail(client: NBAClient, player: dict, seasons: list[str]) -> None:
     """Season-scoped charts; a fragment so switching season or stat only
@@ -558,44 +1057,99 @@ def season_detail(client: NBAClient, player: dict, seasons: list[str]) -> None:
     season = pick[0].selectbox("Season", list(reversed(seasons)))
     games_kind = pick[1].radio("Games", ["Regular season", "Playoffs"], horizontal=True)
     season_type = "Playoffs" if games_kind == "Playoffs" else "Regular Season"
-    left, right = st.columns(2)
 
-    with left:
-        stat = st.selectbox("Form stat", ["PTS", "AST", "REB", "STL", "BLK"])
-        try:
-            log = client.game_log(player["id"], season=season, season_type=season_type)
-            if log.empty:
-                st.info(f"No {games_kind.lower()} games logged for this season.")
+    # charts stacked vertically (full width) rather than squeezed side by side
+    st.subheader("Game-by-game form")
+    stat = st.selectbox("Form stat", ["PTS", "AST", "REB", "STL", "BLK"])
+    try:
+        log = client.game_log(player["id"], season=season, season_type=season_type)
+        if log.empty:
+            st.info(f"No {games_kind.lower()} games logged for this season.")
+        else:
+            window = min(10, max(2, len(log) // 3))
+            st.plotly_chart(
+                form_chart(rolling_form(log, stat, window), stat, window),
+                width="stretch",
+                key="profile_form",
+            )
+    except Exception as e:
+        st.error(f"Could not load game log: {e}")
+
+    st.subheader("Shooting")
+    view = st.radio(
+        "Shot view", ["Hot zones", "Makes & misses", "Zones vs league"], horizontal=True
+    )
+    try:
+        shots = client.shot_chart(player["id"], season=season, season_type=season_type)
+        if shots.empty:
+            st.info(f"No {games_kind.lower()} shot data for this season.")
+        elif view == "Hot zones":
+            bins = hex_bins(
+                shots,
+                client.shot_league_averages(season=season, season_type=season_type),
+                min_fga=3,  # drop 1–2 attempt speckle in the midrange
+            )
+            if bins.empty:
+                st.plotly_chart(shot_chart_fig(shots), width="stretch", key="profile_shots")
             else:
-                window = min(10, max(2, len(log) // 3))
-                st.plotly_chart(
-                    form_chart(rolling_form(log, stat, window), stat, window),
-                    width="stretch",
-                )
-        except Exception as e:
-            st.error(f"Could not load game log: {e}")
-
-    with right:
-        view = st.radio("Shot view", ["Makes & misses", "Zones vs league"], horizontal=True)
-        try:
-            shots = client.shot_chart(player["id"], season=season, season_type=season_type)
-            if shots.empty:
-                st.info(f"No {games_kind.lower()} shot data for this season.")
-            elif view == "Zones vs league":
-                zones = zone_efficiency(
-                    shots, client.shot_league_averages(season=season, season_type=season_type)
-                )
-                st.plotly_chart(shot_zone_fig(shots, zones), width="stretch")
+                st.plotly_chart(hex_shot_fig(bins), width="stretch", key="profile_shots")
                 st.caption(
-                    "Color compares the player's FG% in each zone to the league "
-                    "(±2 percentage points counts as even)."
+                    "Each hexagon groups nearby attempts: bigger means more "
+                    "shots, blue means finishing above the league's FG% from "
+                    "those spots, red below."
                 )
-            else:
-                st.plotly_chart(shot_chart_fig(shots), width="stretch")
-            if not shots.empty:
-                shot_quality_tiles(client, shots, season, season_type)
-        except Exception as e:
-            st.error(f"Could not load shot chart: {e}")
+        elif view == "Zones vs league":
+            zones = zone_efficiency(
+                shots, client.shot_league_averages(season=season, season_type=season_type)
+            )
+            st.plotly_chart(shot_zone_fig(shots, zones), width="stretch", key="profile_shots")
+            st.caption(
+                "Color compares the player's FG% in each zone to the league "
+                "(±2 percentage points counts as even)."
+            )
+        else:
+            st.plotly_chart(shot_chart_fig(shots), width="stretch", key="profile_shots")
+        if not shots.empty:
+            shot_quality_tiles(client, shots, season, season_type)
+            try:
+                breakdown = shot_breakdown(
+                    shots,
+                    client.shot_league_averages(season=season, season_type=season_type),
+                )
+                if not breakdown.empty:
+                    # surfaced inline (not hidden in an expander): it's a graph
+                    st.plotly_chart(
+                        shot_breakdown_fig(breakdown),
+                        width="stretch",
+                        key="profile_breakdown",
+                    )
+                    st.caption(
+                        "Bar length is the share of this player's shots from "
+                        "each range; color is FG% vs league (blue above, red "
+                        "below); labels show FG% and points per shot."
+                    )
+            except Exception:
+                logger.warning("shot breakdown unavailable", exc_info=True)
+    except Exception as e:
+        st.error(f"Could not load shot chart: {e}")
+
+
+def _leaderboard_card(label: str, board: pd.DataFrame, stat: str) -> str:
+    """One category's top-ten as a compact ranked-list card (HTML)."""
+    from html import escape
+
+    lis = []
+    for i, (_, r) in enumerate(board.iterrows(), start=1):
+        value = f"{r[stat]:+.1f}" if "RATING" in stat else f"{r[stat]:.1f}"
+        lis.append(
+            f"<li><span class='lb-rank'>{i}</span>"
+            f"<span class='lb-name'>{escape(str(r['PLAYER_NAME']))}</span>"
+            f"<span class='lb-val'>{value}</span></li>"
+        )
+    return (
+        f"<div class='lb-card'><div class='lb-title'>{escape(label)}</div>"
+        f"<ol class='lb-list'>{''.join(lis)}</ol></div>"
+    )
 
 
 def _fill_widgets(**values: str) -> None:
@@ -642,13 +1196,15 @@ def profile_page(client: NBAClient) -> None:
         return
 
     per_game = career_per_game(totals)
-    ratings, ranks = None, None
+    ratings, ranks, take = None, None, ""
     if player["is_active"]:
         try:
             league = league_with_ratings(client)
             row = league[league["PLAYER_ID"] == player["id"]]
             ratings = row.iloc[0] if not row.empty else None
-            ranks = percentile_ranks(league, player["full_name"]).rename(RATING_LABELS)
+            raw_ranks = percentile_ranks(league, player["full_name"])
+            take = player_scouting_take(raw_ranks)  # takes the raw stat codes
+            ranks = raw_ranks.rename(STAT_LABELS)
         except KeyError:
             ranks = None  # not enough games for league ranks this season
         except Exception:
@@ -669,13 +1225,17 @@ def profile_page(client: NBAClient) -> None:
         except Exception:
             logger.warning("salary lookup failed for profile", exc_info=True)
     profile_header(player, totals, per_game, ratings, draft_note, salary_note)
+    # narrative take first (the headline), then the percentile pills reinforce it
+    if take:
+        scouting_callout(take)
     if ranks is not None:
         skill_badges(ranks)
     if player["is_active"]:
         on_off_tiles(client, player, totals)
+        contract_section(player, contracts)
 
     seasons = list(per_game["SEASON_ID"])
-    st.plotly_chart(career_chart(per_game), width="stretch")
+    st.plotly_chart(career_chart(per_game), width="stretch", key="profile_career")
 
     season_detail(client, player, seasons)
 
@@ -697,20 +1257,21 @@ def percentile_section(client: NBAClient, player: dict, seasons: list[str]) -> N
     season = st.selectbox("Percentile season", list(reversed(options)), key="pct_season")
     try:
         league = league_with_ratings(client, None if season == current_season() else season)
-        ranks = percentile_ranks(league, player["full_name"]).rename(RATING_LABELS)
+        ranks = percentile_ranks(league, player["full_name"]).rename(STAT_LABELS)
     except KeyError:
         st.caption(f"Not enough games in {season} for league percentile ranks.")
         return
     except Exception as e:
         st.caption(f"Percentiles unavailable: {e}")
         return
-    st.plotly_chart(percentile_chart(ranks), width="stretch")
-    with st.expander("Percentile data as table"):
-        st.dataframe(ranks.to_frame("percentile"))
+    st.plotly_chart(percentile_chart(ranks), width="stretch", key="profile_pct")
 
 
 # stats where a smaller number wins the row
 _LOWER_BETTER = {"TOV"}
+# count stats shown as whole numbers; every other row gets a fixed 2 decimals
+# so a row never mixes "4" with "3.70" (per-value rounding did exactly that)
+_INTEGER_STATS = {"GP"}
 
 
 def _best_value_style(table: pd.DataFrame):
@@ -726,11 +1287,22 @@ def _best_value_style(table: pd.DataFrame):
         best = values.min() if row.name in _LOWER_BETTER else values.max()
         return [tint if pd.notna(v) and v == best else "" for v in row]
 
-    return table.style.apply(highlight, axis=1)
+    # format per row, not per value: count rows whole, all others fixed 2dp
+    styler = table.style.apply(highlight, axis=1)
+    int_rows = [r for r in table.index if r in _INTEGER_STATS]
+    float_rows = [r for r in table.index if r not in _INTEGER_STATS]
+    if int_rows:
+        styler = styler.format("{:,.0f}", subset=pd.IndexSlice[int_rows, :], na_rep="—")
+    if float_rows:
+        styler = styler.format("{:,.2f}", subset=pd.IndexSlice[float_rows, :], na_rep="—")
+    return styler
 
 
 def compare_page(client: NBAClient) -> None:
-    st.caption(f"Per-game stats, {current_season()} season. Compare up to four players.")
+    st.caption(
+        "Career averages, plus this season's league percentiles. "
+        "Compare up to four players."
+    )
     labels = ["First player", "Second player", "Third (optional)", "Fourth (optional)"]
     keys = ["cmp_a", "cmp_b", "cmp_c", "cmp_d"]
     picks = []
@@ -746,78 +1318,134 @@ def compare_page(client: NBAClient) -> None:
         st.info("Pick at least two players to compare.")
         leader_suggestions(client, "cmp_a", "cmp_b")
         return
+    # career averages (works for retired players too), raw stat codes as index
     try:
-        league = league_with_ratings(client)
-        table = comparison_table(league, [p["full_name"] for p in players])
-        st.dataframe(_best_value_style(table.rename(index=RATING_LABELS)), width="stretch")
-
-        ranks = pd.concat(
-            [percentile_ranks(league, p["full_name"]).rename(RATING_LABELS) for p in players],
-            axis=1,
-        )
-        fig = go.Figure()
-        for i, name in enumerate(ranks.columns):
-            fig.add_trace(
-                go.Bar(
-                    x=ranks[name].values,
-                    y=ranks.index,
-                    orientation="h",
-                    name=name,
-                    marker_color=PAL["series"][i],
-                )
-            )
-        fig = base_layout(fig, "League percentile, side by side")
-        fig.update_layout(barmode="group", hovermode="closest")
-        fig.update_xaxes(range=[0, 100])
-        fig.update_yaxes(autorange="reversed", automargin=True)
-        st.plotly_chart(fig, width="stretch")
-
-        st.download_button(
-            "Download share poster (PNG)",
-            compare_poster_png(table, current_season()),
-            file_name=f"{' vs '.join(table.columns)}.png",
-            mime="image/png",
-            help="1080×1080 image of this comparison, ready to post.",
-        )
-    except KeyError as e:
-        st.warning(f"Comparison needs every player active this season: {e}")
-    except Exception as e:
-        st.error(f"Could not load comparison: {e}")
-        return
-
-    with st.expander("Shot quality (xeFG)"):
-        try:
-            league_avgs = client.shot_league_averages()
-            quality = pd.concat(
-                {
-                    p["full_name"]: shot_quality(client.shot_chart(p["id"]), league_avgs)
-                    for p in players
-                },
-                axis=1,
-            )
-            table = (quality.loc[["XEFG", "EFG", "MAKING"]] * 100).rename(
-                index={
-                    "XEFG": "Shot diet (xeFG%)",
-                    "EFG": "Actual eFG%",
-                    "MAKING": "Shot making (eFG pts)",
-                }
-            )
-            st.dataframe(_best_value_style(table.round(1)), width="stretch")
-            st.caption(
-                "xeFG% is the eFG% a league-average shooter would post on each "
-                "player's shot locations; shot making is actual minus expected."
-            )
-        except Exception as e:
-            st.caption(f"Shot quality unavailable: {e}")
-
-    try:
-        careers = {
-            p["full_name"]: career_per_game(client.career_stats(p["id"])) for p in players
-        }
-        if all(not df.empty for df in careers.values()):
-            st.plotly_chart(compare_careers_chart(careers), width="stretch")
+        totals_by = {p["full_name"]: client.career_stats(p["id"]) for p in players}
+        table = pd.DataFrame({name: career_averages(t) for name, t in totals_by.items()})
+        careers = {name: career_per_game(t) for name, t in totals_by.items()}
+        row_order = [
+            s
+            for s in ("GP", "MIN", "PTS", "AST", "REB", "STL", "BLK", "TOV",
+                      "FG_PCT", "FG3_PCT", "FT_PCT")
+            if s in table.index
+        ]
+        table = table.loc[row_order]
     except Exception as e:
         st.error(f"Could not load career comparison: {e}")
+        return
+    st.subheader("Career averages")
+    display = table.copy()
+    pct_rows = [r for r in ("FG_PCT", "FG3_PCT", "FT_PCT") if r in display.index]
+    display.loc[pct_rows] *= 100  # percent stats read as percentages
+    st.dataframe(_best_value_style(display.rename(index=STAT_LABELS)), width="stretch")
+    st.caption("Career per-game averages; FG%/3P%/FT% are volume-weighted over the career.")
+    st.download_button(
+        "Download share poster (PNG)",
+        compare_poster_png(table, "Career"),
+        file_name=f"{' vs '.join(table.columns)}.png",
+        mime="image/png",
+        help="1080×1080 image of this comparison, ready to post.",
+    )
+
+    # season-by-season: one row per season, a column per player, for a stat
+    st.subheader("Season by season")
+    season_stats = [s for s in ("PTS", "AST", "REB", "STL", "BLK", "TOV", "MIN")
+                    if any(s in c.columns for c in careers.values())]
+    stat = st.selectbox(
+        "Stat", season_stats, format_func=lambda s: STAT_LABELS.get(s, s), key="cmp_season_stat"
+    )
+    season_tbl = pd.DataFrame(
+        {name: cpg.set_index("SEASON_ID")[stat] for name, cpg in careers.items()
+         if stat in cpg.columns}
+    ).sort_index(ascending=False)
+    season_tbl.index.name = "Season"
+    st.dataframe(
+        season_tbl,
+        width="stretch",
+        column_config={
+            c: st.column_config.NumberColumn(format="%.1f") for c in season_tbl.columns
+        },
+    )
+    if all(not df.empty for df in careers.values()):
+        st.plotly_chart(compare_careers_chart(careers), width="stretch", key="cmp_careers")
+
+    # league percentiles are this-season only, so this needs active players
+    try:
+        league = league_with_ratings(client)
+        ranks = pd.concat(
+            [percentile_ranks(league, p["full_name"]).rename(STAT_LABELS) for p in players],
+            axis=1,
+        )
+    except KeyError:
+        st.caption("League percentiles need every player active this season — skipped.")
+        ranks = None
+    except Exception as e:
+        st.caption(f"League percentiles unavailable: {e}")
+        ranks = None
+    if ranks is not None:
+        # dot-strip rows instead of grouped bars: one row per stat, a hairline
+        # connecting each row's spread, a ringed dot per player
+        fig = go.Figure()
+        xs: list[float | None] = []
+        ys: list[str | None] = []
+        for stat in ranks.index:
+            row = ranks.loc[stat].dropna()
+            if row.empty:
+                continue
+            xs.extend([float(row.min()), float(row.max()), None])
+            ys.extend([stat, stat, None])
+        fig.add_trace(
+            go.Scatter(
+                x=xs, y=ys, mode="lines", showlegend=False, hoverinfo="skip",
+                line=dict(color=PAL["grid"], width=2),
+            )
+        )
+        for i, name in enumerate(ranks.columns):
+            fig.add_trace(
+                go.Scatter(
+                    x=ranks[name].values,
+                    y=ranks.index,
+                    mode="markers",
+                    name=name,
+                    marker=dict(
+                        color=PAL["series"][i], size=11,
+                        line=dict(color=PAL["surface"], width=1.5),
+                    ),
+                    hovertemplate=f"{name}: %{{x:.0f}}th pct<extra></extra>",
+                )
+            )
+        fig = base_layout(fig, "League percentile this season, head to head")
+        fig.add_vline(x=50, line_dash="dot", line_color=PAL["muted"], line_width=1)
+        fig.update_layout(hovermode="closest")
+        fig.update_xaxes(range=[-3, 103], showgrid=True, gridcolor=PAL["grid"])
+        fig.update_yaxes(autorange="reversed", automargin=True, showgrid=False)
+        st.plotly_chart(fig, width="stretch", key="cmp_pct")
+
+    st.subheader("Shot quality (xeFG), this season")
+    try:
+        league_avgs = client.shot_league_averages()
+        quality = pd.concat(
+            {
+                p["full_name"]: shot_quality(client.shot_chart(p["id"]), league_avgs)
+                for p in players
+            },
+            axis=1,
+        )
+        sq_table = (quality.loc[["XEFG", "EFG", "MAKING"]] * 100).rename(
+            index={
+                "XEFG": "Shot diet (xeFG%)",
+                "EFG": "Actual eFG%",
+                "MAKING": "Shot making (eFG pts)",
+            }
+        )
+        st.dataframe(_best_value_style(sq_table.round(2)), width="stretch")
+        st.caption(
+            "xeFG% is the eFG% a league-average shooter would post on each "
+            "player's shot locations; shot making is actual minus expected. "
+            "Current-season shots; per-season shot quality lives on each player's profile."
+        )
+    except Exception as e:
+        st.caption(f"Shot quality unavailable: {e}")
 
 
 @st.cache_resource
@@ -889,7 +1517,12 @@ def outcome_tab(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> None
         away_missing_min=missing[away],
     )
     prob = float(models["outcome"].predict_proba(x).iloc[0])
-    win_prob_bar(home, away, prob)
+    tri_to_id = (
+        league.dropna(subset=["TEAM_ID", "TEAM_ABBREVIATION"])
+        .drop_duplicates("TEAM_ABBREVIATION")
+        .set_index("TEAM_ABBREVIATION")["TEAM_ID"]
+    )
+    matchup_header(home, away, prob, tri_to_id, snapshot)
     st.caption(
         "Logistic regression on season-to-date form differentials — win%, net "
         "rating, four factors (eFG%, TOV%, OREB%, FT rate), pace, ORtg/DRtg, "
@@ -903,26 +1536,23 @@ def outcome_tab(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> None
         mime="image/png",
         help="1200×675 image of this prediction, ready to post.",
     )
-    with st.expander("Season-to-date form"):
-        st.dataframe(
-            snapshot.loc[[home, away]].drop(columns="last_game_date").round(3),
-            width="stretch",
-        )
 
-    st.divider()
     slate_section(client, models, snapshot)
 
 
 def slate_section(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> None:
-    st.subheader("Next slate")
+    """Predicted win probabilities for the next slate. Renders nothing at all
+    (no header, no divider) in the offseason — an empty stub is worse than
+    absence."""
     try:
         slate = upcoming_games(client.schedule())
     except Exception:
         logger.warning("schedule unavailable for the slate", exc_info=True)
         slate = pd.DataFrame()
     if slate.empty:
-        st.caption("No upcoming games on the schedule (offseason).")
         return
+    st.divider()
+    st.subheader("Next slate")
     # real rest/fatigue flags per team entering the slate — the model is
     # trained on them, so defaulting to "everyone equally rested" wastes
     # a feature we already have
@@ -983,13 +1613,19 @@ def margin_chart(margin: pd.Series, home: str, away: str) -> go.Figure:
         go.Bar(
             x=centers,
             y=share.values,
-            marker_color=colors,
+            marker=dict(color=colors, cornerradius=2),
             width=3.4,
             customdata=[f"{iv.left:+.0f} to {iv.right:+.0f}" for iv in counts.index],
             hovertemplate="%{customdata}: %{y:.1%}<extra></extra>",
         )
     )
     fig = base_layout(fig, f"Simulated margin — {home} minus {away}")
+    med = float(margin.median())
+    fig.add_vline(x=med, line_dash="dot", line_color=PAL["muted"], line_width=1)
+    fig.add_annotation(
+        x=med, y=1.05, yref="paper", text=f"median {med:+.0f}", showarrow=False,
+        font=dict(color=PAL["muted"], size=11),
+    )
     fig.update_layout(hovermode="closest", showlegend=False, height=380)
     fig.update_xaxes(zeroline=True, zerolinecolor=PAL["muted"], title="points")
     fig.update_yaxes(tickformat=".0%", gridcolor=PAL["grid"])
@@ -1039,7 +1675,7 @@ def simulate_tab(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> Non
     m[3].metric("Overtime", f"{s['overtime_prob']:.1%}")
 
     st.plotly_chart(margin_chart(sims["home_pts"] - sims["away_pts"], home, away),
-                    width="stretch")
+                    width="stretch", key="sim_margin")
     st.caption(
         f"80% of sims land between {home} {s['margin_p10']:+.0f} and "
         f"{s['margin_p90']:+.0f}. Monte Carlo over pace and ratings — "
@@ -1068,7 +1704,7 @@ def simulate_tab(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> Non
         fig = base_layout(fig, "Simulated total points")
         fig.update_layout(hovermode="closest", showlegend=False, height=320)
         fig.update_yaxes(gridcolor=PAL["grid"])
-        st.plotly_chart(fig, width="stretch")
+        st.plotly_chart(fig, width="stretch", key="sim_total")
 
 
 @st.fragment
@@ -1261,11 +1897,23 @@ def predictions_page(client: NBAClient) -> None:
 def team_detail(client: NBAClient, games: pd.DataFrame, snapshot: pd.DataFrame) -> None:
     """One team's season at a glance; a fragment so switching teams is light."""
     teams = sorted(snapshot.index)
-    team = st.selectbox("Team", teams, index=teams.index("OKC") if "OKC" in teams else 0)
+    # seed the picker before the widget exists: a standings-row click stashes
+    # _pending_team, then reruns here (a widget key can't be set once created)
+    pending = st.session_state.pop("_pending_team", None)
+    if pending in teams:
+        st.session_state["team_select"] = pending
+    if st.session_state.get("team_select") not in teams:
+        st.session_state["team_select"] = "OKC" if "OKC" in teams else teams[0]
+    team = st.selectbox("Team", teams, key="team_select")
     log = games[games["TEAM_ABBREVIATION"] == team].sort_values("GAME_DATE")
     form = snapshot.loc[team]
 
-    tiles = st.columns(4)
+    header = st.columns([1, 2, 2, 2, 2], vertical_alignment="center")
+    with header[0]:
+        logo = fetch_team_logo(int(log["TEAM_ID"].iloc[0]))
+        if logo:
+            st.image(logo, width=96)
+    tiles = header[1:]
     wins, losses = int((log["WL"] == "W").sum()), int((log["WL"] == "L").sum())
     tiles[0].metric("Record", f"{wins}-{losses}")
     tiles[1].metric("Net rating", f"{form['form_net']:+.1f}")
@@ -1276,75 +1924,141 @@ def team_detail(client: NBAClient, games: pd.DataFrame, snapshot: pd.DataFrame) 
         logger.warning("Elo unavailable for team tile", exc_info=True)
         tiles[3].metric("Elo", "—", help="Elo ratings unavailable right now.")
 
+    color = team_color(team)
+    try:
+        recent = log.tail(10)["WL"]
+        take = team_scouting_take(
+            form, wins, losses, snapshot,
+            recent=(int((recent == "W").sum()), int((recent == "L").sum())),
+        )
+        if take:
+            scouting_callout(take, accent=color)
+    except Exception:
+        logger.warning("team scouting take unavailable", exc_info=True)
+
     st.plotly_chart(
-        form_chart(rolling_form(log, "PLUS_MINUS", 10), "PLUS_MINUS", 10, label="Point margin"),
+        form_chart(
+            rolling_form(log, "PLUS_MINUS", 10), "PLUS_MINUS", 10,
+            label="Point margin", signed=True, accent=color,
+        ),
         width="stretch",
+        key="team_form",
     )
 
-    left, right = st.columns(2)
-    with left:
-        st.subheader("Roster")
-        try:
-            league = league_with_ratings(client)
-            roster = league[league["TEAM_ABBREVIATION"] == team].sort_values(
-                "MIN", ascending=False
+    st.subheader("Roster")
+    try:
+        league = league_with_ratings(client)
+        roster = league[league["TEAM_ABBREVIATION"] == team].sort_values(
+            "MIN", ascending=False
+        )
+        contracts = contracts_table(client)
+        if contracts is not None:
+            try:
+                roster = attach_salary(roster, contracts)
+                roster["SALARY"] = roster["SALARY"] / 1e6  # display in $M
+                payroll = team_payroll(contracts)
+                if team in payroll.index:
+                    st.caption(
+                        f"Committed payroll, {salary_seasons(contracts)[0]}: "
+                        f"${payroll[team] / 1e6:.0f}M"
+                    )
+            except Exception:
+                logger.warning("salary columns unavailable for roster", exc_info=True)
+        # full width now, so the 9 columns breathe instead of scrolling
+        keep = [
+            c
+            for c in (
+                "PLAYER_NAME", "GP", "MIN", "PTS", "AST", "REB",
+                "NET_RATING", "DPM", "SALARY",
             )
-            contracts = contracts_table(client)
-            if contracts is not None:
-                try:
-                    roster = attach_salary(roster, contracts)
-                    roster["SALARY"] = roster["SALARY"] / 1e6  # display in $M
-                    payroll = team_payroll(contracts)
-                    if team in payroll.index:
-                        st.caption(
-                            f"Committed payroll, {salary_seasons(contracts)[0]}: "
-                            f"${payroll[team] / 1e6:.0f}M"
-                        )
-                except Exception:
-                    logger.warning("salary columns unavailable for roster", exc_info=True)
-            keep = [
-                c
-                for c in (
-                    "PLAYER_NAME", "GP", "MIN", "PTS", "AST", "REB",
-                    "NET_RATING", "DPM", "SALARY",
+            if c in roster.columns
+        ]
+        st.caption("Click a player to open their profile.")
+        event = st.dataframe(
+            roster[keep].rename(columns={**STAT_LABELS, "SALARY": "SAL ($M)"}),
+            width="stretch",
+            hide_index=True,
+            height=422,
+            on_select="rerun",
+            selection_mode="single-row",
+            key="team_roster",
+            column_config={
+                "MIN": st.column_config.ProgressColumn(
+                    "MIN", min_value=0.0, max_value=40.0, format="%.1f"
+                ),
+                "PTS": st.column_config.NumberColumn(format="%.1f"),
+                "AST": st.column_config.NumberColumn(format="%.1f"),
+                "REB": st.column_config.NumberColumn(format="%.1f"),
+                "NET RTG": st.column_config.NumberColumn(format="%.1f"),
+                "DARKO DPM": st.column_config.NumberColumn(format="%+.1f"),
+                "SAL ($M)": st.column_config.NumberColumn(format="$%.2f"),
+            },
+        )
+        if event.selection.rows:
+            open_profile(str(roster.iloc[event.selection.rows[0]]["PLAYER_NAME"]))
+    except Exception as e:
+        st.error(f"Could not load roster: {e}")
+
+    st.subheader("Last 10 games")
+    recent = log.tail(10).iloc[::-1].copy()
+    recent["GAME_DATE"] = pd.to_datetime(recent["GAME_DATE"]).dt.date
+    st.dataframe(
+        recent[["GAME_DATE", "MATCHUP", "WL", "PTS", "PLUS_MINUS"]].rename(
+            columns={"PLUS_MINUS": "MARGIN"}
+        ),
+        width="stretch",
+        hide_index=True,
+        height=390,
+        column_config={
+            "GAME_DATE": st.column_config.DateColumn("DATE", format="MMM DD"),
+            "MARGIN": st.column_config.NumberColumn(format="%+d"),
+        },
+    )
+
+    contracts = contracts_table(client)
+    if contracts is not None:
+        try:
+            book = team_contracts(contracts, team)
+        except KeyError:
+            book = pd.DataFrame()
+        if not book.empty:
+            st.subheader("Contract book")
+            season_cols = salary_seasons(contracts)
+            totals = book[season_cols].sum() / 1e6
+            fig = go.Figure(
+                go.Bar(
+                    x=list(totals.index),
+                    y=totals.values,
+                    marker=dict(color=team_color(team), cornerradius=4),
+                    text=[f"${v:.0f}M" for v in totals.values],
+                    textposition="outside",
+                    cliponaxis=False,
+                    hovertemplate="%{x}: $%{y:.2f}M<extra></extra>",
                 )
-                if c in roster.columns
-            ]
+            )
+            fig = base_layout(fig, "Committed payroll by season")
+            fig.update_layout(hovermode="closest", showlegend=False, height=280,
+                              margin=dict(t=60))
+            fig.update_xaxes(type="category")
+            fig.update_yaxes(tickprefix="$", ticksuffix="M", gridcolor=PAL["grid"])
+            st.plotly_chart(fig, width="stretch", key="team_payroll")
+
+            money_cols = [c for c in book.columns if c != "PLAYER_NAME"]
+            display = book.copy()
+            display[money_cols] = (display[money_cols] / 1e6).round(2)
             st.dataframe(
-                roster[keep].rename(columns={**RATING_LABELS, "SALARY": "SAL ($M)"}),
+                display.rename(columns={"PLAYER_NAME": "PLAYER"}),
                 width="stretch",
                 hide_index=True,
                 height=390,
                 column_config={
-                    "MIN": st.column_config.ProgressColumn(
-                        "MIN", min_value=0.0, max_value=40.0, format="%.1f"
-                    ),
-                    "PTS": st.column_config.NumberColumn(format="%.1f"),
-                    "AST": st.column_config.NumberColumn(format="%.1f"),
-                    "REB": st.column_config.NumberColumn(format="%.1f"),
-                    "NET RTG": st.column_config.NumberColumn(format="%.1f"),
-                    "DARKO DPM": st.column_config.NumberColumn(format="%+.1f"),
-                    "SAL ($M)": st.column_config.NumberColumn(format="$%.1f"),
+                    c: st.column_config.NumberColumn(format="$%.2f") for c in money_cols
                 },
             )
-        except Exception as e:
-            st.error(f"Could not load roster: {e}")
-    with right:
-        st.subheader("Last 10 games")
-        recent = log.tail(10).iloc[::-1].copy()
-        recent["GAME_DATE"] = pd.to_datetime(recent["GAME_DATE"]).dt.date
-        st.dataframe(
-            recent[["GAME_DATE", "MATCHUP", "WL", "PTS", "PLUS_MINUS"]].rename(
-                columns={"PLUS_MINUS": "MARGIN"}
-            ),
-            width="stretch",
-            hide_index=True,
-            height=390,
-            column_config={
-                "GAME_DATE": st.column_config.DateColumn("DATE", format="MMM DD"),
-                "MARGIN": st.column_config.NumberColumn(format="%+d"),
-            },
-        )
+            st.caption(
+                "Salaries in $M. Scraped weekly from Basketball-Reference; "
+                "personal use only. Blank cells: no committed money that season."
+            )
 
     st.subheader("On/off impact")
     try:
@@ -1382,7 +2096,7 @@ def team_detail(client: NBAClient, games: pd.DataFrame, snapshot: pd.DataFrame) 
 
 
 def teams_page(client: NBAClient) -> None:
-    st.caption(f"Teams · {current_season()}")
+    st.caption(f"Team form, roster, contracts, and on/off impact · {current_season()}")
     try:
         games = client.team_games()
         snapshot = team_form_snapshot(games)
@@ -1402,6 +2116,13 @@ def teams_page(client: NBAClient) -> None:
     except Exception as e:
         st.caption(f"Standings unavailable: {e}")
         return
+    # TeamID -> tricode, so a standings-row click can open that team above
+    id_to_tri = (
+        games.dropna(subset=["TEAM_ID", "TEAM_ABBREVIATION"])
+        .drop_duplicates("TEAM_ID")
+        .set_index("TEAM_ID")["TEAM_ABBREVIATION"]
+    )
+    st.caption("Click a team to load it above.")
     conf_cols = st.columns(2)
     for col, conf in zip(conf_cols, ("East", "West"), strict=True):
         rows = standings[standings["Conference"] == conf].sort_values("PlayoffRank")
@@ -1411,24 +2132,31 @@ def teams_page(client: NBAClient) -> None:
                 "Team": rows["TeamCity"] + " " + rows["TeamName"],
                 "W": rows["WINS"].astype(int),
                 "L": rows["LOSSES"].astype(int),
-                "Win%": rows["WinPCT"].round(3),
+                "Win%": rows["WinPCT"].round(2),
                 "L10": rows["L10"].str.strip(),
                 "Streak": rows["strCurrentStreak"].str.strip(),
             }
         )
         with col:
             st.caption(conf)
-            st.dataframe(
+            event = st.dataframe(
                 table,
                 width="stretch",
                 hide_index=True,
                 height=390,
+                on_select="rerun",
+                selection_mode="single-row",
+                key=f"standings_{conf}",
                 column_config={
                     "Win%": st.column_config.ProgressColumn(
-                        "Win%", min_value=0.0, max_value=1.0, format="%.3f"
+                        "Win%", min_value=0.0, max_value=1.0, format="%.2f"
                     ),
                 },
             )
+            if event.selection.rows:
+                team_id = int(rows.iloc[event.selection.rows[0]]["TeamID"])
+                if team_id in id_to_tri.index:
+                    open_team(str(id_to_tri.loc[team_id]))
 
 
 def home_page(client: NBAClient) -> None:
@@ -1439,7 +2167,7 @@ def home_page(client: NBAClient) -> None:
         help="Dashboards go back to 1996-97. Past seasons load live on first view.",
     )
     is_current = season == current_season()
-    head[0].caption(f"League pulse · {season}")
+    head[0].caption(f"League-wide leaders and team form · {season}")
     try:
         with st.spinner("Loading the league dashboard (first view fetches live)…"):
             league = league_with_ratings(client, None if is_current else season)
@@ -1459,14 +2187,24 @@ def home_page(client: NBAClient) -> None:
     # aren't empty from opening night to December
     max_gp = int(league["GP"].max()) if "GP" in league.columns and len(league) else 0
     min_gp = min(20, max(1, max_gp // 2))
+    # Net and clutch rating are team-context stats: a bench player on a great
+    # team can top raw net rating in 15 minutes a night. A hero tile is the
+    # most prominent number in the app, so the rate-stat tiles qualify only
+    # genuine rotation regulars (~starter minutes) — the box-score tiles keep
+    # the plain games floor.
+    rate_min = 24.0
     tiles = st.columns(len(specs))
     boards: dict[str, pd.DataFrame] = {}
+    used_rate_floor = False
     for col, (stat, label) in zip(tiles, specs, strict=True):
         pool = league
         if stat == "NET_RATING" and "MIN" in league.columns:
-            pool = league[league["MIN"] >= 15]  # rotation players only
-        elif stat == "CLUTCH_NET_RATING" and "CLUTCH_GP" in league.columns:
-            pool = league[league["CLUTCH_GP"] >= min(15, min_gp)]  # enough clutch games
+            pool = league[league["MIN"] >= rate_min]
+            used_rate_floor = True
+        elif stat == "CLUTCH_NET_RATING" and {"MIN", "CLUTCH_GP"} <= set(league.columns):
+            # a real rotation player who has logged enough clutch games
+            pool = league[(league["MIN"] >= rate_min) & (league["CLUTCH_GP"] >= min_gp)]
+            used_rate_floor = True
         try:
             board = league_leaders(pool, stat, top=10, min_gp=min_gp)
         except KeyError:
@@ -1481,18 +2219,29 @@ def home_page(client: NBAClient) -> None:
             if "PLAYER_ID" in row.index:  # face the number: the leader's headshot
                 photo = fetch_headshot(int(row["PLAYER_ID"]))
                 if photo:
-                    st.image(photo, width=76)
+                    st.image(photo, width=90)
+                else:  # reserve the photo's slot so the tile row stays aligned
+                    st.markdown('<div style="height:66px"></div>', unsafe_allow_html=True)
             st.metric(label, value)
             st.caption(f"{row['PLAYER_NAME']} · {team}")
     if boards:
-        with st.expander("Top-ten leaderboards"):
-            for tab, label in zip(st.tabs(list(boards)), boards, strict=True):
-                with tab:
-                    st.dataframe(
-                        boards[label].drop(columns="PLAYER_ID", errors="ignore").round(1),
-                        width="stretch",
-                        hide_index=True,
-                    )
+        note = f"Leaders qualify at {min_gp}+ games"
+        if used_rate_floor:
+            note += f"; net and clutch tiles also require {rate_min:.0f}+ minutes a game"
+        # surfaced inline as a grid of ranked cards (one per category) — not
+        # a wide dense table, and not hidden in an expander
+        st.subheader("League leaders")
+        st.caption(f"Top ten per category. {note}.")
+        label_to_stat = {label: stat for stat, label in specs}
+        items = list(boards.items())
+        for chunk_start in range(0, len(items), 3):
+            cols = st.columns(3)
+            chunk = items[chunk_start:chunk_start + 3]
+            for col, (label, board) in zip(cols, chunk, strict=False):
+                col.markdown(
+                    _leaderboard_card(label, board, label_to_stat[label]),
+                    unsafe_allow_html=True,
+                )
     else:
         st.info(f"No league stats for {season} — leaderboards appear after opening night.")
 
@@ -1506,21 +2255,38 @@ def home_page(client: NBAClient) -> None:
             left, right = st.columns(2)
             with left:
                 try:
-                    st.plotly_chart(elo_dot_chart(league_elo()), width="stretch")
+                    st.plotly_chart(elo_dot_chart(league_elo()), width="stretch", key="home_elo")
+                    st.caption(
+                        "Elo rates each team from game results: everyone starts at "
+                        "1500, and a team gains points for a win — more for beating a "
+                        "strong opponent or winning big — and loses them for a defeat. "
+                        "Warmed over the two prior seasons, so it carries momentum in."
+                    )
                 except Exception as e:
                     st.caption(f"Elo rankings unavailable: {e}")
             with right:
-                st.plotly_chart(net_rating_chart(snapshot), width="stretch")
+                st.plotly_chart(net_rating_chart(snapshot), width="stretch", key="home_net")
         else:
             # Elo and the slate are "now" widgets; a past season keeps form only
-            st.plotly_chart(net_rating_chart(snapshot), width="stretch")
-        with st.expander("Full team form table"):
-            st.dataframe(
-                snapshot.drop(columns="last_game_date").round(3).sort_values(
-                    "form_net", ascending=False
-                ),
-                width="stretch",
+            st.plotly_chart(net_rating_chart(snapshot), width="stretch", key="home_net")
+        # the league landscape fills the space below the fold with the one
+        # chart that shows all 30 teams at once, in their own colors
+        if {"form_ortg", "form_drtg"} <= set(snapshot.columns):
+            st.plotly_chart(
+                league_landscape_chart(snapshot), width="stretch", key="home_landscape"
             )
+            st.caption(
+                "Each team by offensive and defensive rating (defense inverted, so "
+                "up is better). Top-right is elite on both ends. Click a team in the "
+                "standings on the Teams page to dig in."
+            )
+        st.subheader("Team form — all teams")
+        st.dataframe(
+            snapshot.drop(columns="last_game_date").round(2).sort_values(
+                "form_net", ascending=False
+            ),
+            width="stretch",
+        )
         st.caption(f"Data through {snapshot['last_game_date'].max():%b %d, %Y}.")
 
     models = load_models()
@@ -1534,7 +2300,6 @@ def home_page(client: NBAClient) -> None:
             slate_snapshot["elo"] = league_elo().reindex(slate_snapshot.index)
         except Exception:
             logger.warning("Elo unavailable for the slate", exc_info=True)
-        st.divider()
         slate_section(client, models, slate_snapshot)
 
 
@@ -1607,46 +2372,72 @@ def methodology_page(client: NBAClient) -> None:
     methodology.render(client, load_models(), PAL)
 
 
+# the page objects (StreamlitPage), keyed for programmatic drill-down
+# (leaderboard/roster clicks jump here). Rebuilt each run in main().
+PAGES: dict = {}
+
+
+def open_profile(name: str) -> None:
+    """Jump to a player's profile with the search box pre-filled. Safe from a
+    fragment: it stashes the target and triggers a full app rerun that main()
+    turns into the page switch (st.switch_page can't be called in a fragment)."""
+    st.session_state["profile_search"] = name
+    st.session_state["_nav_to"] = "profile"
+    st.rerun(scope="app")
+
+
+def open_team(tricode: str) -> None:
+    """Select a team on the Teams page. Same page as the standings table, so
+    this just stashes the pick and reruns — team_detail seeds its selectbox
+    from _pending_team before the widget exists (the widget's own key can't
+    be written once instantiated)."""
+    st.session_state["_pending_team"] = tricode
+    st.session_state["_nav_to"] = "teams"
+    st.rerun(scope="app")
+
+
 def main() -> None:
     PAL.update(theme_palette())
     inject_css()
     client = get_client()
-    nav = st.navigation(
-        [
-            st.Page(lambda: home_page(client), title="League pulse", icon="📈", default=True),
-            st.Page(
-                lambda: profile_page(client),
-                title="Player profile",
-                icon="🏀",
-                url_path="profile",
-            ),
-            st.Page(
-                lambda: compare_page(client),
-                title="Compare players",
-                icon="⚖️",
-                url_path="compare",
-            ),
-            st.Page(lambda: teams_page(client), title="Teams", icon="🏟️", url_path="teams"),
-            st.Page(lambda: draft_page(client), title="Draft", icon="🎓", url_path="draft"),
-            st.Page(
-                lambda: predictions_page(client),
-                title="Predictions",
-                icon="🔮",
-                url_path="predictions",
-            ),
-            st.Page(
-                lambda: methodology_page(client),
-                title="Methodology",
-                icon="📐",
-                url_path="methodology",
-            ),
-        ]
+    PAGES.clear()
+    PAGES["home"] = st.Page(
+        lambda: home_page(client), title="League pulse", icon="📈", default=True
     )
-    st.title("🏀 NBA Insights")
+    PAGES["profile"] = st.Page(
+        lambda: profile_page(client), title="Player profile", icon="🏀", url_path="profile"
+    )
+    PAGES["compare"] = st.Page(
+        lambda: compare_page(client), title="Compare players", icon="⚖️", url_path="compare"
+    )
+    PAGES["teams"] = st.Page(
+        lambda: teams_page(client), title="Teams", icon="🏆", url_path="teams"
+    )
+    # Draft page hidden for now (owner request, 2026-07-17); the page code
+    # stays so re-enabling is uncommenting this line.
+    # PAGES["draft"] = st.Page(lambda: draft_page(client), title="Draft", icon="🎓",
+    #                          url_path="draft")
+    PAGES["predictions"] = st.Page(
+        lambda: predictions_page(client), title="Predictions", icon="🔮", url_path="predictions"
+    )
+    PAGES["methodology"] = st.Page(
+        lambda: methodology_page(client), title="Methodology", icon="📐", url_path="methodology"
+    )
+    nav = st.navigation(list(PAGES.values()))
+
+    # honor a pending drill-down jump requested by a table click last run
+    goto = st.session_state.pop("_nav_to", None)
+    if goto in PAGES and goto != nav.url_path:
+        st.switch_page(PAGES[goto])
+
+    # brand lives in the sidebar; the page headline names the page, so the
+    # same "NBA Insights" wordmark no longer eats the top of all six pages
+    st.sidebar.title("🏀 NBA Insights")
     st.sidebar.caption(
         "Data: stats.nba.com via nba_api. Responses are cached locally; "
         "current-season data refreshes daily."
     )
+    st.title(f"{nav.icon} {nav.title}")
     nav.run()
 
 

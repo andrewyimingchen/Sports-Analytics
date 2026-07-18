@@ -51,3 +51,34 @@ def career_per_game(season_totals: pd.DataFrame, stats: list[str] | None = None)
     for stat in stats:
         out[stat] = (df[stat] / df["GP"]).round(1)
     return out
+
+
+# career average = summed makes/attempts (percentages) or summed counts over
+# total games; the parts are stats.nba.com season-total columns
+_CAREER_COUNT = ["MIN", "PTS", "AST", "REB", "STL", "BLK", "TOV"]
+_CAREER_PCT = {"FG_PCT": ("FGM", "FGA"), "FG3_PCT": ("FG3M", "FG3A"), "FT_PCT": ("FTM", "FTA")}
+
+
+def career_averages(season_totals: pd.DataFrame) -> pd.Series:
+    """Career per-game averages and shooting percentages from season totals.
+
+    Sums across seasons — deduping the per-team + TOT rows a mid-season
+    trade creates by keeping the highest-GP row per season — and divides
+    counting stats by total games; shooting percentages are aggregate makes
+    over attempts, so a career FG% weights each season by volume. Returns a
+    Series keyed by stats.nba.com codes (GP, PTS, …, FG_PCT). Raises KeyError
+    when GP is missing.
+    """
+    if "GP" not in season_totals.columns:
+        raise KeyError("season totals missing GP")
+    df = season_totals[season_totals["GP"] > 0].copy()
+    df = df.sort_values("GP", ascending=False).drop_duplicates("SEASON_ID")
+    gp = int(df["GP"].sum())
+    out: dict[str, float] = {"GP": gp}
+    for stat in _CAREER_COUNT:
+        if stat in df.columns and gp:
+            out[stat] = round(float(df[stat].sum()) / gp, 1)
+    for pct, (made, att) in _CAREER_PCT.items():
+        if made in df.columns and att in df.columns and float(df[att].sum()):
+            out[pct] = round(float(df[made].sum()) / float(df[att].sum()), 3)
+    return pd.Series(out)

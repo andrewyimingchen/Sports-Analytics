@@ -5,7 +5,13 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from nba_insights.analysis import attach_salary, salary_seasons, team_payroll
+from nba_insights.analysis import (
+    attach_salary,
+    player_contract,
+    salary_seasons,
+    team_contracts,
+    team_payroll,
+)
 from nba_insights.analysis.salaries import normalize_name
 from nba_insights.ingest.salaries import parse_contracts
 
@@ -76,3 +82,22 @@ def test_team_payroll_sums_nearest_season():
     assert payroll["DEN"] == 59033114.0
     assert payroll["BKN"] == 12000000.0
     assert payroll.index[0] == "DEN"  # largest first
+
+
+def test_player_contract_looks_up_by_normalized_name():
+    contracts = parse_contracts(PAGE)
+    row = player_contract(contracts, "Nikola Jokic")  # no diacritic
+    assert row["2026-27"] == 59033114.0
+    assert row["GUARANTEED"] == 59033114.0
+    with pytest.raises(KeyError, match="Nobody"):
+        player_contract(contracts, "Nobody")
+
+
+def test_team_contracts_sorts_book_by_nearest_season():
+    book = team_contracts(parse_contracts(PAGE), "BKN")
+    assert list(book["PLAYER_NAME"]) == ["Big Spender Jr.", "Cheap Guy"]  # largest first
+    assert book.loc[1, "2027-28"] == 2100000.0
+    assert "GUARANTEED" in book.columns
+    assert team_contracts(parse_contracts(PAGE), "LAL").empty
+    with pytest.raises(KeyError):
+        team_contracts(parse_contracts(PAGE).drop(columns=["TEAM_ABBREVIATION"]), "BKN")
