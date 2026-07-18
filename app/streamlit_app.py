@@ -23,8 +23,10 @@ from nba_insights.analysis import (
     career_averages,
     career_per_game,
     draft_class,
+    filter_players,
     hex_bins,
     league_leaders,
+    per_minutes_table,
     percentile_ranks,
     player_contract,
     player_draft_line,
@@ -2159,6 +2161,111 @@ def teams_page(client: NBAClient) -> None:
                     open_team(str(id_to_tri.loc[team_id]))
 
 
+# Explore page column presets (raw stat codes). Base columns always lead.
+_EXPLORE_BASE = ["PLAYER_NAME", "TEAM_ABBREVIATION", "GP", "MIN"]
+_EXPLORE_GROUPS = {
+    "Scoring": ["PTS", "FGA", "FG_PCT", "FG3M", "FG3A", "FG3_PCT", "FTA", "FT_PCT"],
+    "Playmaking": ["PTS", "AST", "TOV"],
+    "Rebounding & defense": ["REB", "OREB", "DREB", "STL", "BLK", "PF"],
+    "Impact": ["PTS", "NET_RATING", "CLUTCH_NET_RATING", "DPM", "O_DPM", "D_DPM", "PLUS_MINUS"],
+    "Everything": [
+        "PTS", "REB", "AST", "STL", "BLK", "TOV", "FG_PCT", "FG3_PCT", "FT_PCT",
+        "FG3M", "NET_RATING", "CLUTCH_NET_RATING", "DPM", "PLUS_MINUS",
+    ],
+}
+_EXPLORE_PCT = ("FG_PCT", "FG3_PCT", "FT_PCT")
+_EXPLORE_SIGNED = ("NET_RATING", "CLUTCH_NET_RATING", "DPM", "O_DPM", "D_DPM", "PLUS_MINUS")
+
+
+def explore_page(client: NBAClient) -> None:
+    """The master table: every player, sortable and filterable — the
+    exploration backbone the leaderboards can only hint at."""
+    st.caption(
+        "Every player, sortable and filterable. Sort by clicking a column header; "
+        "click a row to open that player's profile."
+    )
+    ctrl = st.columns([2, 2, 3])
+    season = ctrl[0].selectbox("Season", seasons_since(), key="explore_season")
+    is_current = season == current_season()
+    mode = ctrl[1].radio("Rate", ["Per game", "Per 36 min"], horizontal=True, key="explore_mode")
+    group = ctrl[2].radio(
+        "Columns", list(_EXPLORE_GROUPS), horizontal=True, key="explore_group"
+    )
+    try:
+        with st.spinner("Loading the league table (first view fetches live)…"):
+            league = league_with_ratings(client, None if is_current else season)
+    except Exception as e:
+        st.error(f"Could not load league stats: {e}")
+        return
+    if league.empty:
+        st.info(f"No league stats for {season} yet.")
+        return
+    if mode == "Per 36 min":
+        league = per_minutes_table(league, 36)
+
+    flt = st.columns([1, 1, 2, 2])
+    max_gp = int(league["GP"].max()) if "GP" in league.columns and len(league) else 1
+    min_gp = flt[0].slider("Min games", 0, max(1, max_gp), 0, key="explore_gp")
+    max_min = float(league["MIN"].max()) if "MIN" in league.columns and len(league) else 1.0
+    min_min = flt[1].slider(
+        "Min minutes/game", 0.0, max(1.0, round(max_min, 0)), 0.0, step=1.0, key="explore_min"
+    )
+    all_teams = (
+        sorted(league["TEAM_ABBREVIATION"].dropna().unique())
+        if "TEAM_ABBREVIATION" in league.columns
+        else []
+    )
+    pick_teams = flt[2].multiselect("Teams", all_teams, key="explore_teams")
+    name_q = flt[3].text_input("Player name contains", key="explore_name")
+
+    filtered = filter_players(
+        league, min_gp=min_gp, min_min=min_min,
+        teams=pick_teams or None, name_query=name_q,
+    )
+    cols = _EXPLORE_BASE + [
+        c for c in _EXPLORE_GROUPS[group]
+        if c in filtered.columns and c not in _EXPLORE_BASE
+    ]
+    cols = [c for c in cols if c in filtered.columns]
+    view = filtered[cols].reset_index(drop=True)
+    display = view.copy()
+    for c in _EXPLORE_PCT:  # fractions -> percentages, like the rest of the app
+        if c in display.columns:
+            display[c] = display[c] * 100
+
+    st.caption(f"{len(view)} players.")
+    colcfg: dict = {}
+    if "GP" in display.columns:
+        colcfg["GP"] = st.column_config.NumberColumn(format="%d")
+    for c in display.columns:
+        if c in _EXPLORE_SIGNED:
+            colcfg[c] = st.column_config.NumberColumn(format="%+.1f")
+        elif c not in ("PLAYER_NAME", "TEAM_ABBREVIATION", "GP"):
+            colcfg[c] = st.column_config.NumberColumn(format="%.1f")
+    event = st.dataframe(
+        display.rename(columns=STAT_LABELS),
+        width="stretch",
+        hide_index=True,
+        height=560,
+        on_select="rerun",
+        selection_mode="single-row",
+        key="explore_table",
+        column_config={STAT_LABELS.get(k, k): v for k, v in colcfg.items()},
+    )
+    if event.selection.rows:
+        open_profile(str(view.iloc[event.selection.rows[0]]["PLAYER_NAME"]))
+    st.download_button(
+        "Download CSV",
+        display.to_csv(index=False).encode(),
+        file_name=f"nba_{season}_{mode.replace(' ', '')}.csv",
+        mime="text/csv",
+    )
+    st.caption(
+        "Per-36 rescales counting stats by minutes; percentages and ratings are "
+        "unchanged. DPM is DARKO daily plus-minus (current season)."
+    )
+
+
 def home_page(client: NBAClient) -> None:
     """League pulse: the app opens with content, not an empty search box."""
     head = st.columns([5, 1])
@@ -2406,6 +2513,9 @@ def main() -> None:
     )
     PAGES["profile"] = st.Page(
         lambda: profile_page(client), title="Player profile", icon="🏀", url_path="profile"
+    )
+    PAGES["explore"] = st.Page(
+        lambda: explore_page(client), title="Explore stats", icon="🔎", url_path="explore"
     )
     PAGES["compare"] = st.Page(
         lambda: compare_page(client), title="Compare players", icon="⚖️", url_path="compare"
