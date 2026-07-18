@@ -17,6 +17,11 @@ dependencies = [
     "uvicorn>=0.30",
 ]
 
+[project.optional-dependencies]
+# AI Q&A ("Ask" page) — optional so the core app stays free and offline.
+# Enable with `uv sync --extra ai` and set ANTHROPIC_API_KEY.
+ai = ["anthropic>=0.69"]
+
 [dependency-groups]
 dev = [
     "httpx>=0.28.1",
