@@ -7,6 +7,10 @@ from nba_insights.analysis.leaders import league_leaders
 from nba_insights.analysis.lineups import most_used_lineups
 from nba_insights.analysis.onoff import team_on_off
 from nba_insights.analysis.percentiles import percentile_ranks
+from nba_insights.analysis.positions import (
+    infer_positions,
+    positional_percentile_ranks,
+)
 from nba_insights.analysis.ratings import attach_dpm, attach_ratings
 from nba_insights.analysis.salaries import (
     attach_salary,
@@ -35,11 +39,13 @@ __all__ = [
     "filter_players",
     "game_log_table",
     "hex_bins",
+    "infer_positions",
     "league_leaders",
     "most_used_lineups",
     "per_minutes_table",
     "percentile_ranks",
     "player_contract",
+    "positional_percentile_ranks",
     "player_draft_line",
     "player_scouting_take",
     "rolling_form",

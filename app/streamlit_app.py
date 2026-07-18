@@ -33,6 +33,7 @@ from nba_insights.analysis import (
     player_contract,
     player_draft_line,
     player_scouting_take,
+    positional_percentile_ranks,
     rolling_form,
     salary_seasons,
     scoreboard,
@@ -564,7 +565,7 @@ def shot_breakdown_fig(breakdown: pd.DataFrame) -> go.Figure:
     return fig
 
 
-def percentile_chart(ranks: pd.Series) -> go.Figure:
+def percentile_chart(ranks: pd.Series, title: str | None = None) -> go.Figure:
     # a full bar to 100 crushes a star's every-stat-elite profile into a wall
     # of near-full bars; a dot on a 0–100 track discriminates by position, so
     # 96 vs 88 reads at a glance, and the dot's color says above/below median
@@ -599,7 +600,7 @@ def percentile_chart(ranks: pd.Series) -> go.Figure:
             hovertemplate="%{x:.0f}th percentile<extra></extra>",
         )
     )
-    fig = base_layout(fig, f"League percentile, {current_season()}")
+    fig = base_layout(fig, title or f"League percentile, {current_season()}")
     fig.add_vline(x=50, line_dash="dot", line_color=PAL["muted"], line_width=1)
     fig.add_annotation(
         x=50, y=1.02, yref="paper", text="league median", showarrow=False,
@@ -1319,17 +1320,33 @@ def percentile_section(client: NBAClient, player: dict, seasons: list[str]) -> N
     if not options:
         st.caption("League percentile ranks cover seasons from 1996-97 onward.")
         return
-    season = st.selectbox("Percentile season", list(reversed(options)), key="pct_season")
+    head = st.columns([3, 2])
+    season = head[0].selectbox("Percentile season", list(reversed(options)), key="pct_season")
+    scope = head[1].radio(
+        "Compare against", ["League", "Position"], horizontal=True, key="pct_scope"
+    )
     try:
         league = league_with_ratings(client, None if season == current_season() else season)
-        ranks = percentile_ranks(league, player["full_name"]).rename(STAT_LABELS)
+        if scope == "Position":
+            raw, group = positional_percentile_ranks(league, player["full_name"])
+            ranks = raw.rename(STAT_LABELS)
+            title = f"Percentile vs {group}s, {season}"
+        else:
+            ranks = percentile_ranks(league, player["full_name"]).rename(STAT_LABELS)
+            title = f"League percentile, {season}"
     except KeyError:
-        st.caption(f"Not enough games in {season} for league percentile ranks.")
+        st.caption(f"Not enough games in {season} for percentile ranks.")
         return
     except Exception as e:
         st.caption(f"Percentiles unavailable: {e}")
         return
-    st.plotly_chart(percentile_chart(ranks), width="stretch", key="profile_pct")
+    st.plotly_chart(percentile_chart(ranks, title=title), width="stretch", key="profile_pct")
+    if scope == "Position":
+        st.caption(
+            f"Ranked against other {group}s. Position is inferred from role stats "
+            "(rebounding, blocks, assists, shot profile), so it's a rough grouping — "
+            "a playmaking or stretch big may straddle two positions."
+        )
 
 
 # stats where a smaller number wins the row
