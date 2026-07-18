@@ -1,5 +1,6 @@
 from nba_insights.analysis.compare import comparison_table
 from nba_insights.analysis.draft import draft_class, player_draft_line
+from nba_insights.analysis.explore import filter_players, per_minutes_table
 from nba_insights.analysis.insights import player_scouting_take, team_scouting_take
 from nba_insights.analysis.leaders import league_leaders
 from nba_insights.analysis.onoff import team_on_off
@@ -28,8 +29,10 @@ __all__ = [
     "career_per_game",
     "comparison_table",
     "draft_class",
+    "filter_players",
     "hex_bins",
     "league_leaders",
+    "per_minutes_table",
     "percentile_ranks",
     "player_contract",
     "player_draft_line",
