@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent))  # sibling modules (methodology, 
 
 from nba_insights import serve
 from nba_insights.analysis import (
+    COLUMN_GLOSSARY,
     attach_salary,
     career_averages,
     career_per_game,
@@ -34,6 +35,7 @@ from nba_insights.analysis import (
     player_draft_line,
     player_scouting_take,
     positional_percentile_ranks,
+    query_players,
     rolling_form,
     salary_seasons,
     scoreboard,
@@ -2458,6 +2460,116 @@ def explore_page(client: NBAClient) -> None:
     )
 
 
+def ask_page(client: NBAClient) -> None:
+    """Natural-language Q&A over the league table, answered by Claude through
+    a single structured query tool (no LLM-generated code runs). Gated: needs
+    the optional `anthropic` package and an Anthropic credential."""
+    import os
+
+    st.caption("Ask about this season in plain English — answered over the live league table.")
+    try:
+        import anthropic
+        from anthropic import beta_tool
+    except ImportError:
+        st.info(
+            "The Ask page needs the optional `anthropic` package. Install it with "
+            "`uv sync --extra ai`, set `ANTHROPIC_API_KEY`, then reload."
+        )
+        return
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        st.info(
+            "Set `ANTHROPIC_API_KEY` in your environment (or run `ant auth login`) "
+            "to enable AI answers. Your other pages work without it."
+        )
+
+    question = st.text_input(
+        "Ask a question",
+        placeholder="e.g. Who leads the league in assists among 30+ minute players?",
+        key="ask_q",
+    )
+    st.caption(
+        "Try: “Best 3-point shooters with 5+ makes a game”, “Which players average a "
+        "20-10?”, “Highest net rating among 30-minute players”."
+    )
+    if not question:
+        return
+
+    league = league_with_ratings(client)
+    glossary = "\n".join(f"- {c}: {d}" for c, d in COLUMN_GLOSSARY.items())
+
+    @beta_tool
+    def query_league(
+        filters: dict | None = None,
+        name_contains: str = "",
+        teams: list | None = None,
+        sort_by: str = "",
+        ascending: bool = False,
+        top_n: int = 10,
+        columns: list | None = None,
+    ) -> str:
+        """Query this season's per-player league table and return JSON rows.
+
+        Args:
+            filters: column -> minimum value; keeps rows meeting every floor,
+                e.g. {"MIN": 30, "AST": 5} for 30+ minutes and 5+ assists.
+            name_contains: case-insensitive substring match on player name.
+            teams: team tricodes to keep, e.g. ["LAL", "BOS"].
+            sort_by: column to order by (descending unless ascending is true).
+            ascending: sort ascending instead of descending.
+            top_n: maximum number of rows to return.
+            columns: which columns to include in each returned row.
+        """
+        import json
+
+        return json.dumps(
+            query_players(
+                league,
+                filters=filters,
+                name_contains=name_contains,
+                teams=teams or None,
+                sort_by=sort_by or None,
+                ascending=ascending,
+                top_n=top_n,
+                columns=columns,
+            )
+        )
+
+    system = (
+        f"You answer NBA questions for the {current_season()} season using ONLY the "
+        "query_league tool over the cached league table. Never invent numbers — call the "
+        "tool and cite what it returns. Percentages come back as fractions (0.48 means "
+        "48%); present them as percentages. Keep answers short and direct. Available "
+        "columns:\n" + glossary
+    )
+    model = os.environ.get("NBA_ASK_MODEL", "claude-opus-4-8")
+    try:
+        with st.spinner("Thinking…"):
+            runner = anthropic.Anthropic().beta.messages.tool_runner(
+                model=model,
+                max_tokens=2048,
+                system=system,
+                tools=[query_league],
+                messages=[{"role": "user", "content": question}],
+            )
+            final = None
+            for message in runner:
+                final = message
+        answer = (
+            "".join(b.text for b in final.content if b.type == "text") if final else ""
+        )
+        st.markdown(answer or "_(no answer produced)_")
+    except anthropic.AuthenticationError:
+        st.warning(
+            "No Anthropic credential found. Set `ANTHROPIC_API_KEY` or run `ant auth login`."
+        )
+    except Exception as e:
+        st.error(f"Could not answer: {e}")
+    st.caption(
+        f"Answered by {model}. Numbers are pulled from the cached stats.nba.com league "
+        "table; the wording is the model's — verify anything important."
+    )
+
+
 def home_page(client: NBAClient) -> None:
     """League pulse: the app opens with content, not an empty search box."""
     head = st.columns([5, 1])
@@ -2720,6 +2832,9 @@ def main() -> None:
     )
     PAGES["games"] = st.Page(
         lambda: games_page(client), title="Games", icon="📅", url_path="games"
+    )
+    PAGES["ask"] = st.Page(
+        lambda: ask_page(client), title="Ask (AI)", icon="💬", url_path="ask"
     )
     # Draft page hidden for now (owner request, 2026-07-17); the page code
     # stays so re-enabling is uncommenting this line.

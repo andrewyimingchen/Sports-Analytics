@@ -1,3 +1,4 @@
+from nba_insights.analysis.ask import COLUMN_GLOSSARY, query_players
 from nba_insights.analysis.compare import comparison_table
 from nba_insights.analysis.draft import draft_class, player_draft_line
 from nba_insights.analysis.explore import filter_players, per_minutes_table
@@ -29,6 +30,7 @@ from nba_insights.analysis.similarity import similar_players
 from nba_insights.analysis.trends import career_averages, career_per_game, rolling_form
 
 __all__ = [
+    "COLUMN_GLOSSARY",
     "attach_dpm",
     "attach_ratings",
     "attach_salary",
@@ -48,6 +50,7 @@ __all__ = [
     "positional_percentile_ranks",
     "player_draft_line",
     "player_scouting_take",
+    "query_players",
     "rolling_form",
     "salary_seasons",
     "scoreboard",
