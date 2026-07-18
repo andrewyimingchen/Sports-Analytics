@@ -36,6 +36,7 @@ from nba_insights.analysis import (
     player_contract,
     player_draft_line,
     player_scouting_take,
+    player_splits,
     positional_percentile_ranks,
     query_players,
     rolling_form,
@@ -1060,6 +1061,51 @@ def contract_section(player: dict, contracts: pd.DataFrame | None) -> None:
     )
 
 
+# split dimension -> (menu label, help caption)
+_SPLIT_CHOICES = {
+    "Home / Away": "home_away",
+    "By month": "month",
+    "By rest": "rest",
+    "By opponent": "opponent",
+}
+_SPLIT_PCT = {"FG_PCT": "FG%", "FG3_PCT": "3P%", "FT_PCT": "FT%"}
+
+
+def splits_section(log: pd.DataFrame) -> None:
+    """Situational splits — home/away, monthly, by rest, by opponent — reshaped
+    from the game log the profile already loaded."""
+    st.subheader("Splits")
+    st.caption("How the season breaks down by situation. Shooting % is aggregate, not per-game.")
+    choice = st.radio(
+        "Split by", list(_SPLIT_CHOICES), horizontal=True, label_visibility="collapsed",
+        key="splits_dim",
+    )
+    try:
+        table = player_splits(log, _SPLIT_CHOICES[choice])
+    except Exception as e:
+        st.caption(f"Splits unavailable: {e}")
+        return
+    if table.empty:
+        st.caption("Not enough games for this split yet.")
+        return
+    # show shooting fractions as percentage points (0.482 -> 48.2)
+    show = table.rename(columns={**STAT_LABELS, **_SPLIT_PCT, "FG3M": "3PM", "PLUS_MINUS": "+/-"})
+    for pct in _SPLIT_PCT.values():
+        if pct in show.columns:
+            show[pct] = (show[pct] * 100).round(1)
+    st.dataframe(
+        show,
+        width="stretch",
+        hide_index=True,
+        height=min(430, 44 + 36 * len(show)),
+        column_config={
+            "Split": st.column_config.TextColumn(width="medium"),
+            "+/-": st.column_config.NumberColumn(format="%+.1f"),
+            **{p: st.column_config.NumberColumn(format="%.1f%%") for p in _SPLIT_PCT.values()},
+        },
+    )
+
+
 @st.fragment
 def season_detail(client: NBAClient, player: dict, seasons: list[str]) -> None:
     """Season-scoped charts; a fragment so switching season or stat only
@@ -1094,6 +1140,7 @@ def season_detail(client: NBAClient, player: dict, seasons: list[str]) -> None:
                         "+/-": st.column_config.NumberColumn(format="%+d"),
                     },
                 )
+            splits_section(log)
     except Exception as e:
         st.error(f"Could not load game log: {e}")
 
