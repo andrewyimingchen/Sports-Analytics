@@ -24,6 +24,10 @@ A Streamlit app in seven pages:
 - **Predictions** — game outcome probabilities, a 10,000-run Monte Carlo game
   simulator (margin/total distributions), player points projections with 80%
   intervals, and starting-five estimates
+- **Season outlook** — a 5,000-run Monte Carlo of the coming season from
+  offseason-regressed Elo: projected standings (win totals with 10–90%
+  bands, playoff/top-6/#1-seed odds) and postseason odds (conference finals,
+  Finals, championship)
 - **Methodology** — how every model is built, judged, and what was rejected
 
 Built on the official-ish [`nba_api`](https://github.com/swar/nba_api)

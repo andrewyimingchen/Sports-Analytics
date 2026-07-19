@@ -23,6 +23,23 @@ def _expected_home(elo_home: float, elo_away: float) -> float:
     return 1.0 / (1.0 + 10 ** (-(elo_home + HOME_ADV - elo_away) / 400.0))
 
 
+def win_prob(elo_a, elo_b, hca: float = 0.0):
+    """P(team A beats team B), giving A an *hca*-point edge (Elo points).
+
+    Scalar or numpy-array in, same out — the season simulator calls it with
+    whole arrays of ratings. Pass ``hca=HOME_ADV`` when A is at home, its
+    negative when A is on the road, and 0 for a neutral floor.
+    """
+    return 1.0 / (1.0 + 10 ** (-((elo_a - elo_b) + hca) / 400.0))
+
+
+def regress_to_mean(elo, carry: float = CARRY):
+    """Pull ratings toward the mean by the off-season share, as the update
+    loop does at every season boundary. Use it to age end-of-season ratings
+    into opening-night ratings for the next season."""
+    return carry * elo + (1 - carry) * BASE
+
+
 def _mov_multiplier(margin: float, elo_winner_diff: float) -> float:
     return ((abs(margin) + 3) ** 0.8) / (7.5 + 0.006 * elo_winner_diff)
 
