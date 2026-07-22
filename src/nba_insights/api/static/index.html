@@ -3,210 +3,1173 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#fcfcfb" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#1a1a19" media="(prefers-color-scheme: dark)">
-<title>NBA Insights</title>
+<meta name="theme-color" content="#0a0c0f">
+<meta name="description" content="NBA player intelligence, matchup probabilities, and transparent basketball models.">
+<title>NBA Insights — Basketball, explained by the numbers</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.svg">
 <link rel="apple-touch-icon" href="icon.svg">
 <style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&family=Oswald:wght@500;600;700&display=swap');
+
 :root {
-  color-scheme: light dark;
-  --surface: #fcfcfb; --plane: #f9f9f7; --ink: #0b0b0b; --ink-2: #52514e;
-  --muted: #898781; --grid: #e1e0d9; --accent: #2a78d6; --accent-2: #1baf7a;
-  --ring: rgba(11,11,11,.10);
-}
-@media (prefers-color-scheme: dark) {
-  :root {
-    --surface: #1a1a19; --plane: #0d0d0d; --ink: #ffffff; --ink-2: #c3c2b7;
-    --grid: #2c2c2a; --accent: #3987e5; --accent-2: #199e70;
-    --ring: rgba(255,255,255,.10);
-  }
+  --night: #0a0c0f; --night-2: #101318; --panel: #15191f; --panel-2: #1a1f27;
+  --line: #2a3039; --line-soft: rgba(255,255,255,.075); --paper: #f2f0e9;
+  --muted: #979da8; --muted-2: #6f7681; --orange: #ff5c35; --orange-2: #ff815f;
+  --lime: #c7ff4a; --blue: #7ab8ff; --red: #ff786d; --radius: 18px;
+  --display: "Oswald", Impact, sans-serif; --body: "Manrope", system-ui, sans-serif;
+  --mono: "DM Mono", ui-monospace, monospace;
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--plane); color: var(--ink);
-       font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-       padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
-header { padding: 16px 16px 8px; }
-h1 { margin: 0; font-size: 1.3rem; }
-h1 small { color: var(--muted); font-weight: 400; font-size: .8rem; margin-left: 6px; }
-main { padding: 0 16px; max-width: 480px; margin: 0 auto; }
-.card { background: var(--surface); border-radius: 14px; padding: 16px;
-        box-shadow: 0 0 0 1px var(--ring); margin: 12px 0; }
-input[type=search], select, button.primary {
-  width: 100%; padding: 12px; border-radius: 10px; font-size: 1rem;
-  border: 1px solid var(--grid); background: var(--surface); color: var(--ink);
+html { scroll-behavior: smooth; }
+body { margin: 0; min-width: 320px; background: var(--night); color: var(--paper);
+  font-family: var(--body); -webkit-font-smoothing: antialiased; }
+button, input, select { font: inherit; }
+button { color: inherit; }
+button, a { -webkit-tap-highlight-color: transparent; }
+.skip { position: fixed; left: 12px; top: -60px; z-index: 100; background: var(--lime);
+  color: var(--night); padding: 10px 14px; border-radius: 8px; font-weight: 700; }
+.skip:focus { top: 12px; }
+
+/* Shell */
+.topbar { position: sticky; top: 0; z-index: 30; height: 74px; display: flex;
+  align-items: center; padding: 0 clamp(20px, 4vw, 64px); border-bottom: 1px solid var(--line-soft);
+  background: rgba(10,12,15,.88); backdrop-filter: blur(20px); }
+.brand { display: flex; align-items: center; gap: 12px; min-width: 230px; }
+.brand-mark { width: 36px; height: 36px; border-radius: 50%; background: var(--orange);
+  color: #111; display: grid; place-items: center; font: 700 16px var(--display);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.25); position: relative; overflow: hidden; }
+.brand-mark::before, .brand-mark::after { content: ""; position: absolute; background: #111; opacity: .65; }
+.brand-mark::before { width: 1px; height: 100%; transform: rotate(36deg); }
+.brand-mark::after { width: 100%; height: 1px; transform: rotate(-12deg); }
+.brand-name { font: 600 20px var(--display); text-transform: uppercase; letter-spacing: .035em; }
+.brand-name span { color: var(--orange); }
+.desktop-nav { display: flex; align-items: center; gap: 4px; margin: auto; }
+.nav-link { border: 0; background: transparent; color: var(--muted); padding: 11px 15px;
+  border-radius: 9px; cursor: pointer; font-size: 13px; font-weight: 700; }
+.nav-link:hover { color: var(--paper); background: rgba(255,255,255,.045); }
+.nav-link.active { color: var(--paper); background: var(--panel-2); }
+.live-status { min-width: 230px; display: flex; justify-content: flex-end; align-items: center;
+  gap: 9px; color: var(--muted); font: 500 10px var(--mono); text-transform: uppercase; letter-spacing: .08em; }
+.live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--lime);
+  box-shadow: 0 0 0 4px rgba(199,255,74,.1), 0 0 14px rgba(199,255,74,.4); }
+.page { display: none; min-height: calc(100vh - 74px); }
+.page.active { display: block; animation: reveal .35s ease both; }
+@keyframes reveal { from { opacity: 0; transform: translateY(5px); } }
+.wrap { width: min(1400px, calc(100% - clamp(32px, 7vw, 112px))); margin: 0 auto; }
+.eyebrow { font: 500 10px var(--mono); color: var(--orange-2); letter-spacing: .14em;
+  text-transform: uppercase; display: flex; align-items: center; gap: 9px; }
+.eyebrow::before { content: ""; width: 18px; height: 1px; background: currentColor; }
+.section-title { margin: 12px 0 0; font: 600 clamp(32px, 5vw, 68px)/.98 var(--display);
+  letter-spacing: -.025em; text-transform: uppercase; }
+.section-copy { color: var(--muted); font-size: 14px; line-height: 1.75; max-width: 590px; }
+.mono { font-family: var(--mono); }
+
+/* Overview hero */
+.hero { min-height: 610px; display: grid; grid-template-columns: minmax(0,1.15fr) minmax(420px,.85fr);
+  gap: clamp(32px,6vw,100px); align-items: center; padding: 78px 0 70px; position: relative; }
+.hero::before { content: ""; position: absolute; z-index: -1; width: 48vw; height: 48vw;
+  right: -18vw; top: -12vw; border: 1px solid rgba(255,92,53,.15); border-radius: 50%;
+  box-shadow: 0 0 0 70px rgba(255,92,53,.025), 0 0 0 140px rgba(255,92,53,.015); }
+.hero h1 { margin: 20px 0 23px; font: 600 clamp(58px,8.6vw,132px)/.84 var(--display);
+  text-transform: uppercase; letter-spacing: -.05em; max-width: 900px; }
+.hero h1 .stroke { color: transparent; -webkit-text-stroke: 1.5px var(--paper); }
+.hero h1 .accent { color: var(--orange); }
+.hero-copy { max-width: 580px; color: #b8bcc4; line-height: 1.8; font-size: 15px; }
+.hero-actions { display: flex; gap: 11px; margin-top: 32px; flex-wrap: wrap; }
+.btn { border: 1px solid var(--line); background: var(--panel); padding: 13px 18px;
+  border-radius: 10px; cursor: pointer; font-size: 12px; font-weight: 700; display: inline-flex;
+  gap: 16px; align-items: center; text-decoration: none; transition: .2s ease; }
+.btn:hover { transform: translateY(-2px); border-color: #525a66; }
+.btn-primary { border-color: var(--orange); background: var(--orange); color: #111; }
+.btn-primary:hover { background: var(--orange-2); }
+.hero-desk { background: linear-gradient(145deg, #191e25, #11151a); border: 1px solid var(--line);
+  border-radius: 24px; padding: 8px; transform: rotate(1.5deg); box-shadow: 0 38px 90px rgba(0,0,0,.38); }
+.desk-inner { border-radius: 17px; background: #0c0f13; overflow: hidden; }
+.desk-head { height: 45px; padding: 0 15px; display: flex; align-items: center;
+  justify-content: space-between; border-bottom: 1px solid var(--line-soft); }
+.traffic { display: flex; gap: 5px; }.traffic i { width: 6px; height: 6px; border-radius: 50%; background: #3c424b; }
+.desk-head span { color: var(--muted-2); font: 9px var(--mono); letter-spacing: .08em; }
+.spotlight { padding: 22px; display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 15px; }
+.spotlight .label { color: var(--orange-2); font: 10px var(--mono); text-transform: uppercase; }
+.spotlight h2 { font: 600 34px/1 var(--display); text-transform: uppercase; margin: 7px 0; }
+.spotlight p { color: var(--muted); font-size: 11px; margin: 0; }
+.score-ring { width: 88px; height: 88px; border: 8px solid var(--orange); border-left-color: #262c34;
+  border-radius: 50%; display: grid; place-items: center; transform: rotate(28deg); }
+.score-ring b { transform: rotate(-28deg); font: 600 26px var(--display); }
+.mini-chart { height: 145px; margin: 4px 22px 22px; border: 1px solid var(--line-soft);
+  border-radius: 12px; padding: 13px; position: relative; overflow: hidden;
+  background: repeating-linear-gradient(to bottom, transparent 0, transparent 32px, rgba(255,255,255,.045) 33px); }
+.mini-chart svg { width: 100%; height: 100%; overflow: visible; }
+.chart-note { position: absolute; right: 12px; top: 10px; color: var(--lime); font: 9px var(--mono); }
+.desk-stats { display: grid; grid-template-columns: repeat(3,1fr); border-top: 1px solid var(--line-soft); }
+.desk-stat { padding: 15px 18px; border-right: 1px solid var(--line-soft); }
+.desk-stat:last-child { border: 0; }.desk-stat b { display: block; font: 600 21px var(--display); }
+.desk-stat span { color: var(--muted-2); font: 8px var(--mono); text-transform: uppercase; }
+
+/* Capability band */
+.ticker { border-block: 1px solid var(--line-soft); background: #0d1014; overflow: hidden; }
+.ticker-track { display: flex; width: max-content; animation: ticker 26s linear infinite; }
+.ticker-row { display: flex; align-items: center; white-space: nowrap; padding: 13px 0; }
+.ticker-row span { color: #777e88; font: 500 10px var(--mono); text-transform: uppercase;
+  letter-spacing: .11em; display: flex; align-items: center; }
+.ticker-row span::after { content: "✦"; color: var(--orange); margin: 0 28px; }
+@keyframes ticker { to { transform: translateX(-50%); } }
+.feature-section { padding: 92px 0; }
+.section-head { display: flex; justify-content: space-between; align-items: end; gap: 32px; margin-bottom: 38px; }
+.cap-grid { display: grid; grid-template-columns: repeat(12,1fr); gap: 14px; }
+.cap-card { grid-column: span 4; min-height: 280px; background: var(--panel); border: 1px solid var(--line-soft);
+  border-radius: var(--radius); padding: 27px; display: flex; flex-direction: column; position: relative;
+  overflow: hidden; transition: border-color .2s, transform .2s; }
+.cap-card:hover { border-color: #414852; transform: translateY(-3px); }
+.cap-card.large { grid-column: span 7; }.cap-card.wide { grid-column: span 5; }
+.cap-number { font: 500 10px var(--mono); color: var(--orange-2); }
+.cap-card h3 { font: 600 28px/1.05 var(--display); text-transform: uppercase; margin: auto 0 11px; }
+.cap-card p { color: var(--muted); font-size: 12px; line-height: 1.7; margin: 0; max-width: 410px; }
+.cap-icon { position: absolute; right: 23px; top: 22px; width: 55px; height: 55px;
+  border: 1px solid var(--line); border-radius: 50%; display: grid; place-items: center; color: var(--lime); }
+.cap-visual { position: absolute; inset: 22px 25px auto auto; width: 46%; height: 120px; }
+.bars { height: 100%; display: flex; gap: 7px; align-items: end; }
+.bars i { flex: 1; border-radius: 3px 3px 0 0; background: #2a3039; position: relative; }
+.bars i::after { content: ""; position: absolute; inset: 38% 0 0; background: var(--orange); border-radius: inherit; }
+.principles { border-top: 1px solid var(--line-soft); padding: 25px 0 70px;
+  display: grid; grid-template-columns: repeat(4,1fr); gap: 20px; }
+.principle b { font: 500 10px var(--mono); color: var(--lime); }.principle h4 { margin: 7px 0;
+  font: 600 14px var(--body); }.principle p { margin: 0; color: var(--muted-2); font-size: 11px; line-height: 1.6; }
+
+/* App pages */
+.app-head { padding: 64px 0 35px; display: flex; justify-content: space-between; align-items: end; gap: 30px; }
+.app-head .section-title { font-size: clamp(48px,7vw,92px); }
+.app-meta { color: var(--muted-2); font: 10px/1.7 var(--mono); text-align: right; text-transform: uppercase; }
+.workspace { display: grid; grid-template-columns: minmax(270px,360px) minmax(0,1fr); gap: 16px; padding-bottom: 90px; }
+.panel { background: var(--panel); border: 1px solid var(--line-soft); border-radius: var(--radius); }
+.panel-pad { padding: 24px; }.panel-kicker { color: var(--muted-2); font: 500 9px var(--mono);
+  text-transform: uppercase; letter-spacing: .12em; margin-bottom: 13px; }
+.search-wrap { position: relative; }
+.search-wrap::before { content: "⌕"; position: absolute; left: 14px; top: 50%; transform: translateY(-54%);
+  font-size: 24px; color: var(--muted); }
+input[type=search], input[type=number], select { width: 100%; appearance: none; color: var(--paper); background: #0e1115;
+  border: 1px solid var(--line); border-radius: 10px; padding: 14px 14px; outline: 0; font-size: 13px; }
+textarea { width: 100%; resize: vertical; color: var(--paper); background: #0e1115; border: 1px solid var(--line);
+  border-radius: 10px; padding: 14px; outline: 0; font: 13px/1.6 var(--body); }
+input[type=search] { padding-left: 43px; }
+input:focus, select:focus { border-color: var(--orange); box-shadow: 0 0 0 3px rgba(255,92,53,.11); }
+.results { margin-top: 12px; max-height: 420px; overflow: auto; }
+.results button { width: 100%; border: 0; border-bottom: 1px solid var(--line-soft); background: transparent;
+  padding: 13px 7px; text-align: left; cursor: pointer; display: flex; justify-content: space-between;
+  align-items: center; font-size: 12px; }
+.results button:hover { color: var(--orange-2); padding-left: 11px; }
+.results button span { color: var(--muted-2); font: 9px var(--mono); }
+.search-hint { padding: 35px 6px 8px; color: var(--muted-2); font-size: 11px; line-height: 1.7; }
+.search-hint strong { color: var(--paper); display: block; margin-bottom: 4px; }
+.profile { min-height: 570px; overflow: hidden; }
+.empty-state { min-height: 570px; display: grid; place-items: center; text-align: center; padding: 40px; }
+.empty-orbit { width: 150px; height: 150px; border: 1px solid var(--line); border-radius: 50%;
+  display: grid; place-items: center; margin: 0 auto 25px; position: relative; }
+.empty-orbit::after { content: ""; width: 16px; height: 16px; border-radius: 50%; background: var(--orange);
+  position: absolute; top: 13px; right: 18px; box-shadow: 0 0 20px rgba(255,92,53,.45); }
+.empty-orbit span { font: 600 45px var(--display); color: #3b424c; }
+.empty-state h3 { font: 600 25px var(--display); text-transform: uppercase; margin: 0 0 8px; }
+.empty-state p { color: var(--muted); max-width: 330px; font-size: 12px; line-height: 1.65; }
+.profile-hero { min-height: 235px; display: grid; grid-template-columns: minmax(180px,260px) 1fr;
+  background: radial-gradient(circle at 16% 100%, rgba(255,92,53,.25), transparent 44%), #11151a;
+  border-bottom: 1px solid var(--line-soft); position: relative; }
+.player-photo { align-self: end; width: 100%; height: 220px; object-fit: contain; object-position: bottom; filter: saturate(.8); }
+.player-fallback { align-self: center; justify-self: center; font: 600 76px var(--display); color: var(--orange); }
+.profile-identity { align-self: center; padding: 30px 34px 30px 15px; }
+.profile-identity .season { color: var(--orange-2); font: 10px var(--mono); text-transform: uppercase; }
+.profile-identity h2 { margin: 7px 0 12px; font: 600 clamp(38px,5vw,67px)/.92 var(--display);
+  text-transform: uppercase; letter-spacing: -.035em; }
+.profile-identity p { color: var(--muted); margin: 0; font-size: 11px; }
+.profile-body { padding: 25px; }
+.stat-grid { display: grid; grid-template-columns: repeat(6,1fr); border: 1px solid var(--line-soft); border-radius: 13px; overflow: hidden; }
+.stat { min-width: 0; padding: 16px; border-right: 1px solid var(--line-soft); }.stat:last-child { border: 0; }
+.stat b { font: 600 27px var(--display); display: block; }.stat span { color: var(--muted-2);
+  font: 8px var(--mono); text-transform: uppercase; white-space: nowrap; }
+.profile-lower { display: grid; grid-template-columns: 1.1fr .9fr; gap: 25px; margin-top: 28px; }
+.subhead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.subhead h3 { margin: 0; font: 600 18px var(--display); text-transform: uppercase; }
+.subhead span { color: var(--muted-2); font: 8px var(--mono); }
+.pct-row { display: grid; grid-template-columns: 80px 1fr 28px; gap: 10px; align-items: center; margin: 10px 0; }
+.pct-row label { color: var(--muted); font: 9px var(--mono); overflow: hidden; text-overflow: ellipsis; }
+.track { height: 5px; background: #292f37; border-radius: 5px; overflow: hidden; }
+.fill { height: 100%; background: var(--orange); border-radius: inherit; transform-origin: left; animation: grow .7s ease both; }
+@keyframes grow { from { transform: scaleX(0); } }
+.pct-row b { font: 500 9px var(--mono); text-align: right; }
+.career-list { border-left: 1px solid var(--line); padding-left: 16px; max-height: 220px; overflow: auto; }
+.career-row { display: grid; grid-template-columns: 1fr repeat(3,42px); gap: 7px; padding: 8px 0;
+  color: var(--muted); border-bottom: 1px solid var(--line-soft); font: 9px var(--mono); }
+.career-row.current { color: var(--paper); }.career-row b { color: var(--orange-2); font-weight: 500; }
+.profile-controls { margin: 26px 0 18px; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.profile-controls label { color: var(--muted-2); font: 8px var(--mono); text-transform: uppercase; }
+.profile-controls select { margin-top: 7px; }
+.deep-stack { display: grid; gap: 18px; margin-top: 26px; }
+.deep-panel { border-top: 1px solid var(--line-soft); padding-top: 24px; }
+.scouting-card { border-left: 3px solid var(--orange); background: rgba(255,92,53,.07);
+  padding: 15px 17px; border-radius: 0 10px 10px 0; font-size: 12px; line-height: 1.7; }
+.context-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 9px; margin-top: 14px; }
+.context-tile { background: #11151a; border: 1px solid var(--line-soft); border-radius: 10px; padding: 13px; }
+.context-tile b { display: block; font: 600 22px var(--display); }.context-tile span { color: var(--muted-2);
+  font: 8px var(--mono); text-transform: uppercase; }
+.shot-layout { display: grid; grid-template-columns: minmax(300px,1.2fr) minmax(220px,.8fr); gap: 18px; }
+.shot-court { width: 100%; min-height: 410px; border-radius: 12px; background: #0d1115;
+  border: 1px solid var(--line-soft); }
+.shot-key { display: flex; gap: 14px; color: var(--muted-2); font: 8px var(--mono); margin: 8px 0 0; }
+.shot-key i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }
+.zone-row, .contract-row { display: grid; grid-template-columns: 1fr 55px 55px 55px; gap: 8px;
+  align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line-soft); font: 9px var(--mono); }
+.zone-row b, .contract-row b { font: 500 10px var(--body); }.positive { color: var(--lime); }.negative-text { color: #ff6b6b; }
+.split-table { overflow-x: auto; }.split-row { min-width: 700px; display: grid;
+  grid-template-columns: minmax(125px,1fr) repeat(8,62px); gap: 8px; padding: 9px 6px;
+  border-bottom: 1px solid var(--line-soft); font: 9px var(--mono); }
+.split-row.header { color: var(--muted-2); text-transform: uppercase; }
+.analytics-note { color: var(--muted-2); font-size: 10px; line-height: 1.6; margin-top: 9px; }
+.team-sections { display: grid; gap: 25px; padding: 22px; }
+.team-section { border-top: 1px solid var(--line-soft); padding-top: 22px; }
+.factor-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 9px; }
+.team-data-row { display: grid; grid-template-columns: minmax(170px,1.5fr) repeat(5,minmax(60px,.6fr));
+  gap: 9px; padding: 10px 5px; border-bottom: 1px solid var(--line-soft); align-items: center; font: 9px var(--mono); }
+.team-data-row.header { color: var(--muted-2); text-transform: uppercase; }.team-data-row b { font: 500 10px var(--body); }
+.standings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+.prediction-tools { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; padding-bottom: 90px; }
+.prediction-tools .panel { min-width: 0; }
+.forecast-panel { padding: 24px; margin-bottom: 16px; }
+.forecast-summary { display: grid; grid-template-columns: repeat(3,1fr); gap: 9px; margin: 16px 0; }
+.forecast-conferences { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.forecast-table { overflow-x: auto; }
+.forecast-row { min-width: 760px; display: grid; grid-template-columns: 45px 55px 120px 65px repeat(3,1fr);
+  gap: 8px; align-items: center; padding: 8px 6px; border-bottom: 1px solid var(--line-soft); font: 9px var(--mono); }
+.forecast-row.header { color: var(--muted-2); text-transform: uppercase; }
+.forecast-row b { font: 600 12px var(--display); }.forecast-row span:not(:nth-child(2)) { text-align: right; }
+.player-forecast-row { min-width: 780px; display: grid; grid-template-columns: minmax(145px,1.5fr) 48px repeat(7,1fr);
+  gap: 8px; align-items: center; padding: 8px 6px; border-bottom: 1px solid var(--line-soft); font: 9px var(--mono); }
+.player-forecast-row.header { color: var(--muted-2); text-transform: uppercase; }
+.player-forecast-row b { font: 600 11px var(--body); }.player-forecast-row span:not(:first-child) { text-align: right; }
+.cup-row { min-width: 650px; display: grid; grid-template-columns: 42px 52px repeat(5,1fr);
+  gap: 8px; align-items: center; padding: 8px 6px; border-bottom: 1px solid var(--line-soft); font: 9px var(--mono); }
+.cup-row.header { color: var(--muted-2); text-transform: uppercase; }.cup-row b { font: 600 12px var(--display); }
+.cup-row span:not(:nth-child(2)) { text-align: right; }
+.lineup-slots { display: grid; gap: 8px; }
+.lineup-slot { display: grid; grid-template-columns: 58px minmax(0,1fr); gap: 8px; align-items: center; }
+.lineup-slot label { color: var(--muted-2); font: 8px var(--mono); text-transform: uppercase; }
+.result-card { margin-top: 16px; background: #0e1115; border: 1px solid var(--line-soft); border-radius: 11px; padding: 16px; }
+.result-card strong { display: block; font: 600 34px var(--display); color: var(--lime); }
+.histogram { height: 105px; display: flex; align-items: end; gap: 2px; margin-top: 14px; }
+.histogram i { flex: 1; min-width: 2px; background: var(--orange); opacity: .8; border-radius: 2px 2px 0 0; }
+.method-grid { display: grid; grid-template-columns: repeat(2,1fr); gap: 16px; padding-bottom: 80px; }
+.method-card { padding: 24px; }.method-card h3 { font: 600 24px var(--display); text-transform: uppercase; margin: 0 0 10px; }
+.method-card p, .method-card li { color: var(--muted); font-size: 11px; line-height: 1.7; }
+.ask-grid { display: grid; grid-template-columns: minmax(280px,.7fr) minmax(0,1.3fr); gap: 16px; padding-bottom: 90px; }
+.answer { padding: 28px; font-size: 13px; line-height: 1.8; white-space: pre-wrap; }
+
+/* Matchup lab */
+.match-grid { display: grid; grid-template-columns: minmax(300px,.65fr) minmax(430px,1.35fr); gap: 16px; padding-bottom: 90px; }
+.match-form { padding: 27px; }.match-form h3 { margin: 0 0 6px; font: 600 24px var(--display); text-transform: uppercase; }
+.match-form > p { color: var(--muted); margin: 0 0 25px; font-size: 11px; line-height: 1.6; }
+.field { margin-bottom: 15px; }.field label { display: block; color: var(--muted-2); font: 9px var(--mono);
+  text-transform: uppercase; letter-spacing: .1em; margin: 0 0 7px 2px; }
+.select-wrap { position: relative; }.select-wrap::after { content: "⌄"; pointer-events: none; position: absolute;
+  right: 13px; top: 50%; transform: translateY(-58%); color: var(--orange); }
+.predict-btn { margin-top: 8px; width: 100%; border: 0; padding: 14px; border-radius: 10px;
+  background: var(--orange); color: #111; cursor: pointer; font: 700 12px var(--body); }
+.predict-btn:hover { background: var(--orange-2); }.predict-btn:disabled { opacity: .5; cursor: wait; }
+.model-note { margin-top: 26px; padding-top: 19px; border-top: 1px solid var(--line-soft); }
+.model-note b { color: var(--lime); font: 500 9px var(--mono); text-transform: uppercase; }
+.model-note p { color: var(--muted-2); font-size: 10px; line-height: 1.7; margin: 8px 0 0; }
+.court-panel { min-height: 520px; overflow: hidden; position: relative;
+  background: radial-gradient(circle at 50% 105%, rgba(255,92,53,.18), transparent 47%), var(--panel); }
+.court-lines { position: absolute; left: 50%; bottom: -150px; transform: translateX(-50%); width: 620px;
+  height: 440px; border: 1px solid rgba(255,255,255,.07); border-radius: 50% 50% 0 0; }
+.court-lines::before { content: ""; position: absolute; width: 220px; height: 220px; border-radius: 50%;
+  border: 1px solid rgba(255,255,255,.07); left: 50%; top: -100px; transform: translateX(-50%); }
+.prediction-empty, .prediction-result { position: relative; z-index: 2; min-height: 520px; display: grid;
+  place-items: center; padding: 40px; text-align: center; }
+.prediction-empty .versus { font: 600 100px var(--display); color: #242a32; line-height: 1; }
+.prediction-empty h3 { font: 600 22px var(--display); text-transform: uppercase; margin: 10px 0; }
+.prediction-empty p { color: var(--muted); font-size: 11px; max-width: 330px; line-height: 1.7; }
+.match-label { color: var(--orange-2); font: 9px var(--mono); text-transform: uppercase; letter-spacing: .14em; }
+.team-row { width: 100%; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 20px; }
+.team-name { font: 600 clamp(45px,7vw,92px) var(--display); }.team-name:last-child { text-align: right; }
+.at-mark { color: var(--muted-2); font: 12px var(--mono); }
+.probability { margin: 22px 0 25px; }.probability b { font: 600 clamp(70px,11vw,145px)/.85 var(--display);
+  letter-spacing: -.055em; }.probability span { display: block; color: var(--muted); font: 9px var(--mono);
+  text-transform: uppercase; letter-spacing: .12em; margin-top: 15px; }
+.prob-track { width: min(620px,100%); height: 9px; display: flex; background: #272d35;
+  border-radius: 10px; overflow: hidden; margin: 0 auto; }
+.prob-home { background: var(--orange); transition: width .7s ease; }.prob-away { background: var(--blue); flex: 1; }
+.prob-legends { width: min(620px,100%); display: flex; justify-content: space-between; margin: 10px auto 0;
+  color: var(--muted); font: 9px var(--mono); }
+.error { color: var(--red); font-size: 11px; line-height: 1.6; padding: 10px 0; }
+.loading { color: var(--muted); font: 10px var(--mono); }
+.hidden { display: none !important; }
+
+/* League pulse, compare, and teams */
+.data-shell { padding-bottom: 90px; }
+.data-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  margin-bottom: 18px; padding: 15px 18px; background: var(--panel); border: 1px solid var(--line-soft);
+  border-radius: 13px; color: var(--muted); font-size: 11px; }
+.data-toolbar b { color: var(--paper); font: 500 10px var(--mono); text-transform: uppercase; }
+.leader-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; }
+.leader-card { background: var(--panel); border: 1px solid var(--line-soft); border-radius: var(--radius); overflow: hidden; }
+.leader-title { padding: 18px 20px; border-bottom: 1px solid var(--line-soft); display: flex;
+  align-items: center; justify-content: space-between; font: 600 17px var(--display); text-transform: uppercase; }
+.leader-title span { color: var(--orange); font: 9px var(--mono); }
+.leader-row { display: grid; grid-template-columns: 24px 1fr auto; gap: 10px; align-items: center;
+  padding: 12px 19px; border-bottom: 1px solid var(--line-soft); font-size: 11px; }
+.leader-row:last-child { border: 0; }.leader-rank { color: var(--muted-2); font: 9px var(--mono); }
+.leader-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.leader-name small { display: block; color: var(--muted-2); font: 8px var(--mono); margin-top: 2px; }
+.leader-value { font: 600 19px var(--display); color: var(--orange-2); }
+.form-board { margin-top: 15px; background: var(--panel); border: 1px solid var(--line-soft); border-radius: var(--radius); padding: 23px; }
+.form-board-head { display: flex; justify-content: space-between; align-items: end; margin-bottom: 20px; }
+.form-board-head h3 { margin: 0; font: 600 23px var(--display); text-transform: uppercase; }
+.form-board-head span { color: var(--muted-2); font: 8px var(--mono); }
+.team-form-list { display: grid; grid-template-columns: repeat(2,1fr); gap: 0 30px; }
+.team-form-row { display: grid; grid-template-columns: 38px 1fr 48px 48px 52px; gap: 10px; align-items: center;
+  padding: 10px 0; border-bottom: 1px solid var(--line-soft); font: 9px var(--mono); }
+.team-form-row b { font: 600 15px var(--display); }.team-form-row span { text-align: right; color: var(--muted); }
+.net-bar { height: 5px; background: #292f37; border-radius: 5px; overflow: hidden; position: relative; }
+.net-bar i { display: block; height: 100%; background: var(--lime); border-radius: inherit; }
+.net-bar i.negative { background: var(--red); margin-left: auto; }
+.compare-picker { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; align-items: start;
+  background: var(--panel); border: 1px solid var(--line-soft); border-radius: var(--radius); padding: 22px; }
+.compare-slot { position: relative; }.compare-slot .results { position: absolute; z-index: 8; top: 49px; left: 0; right: 0;
+  background: #11151a; border: 1px solid var(--line); border-radius: 10px; max-height: 260px; padding: 0 9px; }
+.vs-small { align-self: center; color: var(--orange); font: 600 22px var(--display); }
+.compare-run { align-self: center; border: 0; background: var(--lime); color: var(--night); border-radius: 10px;
+  padding: 14px 18px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.compare-output { margin-top: 15px; min-height: 330px; background: var(--panel); border: 1px solid var(--line-soft); border-radius: var(--radius); padding: 25px; }
+.compare-head { display: grid; grid-template-columns: 120px repeat(2,1fr); gap: 10px; align-items: end;
+  padding-bottom: 18px; border-bottom: 1px solid var(--line-soft); }
+.compare-head div:not(:first-child) { font: 600 clamp(24px,4vw,43px)/.95 var(--display); text-transform: uppercase; }
+.compare-table-row { display: grid; grid-template-columns: 120px repeat(2,1fr); gap: 10px; align-items: center;
+  min-height: 46px; border-bottom: 1px solid var(--line-soft); }
+.compare-table-row label { color: var(--muted); font: 9px var(--mono); }.compare-table-row span { font: 600 18px var(--display); }
+.compare-table-row .winner { color: var(--orange-2); }
+.team-control { display: grid; grid-template-columns: minmax(220px,340px) 1fr; gap: 15px; align-items: stretch; }
+.team-selector { padding: 22px; background: var(--panel); border: 1px solid var(--line-soft); border-radius: var(--radius); }
+.team-selector h3 { margin: 0 0 15px; font: 600 23px var(--display); text-transform: uppercase; }
+.team-identity { background: radial-gradient(circle at 85% 50%, rgba(255,92,53,.18), transparent 45%), var(--panel);
+  border: 1px solid var(--line-soft); border-radius: var(--radius); padding: 26px; display: grid;
+  grid-template-columns: 1fr repeat(4,minmax(65px,100px)); gap: 15px; align-items: center; }
+.team-code { font: 600 clamp(48px,7vw,82px)/.9 var(--display); color: var(--orange); }
+.team-metric b { display: block; font: 600 25px var(--display); }.team-metric span { color: var(--muted-2); font: 8px var(--mono); text-transform: uppercase; }
+.roster-panel { margin-top: 15px; background: var(--panel); border: 1px solid var(--line-soft); border-radius: var(--radius); overflow: hidden; }
+.roster-head, .roster-row { display: grid; grid-template-columns: minmax(170px,1fr) repeat(6,minmax(55px,80px)); gap: 8px; align-items: center; padding: 12px 20px; }
+.roster-head { color: var(--muted-2); font: 8px var(--mono); text-transform: uppercase; border-bottom: 1px solid var(--line); }
+.roster-row { min-height: 49px; border-bottom: 1px solid var(--line-soft); font: 10px var(--mono); }
+.roster-row:last-child { border: 0; }.roster-row strong { font: 600 12px var(--body); }.roster-row span { color: var(--muted); }
+.insight-stack { margin-top: 24px; display: grid; grid-template-columns: 1.2fr .8fr; gap: 20px; }
+.game-strip { overflow-x: auto; display: flex; gap: 8px; padding-bottom: 5px; }
+.game-chip { flex: 0 0 112px; background: #101419; border: 1px solid var(--line-soft); border-radius: 10px; padding: 11px; }
+.game-chip .game-date { color: var(--muted-2); font: 8px var(--mono); }.game-chip b { display: block; font: 600 21px var(--display); margin: 5px 0; }
+.game-chip span { color: var(--muted); font: 8px var(--mono); }.game-chip.win { border-top-color: var(--lime); }.game-chip.loss { border-top-color: var(--red); }
+.comp-list { display: grid; gap: 7px; }.comp-item { display: grid; grid-template-columns: 1fr 44px; gap: 10px; align-items: center;
+  padding: 10px 0; border-bottom: 1px solid var(--line-soft); font-size: 10px; }.comp-item b { font: 600 11px var(--body); }
+.comp-item small { display: block; color: var(--muted-2); margin-top: 2px; }.comp-score { color: var(--orange-2); font: 500 10px var(--mono); text-align: right; }
+.explore-controls { display: grid; grid-template-columns: repeat(5,1fr) auto; gap: 11px; padding: 19px;
+  background: var(--panel); border: 1px solid var(--line-soft); border-radius: var(--radius); }
+.control label { display: block; color: var(--muted-2); font: 8px var(--mono); text-transform: uppercase; margin: 0 0 7px 2px; }
+.control input:not([type=range]) { width: 100%; color: var(--paper); background: #0e1115; border: 1px solid var(--line);
+  border-radius: 10px; padding: 14px; outline: 0; font-size: 12px; }
+.explore-run { align-self: end; border: 0; padding: 14px 18px; border-radius: 10px; background: var(--lime); color: var(--night); font-weight: 700; cursor: pointer; }
+.data-table { margin-top: 15px; background: var(--panel); border: 1px solid var(--line-soft); border-radius: var(--radius); overflow-x: auto; }
+.explore-row { min-width: 920px; display: grid; grid-template-columns: minmax(180px,1.5fr) 55px repeat(10,minmax(58px,.55fr)); gap: 8px;
+  align-items: center; padding: 11px 18px; border-bottom: 1px solid var(--line-soft); font: 9px var(--mono); }
+.explore-row.header { position: sticky; top: 0; background: var(--panel-2); color: var(--muted-2); text-transform: uppercase; }
+.explore-row strong { font: 600 11px var(--body); }.explore-row span:not(:first-child) { text-align: right; color: var(--muted); }
+.explore-row:hover:not(.header) { background: rgba(255,255,255,.025); }
+.game-filters { display: grid; grid-template-columns: 220px 1fr; gap: 12px; margin-bottom: 15px; }
+.game-section { margin-bottom: 15px; background: var(--panel); border: 1px solid var(--line-soft); border-radius: var(--radius); overflow: hidden; }
+.game-section-title { padding: 18px 20px; border-bottom: 1px solid var(--line); font: 600 20px var(--display); text-transform: uppercase; }
+.game-row { display: grid; grid-template-columns: 105px minmax(150px,1fr) 120px 80px minmax(130px,1fr); gap: 12px;
+  align-items: center; min-height: 52px; padding: 10px 20px; border-bottom: 1px solid var(--line-soft); font: 9px var(--mono); }
+.game-row:last-child { border: 0; }.game-row b { font: 600 16px var(--display); }.game-row span { color: var(--muted); }
+.game-row[data-game-id] { width: 100%; color: var(--paper); background: transparent; text-align: left;
+  cursor: pointer; }.game-row[data-game-id]:hover { background: rgba(255,92,53,.06); }
+.game-story-grid { display: grid; grid-template-columns: 1.15fr .85fr; gap: 12px; margin-top: 12px; }
+.game-story-card { min-width: 0; padding: 22px; }
+.game-story-card.wide { grid-column: 1 / -1; }
+.game-flow-chart { width: 100%; min-height: 260px; background: #0d1115; border: 1px solid var(--line-soft);
+  border-radius: 12px; }
+.game-story-list { display: grid; gap: 0; }
+.game-story-row { display: grid; grid-template-columns: 62px minmax(110px,.7fr) 1fr 70px; gap: 10px;
+  padding: 10px 3px; border-bottom: 1px solid var(--line-soft); align-items: center; font: 9px var(--mono); }
+.game-story-row span { color: var(--muted); }.game-story-row b { font: 600 11px var(--body); }
+.advanced-row { min-width: 650px; display: grid; grid-template-columns: 75px repeat(8,1fr); gap: 8px;
+  padding: 10px 4px; border-bottom: 1px solid var(--line-soft); font: 9px var(--mono); text-align: right; }
+.advanced-row span:first-child { text-align: left; }.advanced-row.header { color: var(--muted-2); text-transform: uppercase; }
+.lineup-row { padding: 11px 0; border-bottom: 1px solid var(--line-soft); }
+.lineup-row b { display: block; font-size: 11px; }.lineup-row span { color: var(--muted); font: 9px var(--mono); }
+
+/* Footer + mobile */
+footer { border-top: 1px solid var(--line-soft); padding: 34px 0 100px; }
+.footer-inner { display: flex; align-items: center; justify-content: space-between; gap: 25px; }
+.footer-copy { color: var(--muted-2); font-size: 10px; line-height: 1.7; max-width: 650px; }
+.footer-tag { color: var(--paper); font: 500 10px var(--mono); text-transform: uppercase; white-space: nowrap; }
+.mobile-nav { display: none; }
+@media (max-width: 900px) {
+  .topbar { height: 65px; padding: 0 20px; }.desktop-nav, .live-status { display: none; }.brand { min-width: 0; }
+  .wrap { width: min(100% - 32px, 680px); }.hero { grid-template-columns: 1fr; padding: 55px 0 70px; }
+  .hero h1 { font-size: clamp(62px,18vw,108px); }.hero-desk { transform: none; }
+  .section-head, .app-head { align-items: flex-start; flex-direction: column; }.app-meta { text-align: left; }
+  .cap-card, .cap-card.large, .cap-card.wide { grid-column: span 6; }.cap-visual { opacity: .4; }
+  .principles { grid-template-columns: repeat(2,1fr); }.workspace, .match-grid { grid-template-columns: 1fr; }
+  .profile { min-height: 420px; }.match-form { order: 1; }.court-panel { min-height: 480px; }
+  .stat-grid { grid-template-columns: repeat(3,1fr); }.stat:nth-child(3) { border-right: 0; }
+  .stat:nth-child(-n+3) { border-bottom: 1px solid var(--line-soft); }.profile-lower { grid-template-columns: 1fr; }
+  body { padding-bottom: calc(67px + env(safe-area-inset-bottom)); }
+  .leader-grid { grid-template-columns: repeat(2,1fr); }.team-form-list { grid-template-columns: 1fr; }
+  .compare-picker { grid-template-columns: repeat(2,1fr); }.compare-run { grid-column: 1/-1; }
+  .team-control { grid-template-columns: 1fr; }.team-identity { grid-template-columns: repeat(4,1fr); }
+  .team-code { grid-column: 1/-1; }.roster-panel { overflow-x: auto; }.roster-head, .roster-row { min-width: 720px; }
+  .insight-stack { grid-template-columns: 1fr; }.explore-controls { grid-template-columns: repeat(2,1fr); }.explore-run { grid-column: 1/-1; }
+  .game-story-grid { grid-template-columns: 1fr; }.game-story-card.wide { grid-column: auto; }
+  .mobile-nav { display: flex; position: fixed; z-index: 40; left: 12px; right: 12px;
+    bottom: calc(10px + env(safe-area-inset-bottom)); height: 58px; padding: 5px; border: 1px solid var(--line);
+    background: rgba(21,25,31,.93); backdrop-filter: blur(18px); border-radius: 16px; box-shadow: 0 15px 35px rgba(0,0,0,.45);
+    overflow-x: auto; scrollbar-width: none; }
+  .mobile-nav::-webkit-scrollbar { display: none; }
+  .mobile-nav button { flex: 0 0 68px; border: 0; border-radius: 11px; background: transparent; color: var(--muted);
+    font: 500 9px var(--mono); text-transform: uppercase; cursor: pointer; }
+  .mobile-nav button span { display: block; font-size: 15px; margin-bottom: 2px; }
+  .mobile-nav button.active { color: var(--night); background: var(--lime); }
 }
-button.primary { background: var(--accent); color: #fff; border: none; font-weight: 600; }
-.results button { display: block; width: 100%; text-align: left; padding: 12px;
-  background: none; border: none; border-bottom: 1px solid var(--grid);
-  color: var(--ink); font-size: 1rem; }
-.results button:last-child { border-bottom: none; }
-.profile-head { display: flex; gap: 14px; align-items: center; }
-.profile-head img { width: 72px; height: 53px; object-fit: cover;
-  border-radius: 10px; background: var(--grid); }
-.profile-head .name { font-size: 1.15rem; font-weight: 650; }
-.profile-head .sub { color: var(--muted); font-size: .8rem; }
-.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 14px; }
-.tile { border: 1px solid var(--grid); border-radius: 10px; padding: 8px 10px; }
-.tile .v { font-size: 1.3rem; font-weight: 650; }
-.tile .k { color: var(--ink-2); font-size: .68rem; letter-spacing: .04em; }
-.pct .row { display: grid; grid-template-columns: 58px 1fr 30px; gap: 8px;
-  align-items: center; margin: 7px 0; font-size: .78rem; }
-.pct .label { color: var(--ink-2); }
-.pct .bar { height: 8px; border-radius: 4px; background: var(--grid); }
-.pct .fill { height: 100%; border-radius: 4px; background: var(--accent); }
-.pct .num { text-align: right; font-variant-numeric: tabular-nums; }
-.matchup { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: center; }
-.matchup .at { color: var(--muted); }
-.prob-bar { display: flex; height: 34px; border-radius: 10px; overflow: hidden;
-  margin-top: 14px; font-size: .85rem; font-weight: 650; color: #fff; }
-.prob-bar .home { background: var(--accent); display: flex; align-items: center;
-  padding-left: 10px; min-width: 64px; }
-.prob-bar .away { background: var(--accent-2); display: flex; align-items: center;
-  justify-content: flex-end; padding-right: 10px; min-width: 64px; }
-.prob-caption { display: flex; justify-content: space-between; color: var(--ink-2);
-  font-size: .78rem; margin-top: 6px; }
-.note { color: var(--muted); font-size: .75rem; margin-top: 10px; }
-.error { color: #d03b3b; font-size: .85rem; margin-top: 8px; }
-nav { position: fixed; bottom: 0; left: 0; right: 0; display: flex;
-  background: var(--surface); box-shadow: 0 -1px 0 var(--ring);
-  padding-bottom: env(safe-area-inset-bottom); }
-nav button { flex: 1; padding: 12px 0 10px; background: none; border: none;
-  color: var(--muted); font-size: .75rem; font-weight: 600; }
-nav button.active { color: var(--accent); }
-nav button .ico { display: block; font-size: 1.25rem; margin-bottom: 2px; }
-.hidden { display: none; }
+@media (max-width: 580px) {
+  .hero { min-height: auto; }.hero h1 { font-size: clamp(55px,19vw,84px); }.hero-copy { font-size: 13px; }
+  .hero-desk { margin-inline: -5px; }.spotlight { padding: 18px; }.score-ring { width: 72px; height: 72px; }
+  .desk-stats { grid-template-columns: repeat(3,1fr); }.desk-stat { padding: 13px 10px; }
+  .feature-section { padding: 70px 0; }.cap-card, .cap-card.large, .cap-card.wide { grid-column: 1/-1; min-height: 240px; }
+  .principles { grid-template-columns: 1fr; }.app-head { padding-top: 45px; }.app-head .section-title { font-size: 52px; }
+  .profile-hero { grid-template-columns: 130px 1fr; min-height: 200px; }.player-photo { height: 180px; }
+  .profile-identity { padding: 20px 14px 20px 0; }.profile-identity h2 { font-size: 37px; }
+  .profile-body { padding: 17px; }.stat { padding: 13px 9px; }.stat b { font-size: 23px; }
+  .profile-lower { gap: 20px; }.match-grid { padding-bottom: 50px; }.court-panel { min-height: 430px; }
+  .profile-controls, .shot-layout { grid-template-columns: 1fr; }.context-grid { grid-template-columns: repeat(2,1fr); }
+  .factor-grid { grid-template-columns: repeat(2,1fr); }.standings-grid { grid-template-columns: 1fr; }
+  .prediction-tools, .method-grid, .forecast-conferences { grid-template-columns: 1fr; }
+  .ask-grid { grid-template-columns: 1fr; }
+  .prediction-empty, .prediction-result { min-height: 430px; padding: 24px 17px; }
+  .team-row { gap: 8px; }.team-name { font-size: 47px; }.probability b { font-size: 88px; }
+  .footer-inner { align-items: flex-start; flex-direction: column; }.ticker-track { animation-duration: 18s; }
+  .leader-grid { grid-template-columns: 1fr; }.compare-picker { grid-template-columns: 1fr; }
+  .vs-small { display: none; }.compare-head, .compare-table-row { grid-template-columns: 74px repeat(2,1fr); }
+  .team-identity { grid-template-columns: repeat(2,1fr); }.team-code { grid-column: 1/-1; }
+  .explore-controls, .game-filters { grid-template-columns: 1fr; }.game-row { min-width: 690px; }
+  .game-section { overflow-x: auto; }
+  .game-story-card { padding: 17px; }.game-story-row { grid-template-columns: 54px 74px 1fr; }
+  .game-story-row span:last-child { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; } }
 </style>
 </head>
 <body>
-<header><h1>🏀 NBA Insights <small>data: stats.nba.com</small></h1></header>
-<main>
-  <section id="tab-players">
-    <div class="card">
-      <input id="search" type="search" placeholder="Search a player — e.g. Jokic"
-             autocomplete="off">
-      <div class="results" id="results"></div>
+<a class="skip" href="#main">Skip to content</a>
+<header class="topbar">
+  <div class="brand"><div class="brand-mark" aria-hidden="true">N</div><div class="brand-name">NBA <span>Insights</span></div></div>
+  <nav class="desktop-nav" aria-label="Primary">
+    <button class="nav-link active" data-page="overview">Overview</button>
+    <button class="nav-link" data-page="pulse">League pulse</button>
+    <button class="nav-link" data-page="players">Players</button>
+    <button class="nav-link" data-page="explore">Explore</button>
+    <button class="nav-link" data-page="compare">Compare</button>
+    <button class="nav-link" data-page="teams">Teams</button>
+    <button class="nav-link" data-page="games">Games</button>
+    <button class="nav-link" data-page="matchup">Matchup lab</button>
+    <button class="nav-link" data-page="ask">Ask AI</button>
+    <button class="nav-link" data-page="methodology">Methodology</button>
+  </nav>
+  <div class="live-status"><i class="live-dot"></i> Analysis engine ready</div>
+</header>
+
+<main id="main">
+  <section id="page-overview" class="page active">
+    <div class="wrap hero">
+      <div>
+        <div class="eyebrow">Basketball intelligence platform</div>
+        <h1>See the game<br><span class="stroke">behind the</span><br><span class="accent">game.</span></h1>
+        <p class="hero-copy">Player trajectories, league-relative performance, team form, and probabilistic forecasts—built from possession-level thinking and presented without the noise.</p>
+        <div class="hero-actions">
+          <button class="btn btn-primary" data-page="players">Explore a player <span>↗</span></button>
+          <button class="btn" data-page="matchup">Open matchup lab <span>→</span></button>
+        </div>
+      </div>
+      <div class="hero-desk" aria-label="Analytics dashboard preview">
+        <div class="desk-inner">
+          <div class="desk-head"><div class="traffic"><i></i><i></i><i></i></div><span>MODEL OUTPUT / LIVE WORKSPACE</span></div>
+          <div class="spotlight"><div><div class="label">Game intelligence</div><h2>Every edge has context.</h2><p>Form, efficiency, pace, rest, and Elo in one read.</p></div><div class="score-ring"><b>70%</b></div></div>
+          <div class="mini-chart"><span class="chart-note">▲ MODEL CONFIDENCE</span>
+            <svg viewBox="0 0 400 100" preserveAspectRatio="none" role="img" aria-label="Illustrative performance trend">
+              <defs><linearGradient id="area" x1="0" x2="0" y1="0" y2="1"><stop stop-color="#ff5c35" stop-opacity=".32"/><stop offset="1" stop-color="#ff5c35" stop-opacity="0"/></linearGradient></defs>
+              <path d="M0 85 C42 78 54 54 94 62 S145 82 180 52 S226 26 260 42 S310 73 340 40 S375 20 400 14 L400 100 L0 100Z" fill="url(#area)"/>
+              <path d="M0 85 C42 78 54 54 94 62 S145 82 180 52 S226 26 260 42 S310 73 340 40 S375 20 400 14" fill="none" stroke="#ff5c35" stroke-width="2"/>
+            </svg>
+          </div>
+          <div class="desk-stats"><div class="desk-stat"><b>10K</b><span>simulations</span></div><div class="desk-stat"><b>1996</b><span>history from</span></div><div class="desk-stat"><b>80%</b><span>interval target</span></div></div>
+        </div>
+      </div>
     </div>
-    <div class="card hidden" id="profile"></div>
+    <div class="ticker" aria-hidden="true"><div class="ticker-track"><div class="ticker-row"><span>Player percentiles</span><span>Shot quality</span><span>Lineup intelligence</span><span>Team Elo</span><span>Monte Carlo simulation</span><span>On / off impact</span></div><div class="ticker-row"><span>Player percentiles</span><span>Shot quality</span><span>Lineup intelligence</span><span>Team Elo</span><span>Monte Carlo simulation</span><span>On / off impact</span></div></div></div>
+    <div class="wrap feature-section">
+      <div class="section-head"><div><div class="eyebrow">One connected view</div><h2 class="section-title">From box score<br>to bigger picture.</h2></div><p class="section-copy">Seven analytical surfaces share the same cached data layer. Move from a headline number to its history, context, and model assumptions without losing the thread.</p></div>
+      <div class="cap-grid">
+        <article class="cap-card large"><span class="cap-number">01 / PLAYER LAB</span><div class="cap-visual"><div class="bars"><i style="height:45%"></i><i style="height:68%"></i><i style="height:54%"></i><i style="height:88%"></i><i style="height:73%"></i><i style="height:100%"></i></div></div><h3>Player profiles that explain the shape of performance.</h3><p>Career arcs, form, shot quality, era-aware league percentiles, clutch production, DARKO DPM, draft pedigree, and salary context.</p></article>
+        <article class="cap-card wide"><span class="cap-number">02 / FORECAST</span><div class="cap-icon">◎</div><h3>Probabilities,<br>not proclamations.</h3><p>Outcome predictions and 10,000-run game simulations built from prior-seeded form, availability, rest, and Elo.</p></article>
+        <article class="cap-card"><span class="cap-number">03 / LINEUPS</span><div class="cap-icon">⌁</div><h3>Five players.<br>One ecosystem.</h3><p>Rotation stints, garbage-time filtering, estimated possessions, lineup net rating, and starting-five forecasts.</p></article>
+        <article class="cap-card"><span class="cap-number">04 / TEAM ROOM</span><div class="cap-icon">↗</div><h3>Team identity,<br>in motion.</h3><p>Standings, four factors, Elo, recent form, payroll, roster impact, and the signals beneath a win-loss record.</p></article>
+        <article class="cap-card"><span class="cap-number">05 / DRAFT</span><div class="cap-icon">＋</div><h3>Measure the past.<br>Project the future.</h3><p>Every draft class since 1947, with combine measurements and athletic testing from 2000 onward.</p></article>
+      </div>
+    </div>
+    <div class="wrap principles">
+      <div class="principle"><b>01</b><h4>Transparent by design</h4><p>Methodology and holdout results live beside the predictions they qualify.</p></div>
+      <div class="principle"><b>02</b><h4>Era-aware context</h4><p>Historical players are ranked against their own season, not a modern baseline.</p></div>
+      <div class="principle"><b>03</b><h4>Offline resilient</h4><p>Local SQLite caching keeps repeat views fast and serves stale data gracefully.</p></div>
+      <div class="principle"><b>04</b><h4>No false precision</h4><p>Intervals and probabilities communicate what the models know—and what they do not.</p></div>
+    </div>
   </section>
 
-  <section id="tab-predict" class="hidden">
-    <div class="card">
-      <div class="matchup">
-        <select id="away"></select><span class="at">@</span><select id="home"></select>
+  <section id="page-pulse" class="page">
+    <div class="wrap data-shell">
+      <div class="app-head"><div><div class="eyebrow">Across the association</div><h1 class="section-title">League pulse.</h1></div><div class="app-meta">Qualified leaders<br>Season-to-date form</div></div>
+      <div class="data-toolbar"><span>The clearest signals from player production and team efficiency.</span><div class="select-wrap"><select id="pulse-season"><option>Loading season…</option></select></div></div>
+      <div id="pulse-content"><div class="panel empty-state"><div class="loading">LOADING LEAGUE PULSE…</div></div></div>
+    </div>
+  </section>
+
+  <section id="page-players" class="page">
+    <div class="wrap">
+      <div class="app-head"><div><div class="eyebrow">Player intelligence</div><h1 class="section-title">Player lab.</h1></div><div class="app-meta">Current + historical seasons<br>League-relative context</div></div>
+      <div class="workspace">
+        <aside class="panel panel-pad">
+          <div class="panel-kicker">Find a player</div>
+          <div class="search-wrap"><input id="search" type="search" placeholder="Search by name" autocomplete="off" aria-label="Search players"></div>
+          <div class="results" id="results" aria-live="polite"></div>
+          <div class="search-hint" id="search-hint"><strong>Start with any NBA player.</strong>Type at least three characters. Active players include current-season percentile context; retired players retain their career view.</div>
+        </aside>
+        <section class="panel profile" id="profile" aria-live="polite">
+          <div class="empty-state"><div><div class="empty-orbit"><span>01</span></div><h3>Choose your subject</h3><p>Search the league, select a player, and we’ll assemble their latest production, league standing, and career arc.</p></div></div>
+        </section>
       </div>
-      <div style="margin-top:12px"><button class="primary" id="go">Predict</button></div>
-      <div id="prediction"></div>
-      <p class="note">Logistic model on season-to-date form, availability and Elo —
-        70% holdout accuracy. Assumes both teams at full strength.</p>
+    </div>
+  </section>
+
+  <section id="page-compare" class="page">
+    <div class="wrap data-shell">
+      <div class="app-head"><div><div class="eyebrow">Head to head</div><h1 class="section-title">Compare players.</h1></div><div class="app-meta">Current-season production<br>League-relative metrics</div></div>
+      <div class="compare-picker">
+        <div class="compare-slot"><div class="panel-kicker">Player one</div><div class="search-wrap"><input id="compare-a" type="search" placeholder="Search player" autocomplete="off"></div><div class="results hidden" id="compare-a-results"></div></div>
+        <div class="compare-slot"><div class="panel-kicker">Player two</div><div class="search-wrap"><input id="compare-b" type="search" placeholder="Search player" autocomplete="off"></div><div class="results hidden" id="compare-b-results"></div></div>
+        <div class="compare-slot"><div class="panel-kicker">Third (optional)</div><div class="search-wrap"><input id="compare-c" type="search" placeholder="Search player" autocomplete="off"></div><div class="results hidden" id="compare-c-results"></div></div>
+        <div class="compare-slot"><div class="panel-kicker">Fourth (optional)</div><div class="search-wrap"><input id="compare-d" type="search" placeholder="Search player" autocomplete="off"></div><div class="results hidden" id="compare-d-results"></div></div>
+        <button class="compare-run" id="compare-go">Compare →</button>
+      </div>
+      <div class="compare-output" id="compare-output"><div class="empty-state" style="min-height:280px"><div><div class="empty-orbit" style="width:110px;height:110px"><span>VS</span></div><h3>Set the matchup</h3><p>Choose two active players to compare their current-season production and impact metrics.</p></div></div></div>
+    </div>
+  </section>
+
+  <section id="page-explore" class="page">
+    <div class="wrap data-shell">
+      <div class="app-head"><div><div class="eyebrow">The complete player pool</div><h1 class="section-title">Explore stats.</h1></div><div class="app-meta">Sortable league table<br>Per game + per 36</div></div>
+      <div class="explore-controls">
+        <div class="control"><label for="explore-season">Season</label><div class="select-wrap"><select id="explore-season"><option>Loading…</option></select></div></div>
+        <div class="control"><label for="explore-query">Player</label><input id="explore-query" placeholder="Name contains"></div>
+        <div class="control"><label for="explore-team">Team</label><div class="select-wrap"><select id="explore-team"><option value="">All teams</option></select></div></div>
+        <div class="control"><label for="explore-rate">Rate</label><div class="select-wrap"><select id="explore-rate"><option value="per_game">Per game</option><option value="per_36">Per 36 minutes</option></select></div></div>
+        <div class="control"><label for="explore-sort">Sort by</label><div class="select-wrap"><select id="explore-sort"><option>PTS</option><option>REB</option><option>AST</option><option>STL</option><option>BLK</option><option>FG3M</option><option>NET_RATING</option><option>DPM</option></select></div></div>
+        <button class="explore-run" id="explore-go">Apply filters →</button>
+      </div>
+      <div class="data-table" id="explore-output"><div class="empty-state" style="min-height:390px"><div class="loading">LOADING LEAGUE TABLE…</div></div></div>
+    </div>
+  </section>
+
+  <section id="page-teams" class="page">
+    <div class="wrap data-shell">
+      <div class="app-head"><div><div class="eyebrow">Thirty identities</div><h1 class="section-title">Team room.</h1></div><div class="app-meta">Form + efficiency<br>Rotation production</div></div>
+      <div class="team-control">
+        <div class="team-selector"><h3>Choose a team</h3><div class="select-wrap"><select id="team-pick"><option>Loading teams…</option></select></div></div>
+        <div class="team-identity" id="team-identity"><div class="team-code">—</div><div class="team-metric"><b>—</b><span>Win rate</span></div><div class="team-metric"><b>—</b><span>Net rating</span></div><div class="team-metric"><b>—</b><span>Off rating</span></div><div class="team-metric"><b>—</b><span>Def rating</span></div></div>
+      </div>
+      <div class="roster-panel" id="roster-panel"><div class="empty-state" style="min-height:330px"><div class="loading">CHOOSE A TEAM TO OPEN THE ROOM…</div></div></div>
+    </div>
+  </section>
+
+  <section id="page-matchup" class="page">
+    <div class="wrap">
+      <div class="app-head"><div><div class="eyebrow">Game outcome model</div><h1 class="section-title">Matchup lab.</h1></div><div class="app-meta">Full-strength assumption<br>Logistic forecast</div></div>
+      <section class="panel forecast-panel" id="season-forecast"><div class="empty-state" style="min-height:260px"><div class="loading">SIMULATING 2026–27 SEASON…</div></div></section>
+      <div class="match-grid">
+        <aside class="panel match-form">
+          <h3>Build a matchup</h3><p>Choose the visitors and home team. The model blends season-to-date form with schedule and strength context.</p>
+          <div class="field"><label for="prediction-season">Prediction season</label><div class="select-wrap"><select id="prediction-season"><option>Loading seasons…</option></select></div></div>
+          <div class="field"><label for="away">Away team</label><div class="select-wrap"><select id="away"><option>Loading teams…</option></select></div></div>
+          <div class="field"><label for="home">Home team</label><div class="select-wrap"><select id="home"><option>Loading teams…</option></select></div></div>
+          <div class="field"><label for="away-missing">Away expected minutes out</label><input id="away-missing" type="number" min="0" max="240" value="0"></div>
+          <div class="field"><label for="home-missing">Home expected minutes out</label><input id="home-missing" type="number" min="0" max="240" value="0"></div>
+          <button class="predict-btn" id="go">Run prediction →</button>
+          <div id="form-error" class="error hidden" role="alert"></div>
+          <div class="model-note"><b>Model card / 2025–26 holdout</b><p id="prediction-basis-note">70.2% outcome accuracy and 0.589 log loss. Upcoming-season forecasts use the latest completed team form and rosters as a preseason carry-forward until new-season games exist.</p></div>
+        </aside>
+        <section class="panel court-panel" id="prediction" aria-live="polite">
+          <div class="court-lines"></div><div class="prediction-empty"><div><div class="versus">VS</div><h3>Your matchup starts here</h3><p>The output is a probability, not a promise. Team form can move the number; unmodeled late news can move the game.</p></div></div>
+        </section>
+      </div>
+      <div class="prediction-tools">
+        <section class="panel panel-pad"><div class="subhead"><h3>10,000-game simulation</h3><span>MARGIN + TOTAL DISTRIBUTIONS</span></div><p class="analytics-note">Uses the matchup and minutes-out assumptions above.</p><button class="explore-run" id="simulate-go">Run simulation →</button><div id="simulation-output"></div></section>
+        <section class="panel panel-pad"><div class="subhead"><h3>Player points</h3><span>80% INTERVAL</span></div><div class="field"><label for="points-player">Player</label><div class="search-wrap"><input id="points-player" type="search" placeholder="Search player"></div><div class="results hidden" id="points-player-results"></div></div><div class="field"><label for="points-opponent">Opponent</label><div class="select-wrap"><select id="points-opponent"></select></div></div><div class="field"><label for="points-venue">Venue</label><div class="select-wrap"><select id="points-venue"><option value="true">Home</option><option value="false">Away</option></select></div></div><button class="explore-run" id="points-go">Project points →</button><div id="points-output"></div></section>
+        <section class="panel panel-pad"><div class="subhead"><h3>Starting-five estimate</h3><span>OBSERVED + PROXY BLEND</span></div><div class="field"><label for="lineup-team">Team</label><div class="select-wrap"><select id="lineup-team"></select></div></div><div class="field"><label>Choose one player in each slot</label><div class="lineup-slots" id="lineup-slots"><div class="loading">LOADING ROSTER…</div></div></div><button class="explore-run" id="lineup-go">Estimate lineup →</button><div id="lineup-output"></div></section>
+      </div>
+    </div>
+  </section>
+
+  <section id="page-methodology" class="page">
+    <div class="wrap data-shell">
+      <div class="app-head"><div><div class="eyebrow">Transparent by design</div><h1 class="section-title">Methodology.</h1></div><div class="app-meta">Holdout discipline<br>What worked + what failed</div></div>
+      <div id="methodology-output"><div class="panel empty-state"><div class="loading">LOADING MODEL CARDS…</div></div></div>
+    </div>
+  </section>
+
+  <section id="page-ask" class="page">
+    <div class="wrap data-shell">
+      <div class="app-head"><div><div class="eyebrow">Structured league Q&A</div><h1 class="section-title">Ask the league.</h1></div><div class="app-meta">Optional Anthropic credential<br>Numbers from cached data only</div></div>
+      <div class="ask-grid"><section class="panel panel-pad"><div class="field"><label for="ask-question">Question</label><textarea id="ask-question" rows="5" placeholder="Who leads the league in assists among players averaging 30+ minutes?"></textarea></div><button class="explore-run" id="ask-go">Ask over the data →</button><p class="analytics-note">The model can query a constrained stats tool; it cannot execute generated code. Requires ANTHROPIC_API_KEY on the server.</p></section><section class="panel" id="ask-output"><div class="empty-state" style="min-height:330px"><div><h3>Try a basketball question</h3><p>Examples: best high-volume three-point shooters, 20-and-10 players, or net-rating leaders with a minutes floor.</p></div></div></section></div>
+    </div>
+  </section>
+
+  <section id="page-games" class="page">
+    <div class="wrap data-shell">
+      <div class="app-head"><div><div class="eyebrow">Scores and schedule</div><h1 class="section-title">Game center.</h1></div><div class="app-meta">Finals + upcoming<br>Top performers</div></div>
+      <div class="game-filters"><div class="select-wrap"><select id="games-team"><option value="">All teams</option></select></div><div class="select-wrap"><select id="games-season"><option>Loading seasons…</option></select></div></div>
+      <div id="games-output"><div class="panel empty-state"><div class="loading">LOADING GAME CENTER…</div></div></div>
+      <div id="box-score-output"></div>
     </div>
   </section>
 </main>
-<nav>
-  <button id="nav-players" class="active"><span class="ico">👤</span>Players</button>
-  <button id="nav-predict"><span class="ico">📈</span>Predict</button>
+
+<footer><div class="wrap footer-inner"><div class="footer-copy">NBA Insights is a personal, educational analytics project built on cached stats.nba.com data. NBA data belongs to NBA Media Ventures, LLC. Predictions are analytical estimates, not betting advice.</div><div class="footer-tag">Built for curious fans · 2026</div></div></footer>
+
+<nav class="mobile-nav" aria-label="Mobile navigation">
+  <button class="active" data-page="overview"><span>◫</span>Overview</button>
+  <button data-page="pulse"><span>⌁</span>Pulse</button>
+  <button data-page="players"><span>⌕</span>Players</button>
+  <button data-page="explore"><span>▦</span>Explore</button>
+  <button data-page="compare"><span>⇄</span>Compare</button>
+  <button data-page="teams"><span>◇</span>Teams</button>
+  <button data-page="games"><span>□</span>Games</button>
+  <button data-page="matchup"><span>↗</span>Matchup</button>
+  <button data-page="ask"><span>?</span>Ask</button>
+  <button data-page="methodology"><span>∴</span>Method</button>
 </nav>
+
 <script>
 const $ = (id) => document.getElementById(id);
-const api = (path) => fetch(path).then(r => {
-  if (!r.ok) return r.json().then(b => { throw new Error(b.detail || r.statusText); });
-  return r.json();
-});
+const escapeHTML = (value) => String(value ?? "").replace(/[&<>'"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));
+const api = async (path) => {
+  const response = await fetch(path);
+  if (!response.ok) {
+    let message = response.statusText;
+    try { message = (await response.json()).detail || message; } catch {}
+    throw new Error(message);
+  }
+  return response.json();
+};
 
-// --- tabs ---------------------------------------------------------------
-function show(tab) {
-  $("tab-players").classList.toggle("hidden", tab !== "players");
-  $("tab-predict").classList.toggle("hidden", tab !== "predict");
-  $("nav-players").classList.toggle("active", tab === "players");
-  $("nav-predict").classList.toggle("active", tab === "predict");
+function showPage(page, updateHash = true) {
+  document.querySelectorAll(".page").forEach(el => el.classList.toggle("active", el.id === `page-${page}`));
+  document.querySelectorAll("[data-page]").forEach(el => el.classList.toggle("active", el.dataset.page === page));
+  document.querySelector(`.mobile-nav [data-page="${page}"]`)?.scrollIntoView({
+    behavior: "smooth", block: "nearest", inline: "center"
+  });
+  if (updateHash) history.replaceState(null, "", page === "overview" ? location.pathname : `#${page}`);
+  if (page === "pulse") loadPulse();
+  if (page === "explore") loadExplore();
+  if (page === "teams") loadTeamPicker();
+  if (page === "games") loadGames();
+  if (page === "matchup") loadTeams();
+  if (page === "methodology") loadMethodology();
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
-$("nav-players").onclick = () => show("players");
-$("nav-predict").onclick = () => { show("predict"); loadTeams(); };
+document.querySelectorAll("[data-page]").forEach(el => el.addEventListener("click", () => showPage(el.dataset.page)));
+const initialPage = ["pulse", "players", "explore", "compare", "teams", "games", "matchup", "ask", "methodology"].includes(location.hash.slice(1)) ? location.hash.slice(1) : "overview";
+showPage(initialPage, false);
 
-// --- players ------------------------------------------------------------
 let debounce;
-$("search").addEventListener("input", (e) => {
+$("search").addEventListener("input", event => {
   clearTimeout(debounce);
-  const q = e.target.value.trim();
+  const q = event.target.value.trim();
+  $("search-hint").classList.toggle("hidden", q.length >= 3);
   if (q.length < 3) { $("results").innerHTML = ""; return; }
+  $("results").innerHTML = '<div class="loading">SEARCHING THE DATABASE…</div>';
   debounce = setTimeout(async () => {
     try {
       const players = await api(`/players/search?q=${encodeURIComponent(q)}`);
-      $("results").innerHTML = players.slice(0, 8).map(p =>
-        `<button data-id="${p.id}" data-name="${p.full_name}">${p.full_name}</button>`
-      ).join("") || `<p class="note">No players found.</p>`;
-    } catch (err) { $("results").innerHTML = `<p class="error">${err.message}</p>`; }
+      $("results").innerHTML = players.slice(0, 10).map(player =>
+        `<button data-id="${Number(player.id)}" data-name="${escapeHTML(player.full_name)}">${escapeHTML(player.full_name)}<span>${player.is_active ? "ACTIVE" : "HISTORICAL"} →</span></button>`
+      ).join("") || '<div class="search-hint">No matching players found.</div>';
+    } catch (error) { $("results").innerHTML = `<div class="error">${escapeHTML(error.message)}</div>`; }
   }, 250);
 });
-
-$("results").addEventListener("click", (e) => {
-  const b = e.target.closest("button");
-  if (b) loadProfile(+b.dataset.id, b.dataset.name);
+$("results").addEventListener("click", event => {
+  const button = event.target.closest("button");
+  if (button) loadProfile(Number(button.dataset.id), button.dataset.name);
 });
 
+const fmt = (value, digits = 1) => Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : "—";
 async function loadProfile(id, name) {
-  const el = $("profile");
-  el.classList.remove("hidden");
-  el.innerHTML = `<p class="note">Loading ${name}…</p>`;
+  const profile = $("profile");
+  profile.innerHTML = `<div class="empty-state"><div class="loading">ASSEMBLING ${escapeHTML(name.toUpperCase())}…</div></div>`;
   try {
     const seasons = await api(`/players/${id}/career`);
-    const last = seasons[seasons.length - 1];
-    let html = `
-      <div class="profile-head">
-        <img src="/players/${id}/headshot" alt="" onerror="this.style.display='none'">
-        <div><div class="name">${name}</div>
-        <div class="sub">${last.SEASON_ID} · ${last.GP} games</div></div>
+    const latest = seasons.at(-1);
+    let percentileData = null;
+    try { percentileData = await api(`/players/${id}/percentiles`); } catch {}
+    const [gamesResult, similarResult] = await Promise.allSettled([
+      api(`/players/${id}/games?limit=10`), api(`/players/${id}/similar?limit=6`)
+    ]);
+    const recentGames = gamesResult.status === "fulfilled" ? gamesResult.value.games : [];
+    const similar = similarResult.status === "fulfilled" ? similarResult.value.similar : [];
+    const stats = [
+      ["PTS", fmt(latest.PTS)], ["AST", fmt(latest.AST)], ["REB", fmt(latest.REB)],
+      ["GP", fmt(latest.GP, 0)], ["FG%", latest.FG_PCT == null ? "—" : fmt(latest.FG_PCT * 100) + "%"],
+      ["3P%", latest.FG3_PCT == null ? "—" : fmt(latest.FG3_PCT * 100) + "%"]
+    ];
+    const pctEntries = percentileData ? Object.entries(percentileData.percentiles).slice(0, 8) : [];
+    const initials = name.split(/\s+/).map(part => part[0]).join("").slice(0,2);
+    profile.innerHTML = `
+      <div class="profile-hero">
+        <img class="player-photo" src="/players/${id}/headshot" alt="${escapeHTML(name)}" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'player-fallback',textContent:'${escapeHTML(initials)}'}))">
+        <div class="profile-identity"><div class="season">${escapeHTML(latest.SEASON_ID)} / Latest season</div><h2>${escapeHTML(name)}</h2><p>${fmt(latest.GP,0)} games logged · Per-game production</p></div>
       </div>
-      <div class="tiles">` +
-      ["PTS", "AST", "REB"].map(s =>
-        `<div class="tile"><div class="v">${(+last[s]).toFixed(1)}</div>
-         <div class="k">${s} / GAME</div></div>`).join("") + `</div>`;
-    try {
-      const pct = await api(`/players/${id}/percentiles`);
-      html += `<div class="pct" style="margin-top:14px">
-        <div class="label" style="font-size:.8rem">League percentile, ${pct.season}</div>` +
-        Object.entries(pct.percentiles).map(([k, v]) =>
-          `<div class="row"><span class="label">${k}</span>
-           <div class="bar"><div class="fill" style="width:${Math.round(v)}%"></div></div>
-           <span class="num">${Math.round(v)}</span></div>`).join("") + `</div>`;
-    } catch { /* inactive player: card stays stats-only */ }
-    el.innerHTML = html;
-    el.scrollIntoView({ behavior: "smooth" });
-  } catch (err) { el.innerHTML = `<p class="error">${err.message}</p>`; }
+      <div class="profile-body">
+        <div class="stat-grid">${stats.map(([label,value]) => `<div class="stat"><b>${value}</b><span>${label}${["PTS","AST","REB"].includes(label) ? " / game" : ""}</span></div>`).join("")}</div>
+        <div class="profile-lower">
+          <div><div class="subhead"><h3>League standing</h3><span>${percentileData ? escapeHTML(percentileData.season) : "NOT AVAILABLE"}</span></div>
+            ${pctEntries.length ? pctEntries.map(([key,value]) => `<div class="pct-row"><label title="${escapeHTML(key)}">${escapeHTML(key)}</label><div class="track"><div class="fill" style="width:${Math.max(0,Math.min(100,Number(value)))}%"></div></div><b>${Math.round(value)}</b></div>`).join("") : '<p class="search-hint">Current-season percentiles are available for active players with a qualifying sample.</p>'}
+          </div>
+          <div><div class="subhead"><h3>Career trail</h3><span>PTS · AST · REB</span></div><div class="career-list">
+            ${seasons.slice().reverse().map((season,index) => `<div class="career-row ${index === 0 ? "current" : ""}"><b>${escapeHTML(season.SEASON_ID)}</b><span>${fmt(season.PTS)}</span><span>${fmt(season.AST)}</span><span>${fmt(season.REB)}</span></div>`).join("")}
+          </div></div>
+        </div>
+        <div class="insight-stack">
+          <div><div class="subhead"><h3>Recent form</h3><span>LAST ${recentGames.length} GAMES</span></div>
+            ${recentGames.length ? `<div class="game-strip">${recentGames.map(game => `<div class="game-chip ${game.WL === "W" ? "win" : "loss"}"><div class="game-date">${escapeHTML(game.DATE)}</div><b>${escapeHTML(game.PTS)} PTS</b><span>${escapeHTML(game.MATCHUP)} · ${escapeHTML(game.WL)}</span></div>`).join("")}</div>` : '<p class="search-hint">Recent game data is unavailable for this season.</p>'}
+          </div>
+          <div><div class="subhead"><h3>Similar players</h3><span>STYLE MATCH</span></div>
+            ${similar.length ? `<div class="comp-list">${similar.map(player => `<div class="comp-item"><div><b>${escapeHTML(player.PLAYER_NAME)}</b><small>${escapeHTML(player.TEAM_ABBREVIATION)} · ${fmt(player.PTS)} PTS</small></div><span class="comp-score">${fmt(player.SIMILARITY,0)}%</span></div>`).join("")}</div>` : '<p class="search-hint">Statistical comps require an active-season sample.</p>'}
+          </div>
+        </div>
+        <div class="profile-controls">
+          <label>Analysis season<select id="profile-season">${seasons.slice().reverse().map(season => `<option value="${escapeHTML(season.SEASON_ID)}" ${season.SEASON_ID === latest.SEASON_ID ? "selected" : ""}>${escapeHTML(season.SEASON_ID)}</option>`).join("")}</select></label>
+          <label>Shot sample<select id="profile-season-type"><option>Regular Season</option><option>Playoffs</option></select></label>
+        </div>
+        <div id="profile-deep" class="deep-stack"><div class="loading">LOADING DEEP ANALYTICS…</div></div>
+      </div>`;
+    const refreshDeep = () => loadProfileDeep(id, name, $("profile-season").value, $("profile-season-type").value);
+    $("profile-season").addEventListener("change", refreshDeep);
+    $("profile-season-type").addEventListener("change", refreshDeep);
+    await refreshDeep();
+  } catch (error) { profile.innerHTML = `<div class="empty-state"><div><h3>Profile unavailable</h3><p class="error">${escapeHTML(error.message)}</p></div></div>`; }
 }
 
-// --- predict --------------------------------------------------------------
+const money = value => Number.isFinite(Number(value)) ? `$${(Number(value) / 1e6).toFixed(1)}M` : "—";
+const deepValue = result => result.status === "fulfilled" ? result.value : null;
+
+function percentileRows(entries) {
+  return entries.length ? entries.map(([key,value]) => `<div class="pct-row"><label>${escapeHTML(key.replaceAll("_"," "))}</label><div class="track"><div class="fill" style="width:${Math.max(0,Math.min(100,Number(value)))}%"></div></div><b>${Math.round(value)}</b></div>`).join("") : '<p class="analytics-note">No qualifying percentile sample.</p>';
+}
+
+function shotCourt(data, mode = "hex") {
+  if (!data?.attempts?.length) return '<div class="empty-state" style="min-height:360px"><p>No shots in this sample.</p></div>';
+  const zoneDiff = new Map((data.zones || []).map(zone => [
+    [zone.SHOT_ZONE_BASIC,zone.SHOT_ZONE_AREA,zone.SHOT_ZONE_RANGE].join("|"), Number(zone.DIFF)
+  ]));
+  let marks = "";
+  if (mode === "hex") {
+    const max = Math.max(1,...data.hexes.map(hex => Number(hex.FGA) || 0));
+    marks = data.hexes.map(hex => {
+      const diff = Number(hex.DIFF) || 0, color = diff > .02 ? "#c9f65b" : diff < -.02 ? "#ff6b6b" : "#6f7884";
+      const radius = 5 + 13 * Math.sqrt((Number(hex.FGA)||0) / max);
+      return `<circle cx="${Number(hex.X)}" cy="${Number(hex.Y)}" r="${radius}" fill="${color}" fill-opacity=".72"><title>${escapeHTML(hex.FGA)} shots · ${fmt(Number(hex.PCT)*100)}% · ${diff>=0?"+":""}${fmt(diff*100)} vs league</title></circle>`;
+    }).join("");
+  } else {
+    marks = data.attempts.map(shot => {
+      const key = [shot.SHOT_ZONE_BASIC,shot.SHOT_ZONE_AREA,shot.SHOT_ZONE_RANGE].join("|");
+      const diff = zoneDiff.get(key) || 0;
+      const color = mode === "zone" ? (diff > .02 ? "#c9f65b" : diff < -.02 ? "#ff6b6b" : "#6f7884") : (Number(shot.SHOT_MADE_FLAG) ? "#c9f65b" : "#6f7884");
+      return `<circle cx="${Number(shot.LOC_X)}" cy="${Number(shot.LOC_Y)}" r="4" fill="${color}" fill-opacity=".76"><title>${escapeHTML(shot.SHOT_ZONE_BASIC)} · ${Number(shot.SHOT_MADE_FLAG)?"made":"missed"}</title></circle>`;
+    }).join("");
+  }
+  return `<svg class="shot-court" viewBox="-250 -55 500 405" role="img" aria-label="Player shot chart">
+    <g fill="none" stroke="#343c46" stroke-width="2"><rect x="-250" y="-47" width="500" height="395"/><circle cx="0" cy="0" r="7.5"/><line x1="-30" y1="-7" x2="30" y2="-7"/><rect x="-80" y="-47" width="160" height="190"/><path d="M-220 92 L-220 -47 M220 92 L220 -47 M-220 92 A237.5 237.5 0 0 0 220 92"/><path d="M-60 143 A60 60 0 0 0 60 143"/></g>${marks}</svg>`;
+}
+
+function splitRows(rows) {
+  const columns = ["GP","MIN","PTS","REB","AST","FG3M","FG_PCT","PLUS_MINUS"];
+  const header = `<div class="split-row header"><span>Split</span>${columns.map(column => `<span>${column.replace("PLUS_MINUS","+/-").replace("FG_PCT","FG%")}</span>`).join("")}</div>`;
+  return header + rows.map(row => `<div class="split-row"><b>${escapeHTML(row.Split)}</b>${columns.map(column => `<span>${row[column] == null ? "—" : column === "FG_PCT" ? fmt(Number(row[column])*100)+"%" : fmt(row[column],column === "GP" ? 0 : 1)}</span>`).join("")}</div>`).join("");
+}
+
+async function loadProfileDeep(id, name, season, seasonType) {
+  const target = $("profile-deep");
+  target.innerHTML = '<div class="loading">REFRESHING DEEP ANALYTICS…</div>';
+  const encodedSeason = encodeURIComponent(season), encodedType = encodeURIComponent(seasonType);
+  const [insightsResult, shotsResult, splitsResult, onOffResult, contractResult] = await Promise.allSettled([
+    api(`/players/${id}/insights?season=${encodedSeason}`),
+    api(`/players/${id}/shots?season=${encodedSeason}&season_type=${encodedType}`),
+    api(`/players/${id}/splits?season=${encodedSeason}`),
+    api(`/players/${id}/on-off`),
+    api(`/players/${id}/contract`),
+  ]);
+  const insights = deepValue(insightsResult), shots = deepValue(shotsResult), splits = deepValue(splitsResult);
+  const onOff = deepValue(onOffResult)?.on_off, contract = deepValue(contractResult);
+  const ratings = insights?.ratings || {}, positionEntries = Object.entries(insights?.position_percentiles || {}).slice(0,8);
+  const quality = shots?.quality || {}, breakdown = shots?.breakdown || [];
+  target.innerHTML = `
+    <section class="deep-panel"><div class="subhead"><h3>Scouting context</h3><span>${escapeHTML(insights?.season || season)} · ${escapeHTML(insights?.position_group || "League")}</span></div>
+      ${insights?.scouting_take ? `<div class="scouting-card">${escapeHTML(insights.scouting_take)}</div>` : '<p class="analytics-note">Scouting context is unavailable for this sample.</p>'}
+      <div class="context-grid">
+        <div class="context-tile"><b>${ratings.NET_RATING == null ? "—" : `${Number(ratings.NET_RATING)>=0?"+":""}${fmt(ratings.NET_RATING)}`}</b><span>Net rating</span></div>
+        <div class="context-tile"><b>${ratings.CLUTCH_NET_RATING == null ? "—" : `${Number(ratings.CLUTCH_NET_RATING)>=0?"+":""}${fmt(ratings.CLUTCH_NET_RATING)}`}</b><span>Clutch net</span></div>
+        <div class="context-tile"><b>${ratings.DPM == null ? "—" : `${Number(ratings.DPM)>=0?"+":""}${fmt(ratings.DPM)}`}</b><span>DARKO DPM</span></div>
+        <div class="context-tile"><b>${escapeHTML(insights?.draft || "Undrafted")}</b><span>Draft pedigree</span></div>
+      </div>${positionEntries.length ? `<div class="subhead" style="margin-top:20px"><h3>Position percentiles</h3><span>Inferred ${escapeHTML(insights.position_group)}</span></div>${percentileRows(positionEntries)}` : ""}
+    </section>
+    <section class="deep-panel"><div class="subhead"><h3>On / off impact</h3><span>${escapeHTML(onOff ? "CURRENT TEAM" : "UNAVAILABLE")}</span></div>
+      ${onOff ? `<div class="context-grid"><div class="context-tile"><b>${fmt(onOff.NET_ON)}</b><span>Team net · on</span></div><div class="context-tile"><b>${fmt(onOff.NET_OFF)}</b><span>Team net · off</span></div><div class="context-tile"><b>${Number(onOff.NET_DIFF)>=0?"+":""}${fmt(onOff.NET_DIFF)}</b><span>On/off swing</span></div><div class="context-tile"><b>${fmt(onOff.MIN_ON,0)}</b><span>Minutes on</span></div></div>` : '<p class="analytics-note">On/off data is available for active players with a current team row.</p>'}
+    </section>
+    <section class="deep-panel"><div class="subhead"><h3>Shot intelligence</h3><span>${escapeHTML(seasonType)} · ${shots?.attempts?.length || 0} attempts</span></div>
+      <div class="profile-controls"><label>Chart view<select id="shot-mode"><option value="hex">Hot zones</option><option value="zone">Zone vs league</option><option value="raw">Makes / misses</option></select></label></div>
+      <div class="shot-layout"><div><div id="shot-viz">${shotCourt(shots,"hex")}</div><div class="shot-key"><span><i style="background:#c9f65b"></i>Above / made</span><span><i style="background:#ff6b6b"></i>Below league</span><span><i style="background:#6f7884"></i>Neutral / missed</span></div></div>
+      <div><div class="context-grid" style="grid-template-columns:1fr 1fr"><div class="context-tile"><b>${quality.XEFG==null?"—":fmt(Number(quality.XEFG)*100)+"%"}</b><span>Expected eFG%</span></div><div class="context-tile"><b>${quality.EFG==null?"—":fmt(Number(quality.EFG)*100)+"%"}</b><span>Actual eFG%</span></div><div class="context-tile"><b>${quality.MAKING==null?"—":`${Number(quality.MAKING)>=0?"+":""}${fmt(Number(quality.MAKING)*100)}`}</b><span>Shot making</span></div><div class="context-tile"><b>${quality.LEAGUE_EFG==null?"—":fmt(Number(quality.LEAGUE_EFG)*100)+"%"}</b><span>League eFG%</span></div></div>
+      <div style="margin-top:14px">${breakdown.map(zone => `<div class="zone-row"><b>${escapeHTML(zone.ZONE)}</b><span>${fmt(Number(zone.SHARE)*100)}%</span><span>${fmt(Number(zone.FG_PCT)*100)}%</span><span class="${Number(zone.DIFF)>=0?"positive":"negative-text"}">${zone.DIFF==null?"—":`${Number(zone.DIFF)>=0?"+":""}${fmt(Number(zone.DIFF)*100)}`}</span></div>`).join("")}</div></div></div>
+      <p class="analytics-note">Hot-zone size is shot volume; color is accuracy versus the league expectation for those locations.</p>
+    </section>
+    <section class="deep-panel"><div class="subhead"><h3>Situational splits</h3><span>${escapeHTML(season)}</span></div>
+      <div class="profile-controls"><label>Split by<select id="split-mode"><option value="home_away">Home / away</option><option value="month">Month</option><option value="rest">Rest</option><option value="opponent">Opponent</option></select></label></div><div id="split-viz" class="split-table">${splitRows(splits?.splits?.home_away || [])}</div>
+    </section>
+    <section class="deep-panel"><div class="subhead"><h3>Contract & salary</h3><span>LOCAL-ONLY DATA</span></div>
+      ${contract ? `<div class="context-grid"><div class="context-tile"><b>${money(Object.values(contract.salaries)[0])}</b><span>Current salary</span></div><div class="context-tile"><b>${money(Object.values(contract.salaries).reduce((sum,value)=>sum+Number(value),0))}</b><span>Committed total</span></div><div class="context-tile"><b>${money(contract.guaranteed)}</b><span>Guaranteed</span></div></div><div style="margin-top:13px">${Object.entries(contract.salaries).map(([year,value]) => `<div class="contract-row"><b>${escapeHTML(year)}</b><span>${money(value)}</span><span></span><span></span></div>`).join("")}</div><p class="analytics-note">Scraped weekly for personal use and served only to the local machine.</p>` : '<p class="analytics-note">No listed contract, or this request is not coming from the local machine.</p>'}
+    </section>`;
+  $("shot-mode")?.addEventListener("change", event => { $("shot-viz").innerHTML = shotCourt(shots,event.target.value); });
+  $("split-mode")?.addEventListener("change", event => { $("split-viz").innerHTML = splitRows(splits?.splits?.[event.target.value] || []); });
+}
+
+let pulseLoaded = false;
+let pulseData = null;
+let metaData = null;
+async function loadMeta(){if(metaData)return metaData;metaData=await api("/meta");const options=metaData.seasons.map(season=>`<option value="${escapeHTML(season)}">${escapeHTML(season)}</option>`).join("");["pulse-season","explore-season","games-season"].forEach(id=>{if($(id))$(id).innerHTML=options;});const forecastOptions=(metaData.prediction_seasons||[metaData.current_season]).map((season,index)=>`<option value="${escapeHTML(season)}" ${index?"selected":""}>${escapeHTML(season)}${index?" · preseason projection":""}</option>`).join("");if($("prediction-season"))$("prediction-season").innerHTML=forecastOptions;return metaData;}
+const leaderLabels = {points:"Points",assists:"Assists",rebounds:"Rebounds",threes:"Threes",net_rating:"Net rating",clutch_net:"Clutch net"};
+const leaderStats = {points:"PTS",assists:"AST",rebounds:"REB",threes:"FG3M",net_rating:"NET_RATING",clutch_net:"CLUTCH_NET_RATING"};
+async function loadPulse() {
+  if (pulseLoaded) return;
+  try {
+    await loadMeta();
+    pulseData = await api(`/league/pulse?season=${encodeURIComponent($("pulse-season").value)}`);
+    pulseLoaded = true;
+    const cards = Object.entries(pulseData.leaders).map(([key,rows]) => {
+      const stat = leaderStats[key];
+      return `<article class="leader-card"><div class="leader-title">${leaderLabels[key] || escapeHTML(key)}<span>TOP 5</span></div>${rows.map((row,index) => `<div class="leader-row"><span class="leader-rank">0${index+1}</span><span class="leader-name">${escapeHTML(row.PLAYER_NAME)}<small>${escapeHTML(row.TEAM_ABBREVIATION || "—")}</small></span><b class="leader-value">${stat.includes("RATING") && Number(row[stat]) > 0 ? "+" : ""}${fmt(row[stat])}</b></div>`).join("")}</article>`;
+    }).join("");
+    const teams = pulseData.team_form || [];
+    const maxNet = Math.max(1, ...teams.map(team => Math.abs(Number(team.form_net) || 0)));
+    const formRows = teams.map((team,index) => {
+      const net = Number(team.form_net) || 0, width = Math.max(3, Math.abs(net) / maxNet * 100);
+      return `<div class="team-form-row"><b>${escapeHTML(team.team)}</b><div class="net-bar"><i class="${net < 0 ? "negative" : ""}" style="width:${width}%"></i></div><span>${net >= 0 ? "+" : ""}${fmt(net)}</span><span>${fmt((Number(team.form_win_pct)||0)*100,0)}%</span><span>${team.elo==null?"—":fmt(team.elo,0)}</span></div>`;
+    }).join("");
+    const landscapeTeams=teams.filter(team=>team.form_ortg!=null&&team.form_drtg!=null),minO=Math.min(...landscapeTeams.map(team=>Number(team.form_ortg))),maxO=Math.max(...landscapeTeams.map(team=>Number(team.form_ortg))),minD=Math.min(...landscapeTeams.map(team=>Number(team.form_drtg))),maxD=Math.max(...landscapeTeams.map(team=>Number(team.form_drtg)));
+    const landscape=landscapeTeams.length?`<section class="form-board"><div class="form-board-head"><h3>League landscape</h3><span>OFFENSE → · DEFENSE BETTER ↑</span></div><svg class="shot-court" style="min-height:420px" viewBox="0 0 700 400" role="img" aria-label="Team offense versus defense"><line x1="350" y1="20" x2="350" y2="375" stroke="#343c46"/><line x1="25" y1="200" x2="675" y2="200" stroke="#343c46"/>${landscapeTeams.map(team=>{const x=40+(Number(team.form_ortg)-minO)/(maxO-minO||1)*620,y=30+(Number(team.form_drtg)-minD)/(maxD-minD||1)*340;return `<g><circle cx="${x}" cy="${y}" r="11" fill="#ff5c35"/><text x="${x}" y="${y-15}" text-anchor="middle" fill="#f4f1ea" font-size="10">${escapeHTML(team.team)}</text></g>`;}).join("")}</svg></section>`:"";
+    const slate=(pulseData.next_slate||[]).length?`<section class="form-board"><div class="form-board-head"><h3>Next slate</h3><span>REST-AWARE MODEL PROBABILITIES</span></div><div class="leader-grid">${pulseData.next_slate.map(game=>`<article class="leader-card" style="padding:20px"><b class="leader-value">${escapeHTML(game.away)} @ ${escapeHTML(game.home)}</b><p>${escapeHTML(game.home)} ${fmt(Number(game.home_win_prob)*100,0)}% · ${new Date(game.tipoff).toLocaleString()}</p></article>`).join("")}</div></section>`:"";
+    $("pulse-content").innerHTML = `<div class="leader-grid">${cards}</div>${slate}<section class="form-board"><div class="form-board-head"><h3>Team form index</h3><span>NET · WIN% · ELO</span></div><div class="team-form-list">${formRows}</div></section>${landscape}`;
+  } catch (error) { $("pulse-content").innerHTML = `<div class="panel empty-state"><div><h3>League pulse unavailable</h3><p class="error">${escapeHTML(error.message)}</p></div></div>`; }
+}
+$("pulse-season").addEventListener("change",()=>{pulseLoaded=false;$("pulse-content").innerHTML='<div class="panel empty-state"><div class="loading">LOADING HISTORICAL PULSE…</div></div>';loadPulse();});
+
+let exploreLoaded = false;
+let exploreData = null;
+async function loadExplore() {
+  if (!exploreLoaded) {
+    try {
+      await loadMeta();
+      const teams = await api("/teams");
+      $("explore-team").innerHTML = '<option value="">All teams</option>' + teams.map(team => `<option>${escapeHTML(team)}</option>`).join("");
+    } catch {}
+  }
+  exploreLoaded = true;
+  const params = new URLSearchParams({
+    season: $("explore-season").value,
+    rate: $("explore-rate").value,
+    q: $("explore-query").value.trim(),
+    sort: $("explore-sort").value,
+    order: "desc",
+    min_gp: "10",
+  });
+  if ($("explore-team").value) params.append("teams", $("explore-team").value);
+  $("explore-output").innerHTML = '<div class="empty-state" style="min-height:390px"><div class="loading">FILTERING PLAYER POOL…</div></div>';
+  try {
+    const result = await api(`/league/explore?${params}`);
+    exploreData = result;
+    const columns = [["TEAM_ABBREVIATION","TM"],["GP","GP"],["MIN","MIN"],["PTS","PTS"],["REB","REB"],["AST","AST"],["STL","STL"],["BLK","BLK"],["FG3M","3PM"],["NET_RATING","NET"],["DPM","DPM"]];
+    const header = `<div class="explore-row header"><span>Player · ${result.count} results</span>${columns.map(([,label]) => `<span>${label}</span>`).join("")}</div>`;
+    const rows = result.players.map(player => `<div class="explore-row"><strong>${escapeHTML(player.PLAYER_NAME)}</strong>${columns.map(([key]) => `<span>${player[key] == null ? "—" : key === "TEAM_ABBREVIATION" ? escapeHTML(player[key]) : `${["NET_RATING","DPM"].includes(key) && Number(player[key]) > 0 ? "+" : ""}${fmt(player[key], key === "GP" ? 0 : 1)}`}</span>`).join("")}</div>`).join("");
+    $("explore-output").innerHTML = header + rows + `<button class="explore-run" style="margin:16px" id="explore-download">Download CSV ↓</button>`;
+    $("explore-download").addEventListener("click",downloadExplore);
+  } catch (error) { $("explore-output").innerHTML = `<div class="empty-state" style="min-height:390px"><div><h3>League table unavailable</h3><p class="error">${escapeHTML(error.message)}</p></div></div>`; }
+}
+$("explore-go").addEventListener("click", loadExplore);
+function downloadExplore(){if(!exploreData?.players?.length)return;const columns=Object.keys(exploreData.players[0]),quote=value=>`"${String(value??"").replaceAll('"','""')}"`,csv=[columns.join(","),...exploreData.players.map(row=>columns.map(column=>quote(row[column])).join(","))].join("\n"),link=document.createElement("a");link.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));link.download=`nba_${exploreData.season}_${exploreData.rate}.csv`;link.click();URL.revokeObjectURL(link.href);}
+
+let gameData = null;
+function renderGames(team = "") {
+  const games = (gameData?.games || []).filter(game => !team || game.HOME === team || game.AWAY === team);
+  const upcoming = games.filter(game => ["Scheduled","Live"].includes(game.STATUS)).slice(0,20);
+  const finals = games.filter(game => game.STATUS === "Final").reverse().slice(0,40);
+  const section = (title, rows) => rows.length ? `<section class="game-section"><div class="game-section-title">${title} · ${rows.length}</div>${rows.map(game => `<button type="button" class="game-row" data-game-id="${escapeHTML(game.GAME_ID)}"><span>${escapeHTML(game.GAME_DATE)}</span><b>${escapeHTML(game.AWAY)} @ ${escapeHTML(game.HOME)}</b><span>${game.STATUS === "Final" ? `${escapeHTML(game.AWAY_PTS)}–${escapeHTML(game.HOME_PTS)}` : escapeHTML(game.STATUS_TEXT || game.STATUS)}</span><span>${escapeHTML(game.WINNER || "—")}</span><span>${escapeHTML(game.TOP_SCORER || "View details →")}</span></button>`).join("")}</section>` : "";
+  $("games-output").innerHTML = section("Upcoming", upcoming) + section("Final scores", finals) || '<div class="panel empty-state"><div><h3>No games found</h3><p>Try a different team filter.</p></div></div>';
+}
+async function loadGames() {
+  if (gameData) return;
+  try {
+    await loadMeta();
+    gameData = await api(`/games?season=${encodeURIComponent($("games-season").value)}`);
+    const teams = [...new Set(gameData.games.flatMap(game => [game.HOME, game.AWAY]))].filter(Boolean).sort();
+    $("games-team").innerHTML = '<option value="">All teams</option>' + teams.map(team => `<option>${escapeHTML(team)}</option>`).join("");
+    renderGames();
+  } catch (error) { $("games-output").innerHTML = `<div class="panel empty-state"><div><h3>Game Center unavailable</h3><p class="error">${escapeHTML(error.message)}</p></div></div>`; }
+}
+$("games-team").addEventListener("change", event => renderGames(event.target.value));
+$("games-season").addEventListener("change",()=>{gameData=null;$("box-score-output").innerHTML="";$("games-output").innerHTML='<div class="panel empty-state"><div class="loading">LOADING SEASON…</div></div>';loadGames();});
+
+function gameFlowSVG(story) {
+  const points=story.timeline||[];
+  if(!points.length)return '<p class="analytics-note">Timeline data is unavailable.</p>';
+  const width=700,height=260,pad=34,maxElapsed=Math.max(...points.map(point=>Number(point.ELAPSED)||0),1);
+  const x=point=>pad+(Number(point.ELAPSED)||0)/maxElapsed*(width-pad*2);
+  const y=point=>height-pad-(Number(point.HOME_WIN_PROB)||0)*(height-pad*2);
+  const path=points.map((point,index)=>`${index?'L':'M'} ${x(point).toFixed(1)} ${y(point).toFixed(1)}`).join(' ');
+  const quarters=[1,2,3].map(q=>{const qx=pad+q*720/maxElapsed*(width-pad*2);return qx<width-pad?`<line x1="${qx}" y1="${pad}" x2="${qx}" y2="${height-pad}" stroke="#2a3039" stroke-dasharray="3 5"/>`:'';}).join('');
+  return `<svg class="game-flow-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Home win probability by game time"><line x1="${pad}" y1="${height/2}" x2="${width-pad}" y2="${height/2}" stroke="#343c46"/>${quarters}<text x="6" y="${pad+4}" fill="#979da8" font-size="10">100%</text><text x="12" y="${height/2+4}" fill="#979da8" font-size="10">50%</text><text x="18" y="${height-pad+4}" fill="#979da8" font-size="10">0%</text><path d="${path}" fill="none" stroke="#ff5c35" stroke-width="4" stroke-linejoin="round"/><circle cx="${x(points.at(-1))}" cy="${y(points.at(-1))}" r="6" fill="#c7ff4a"/></svg>`;
+}
+
+function shotChartSVG(story) {
+  const shots=(story.shots||[]).filter(shot=>shot.XLEGACY!=null&&shot.YLEGACY!=null);
+  if(!story.shot_locations_available||!shots.length)return '';
+  const clamp=(value,min,max)=>Math.max(min,Math.min(max,value));
+  const marks=shots.map(shot=>{const cx=clamp(350+Number(shot.XLEGACY)*1.12,32,668),cy=clamp(535-Number(shot.YLEGACY),28,535),color=shot.MADE?'#ff5c35':'#6f7681';return `<circle cx="${cx}" cy="${cy}" r="6" fill="${color}" opacity=".9"><title>${escapeHTML(shot.PLAYER||'Unknown')} · ${escapeHTML(shot.SUBTYPE||'shot')} · ${shot.MADE?'made':'missed'}</title></circle>`;}).join('');
+  return `<svg class="shot-court" viewBox="0 0 700 560" role="img" aria-label="Game shot chart"><rect x="25" y="20" width="650" height="520" fill="none" stroke="#343c46" stroke-width="2"/><path d="M 145 20 V 210 H 555 V 20 M 245 210 A 105 105 0 0 0 455 210" fill="none" stroke="#343c46" stroke-width="2"/><circle cx="350" cy="65" r="8" fill="none" stroke="#343c46" stroke-width="2"/><path d="M 62 20 V 135 A 330 330 0 0 0 638 135 V 20" fill="none" stroke="#343c46" stroke-width="2"/>${marks}</svg><div class="shot-key"><span><i style="background:#ff5c35"></i>Made</span><span><i style="background:#6f7681"></i>Missed</span></div>`;
+}
+
+function renderGameStory(story) {
+  if(!story.available)return `<section class="panel panel-pad" style="margin-top:12px"><div class="subhead"><h3>Game story unavailable</h3><span>CACHED DATA</span></div><p class="analytics-note">${escapeHTML(story.reason||'No cached play-by-play is available for this game.')}</p></section>`;
+  const turns=(story.turning_points||[]).map(point=>`<div class="game-story-row"><span>Q${escapeHTML(point.PERIOD)} ${escapeHTML(point.CLOCK)}</span><b>${escapeHTML(story.away)} ${escapeHTML(point.AWAY_SCORE)}–${escapeHTML(point.HOME_SCORE)} ${escapeHTML(story.home)}</b><span>${fmt(Number(point.HOME_WIN_PROB)*100,0)}% home win</span><span>±${fmt(Number(point.SWING)*100,0)} pts</span></div>`).join('');
+  const advanced=(story.advanced||[]).map(team=>`<div class="advanced-row"><span><b>${escapeHTML(team.TEAM)}</b></span><span>${escapeHTML(team.PTS)}</span><span>${fmt(Number(team.EFG_PCT)*100,1)}%</span><span>${fmt(Number(team.TS_PCT)*100,1)}%</span><span>${fmt(Number(team.TOV_RATE)*100,1)}%</span><span>${fmt(Number(team.FT_RATE)*100,1)}%</span><span>${fmt(team.AST_TOV,2)}</span><span>${escapeHTML(team.OREB)}</span><span>${escapeHTML(team.REB)}</span></div>`).join('');
+  const lineups=(story.lineups||[]).map(row=>`<div class="lineup-row"><b>${escapeHTML(row.TEAM)} · ${row.PLAYERS.map(escapeHTML).join(' · ')}</b><span>${fmt(row.MIN,1)} MIN · ${Number(row.PLUS_MINUS)>=0?'+':''}${fmt(row.PLUS_MINUS,1)} · ${Number(row.NET_RATING)>=0?'+':''}${fmt(row.NET_RATING,1)} NET · ${escapeHTML(row.STINTS)} STINTS</span></div>`).join('');
+  const shotSummary=(story.shot_summary||[]).map(row=>`<div class="zone-row"><b>${escapeHTML(row.TEAM||'—')} · ${escapeHTML(row.SHOT_TYPE||'Unknown shot')}</b><span>${escapeHTML(row.FGM)}</span><span>${escapeHTML(row.FGA)}</span><span>${fmt(Number(row.FG_PCT)*100,1)}%</span></div>`).join('');
+  const feed=(story.feed||[]).map(row=>`<div class="game-story-row"><span>Q${escapeHTML(row.PERIOD)} ${escapeHTML(row.CLOCK)}</span><b>${escapeHTML(row.PLAYER||row.TEAM||'Game')}</b><span>${escapeHTML(row.EVENT)}</span><span>${escapeHTML(row.SCORE||'')}</span></div>`).join('');
+  const chart=shotChartSVG(story);
+  return `<div class="game-story-grid"><section class="panel game-story-card wide"><div class="subhead"><h3>Game flow</h3><span>HOME WIN PROBABILITY</span></div>${gameFlowSVG(story)}<p class="analytics-note">${escapeHTML(story.win_probability_method)}</p></section><section class="panel game-story-card"><div class="subhead"><h3>Turning points</h3><span>LARGEST PROBABILITY SWINGS</span></div><div class="game-story-list">${turns||'<p class="analytics-note">No score changes were cached.</p>'}</div></section><section class="panel game-story-card"><div class="subhead"><h3>Game context</h3><span>RUNS · CLUTCH</span></div><div class="context-grid"><div class="context-tile"><b>${escapeHTML(story.biggest_runs?.[story.away]??'—')}</b><span>${escapeHTML(story.away)} biggest run</span></div><div class="context-tile"><b>${escapeHTML(story.biggest_runs?.[story.home]??'—')}</b><span>${escapeHTML(story.home)} biggest run</span></div><div class="context-tile"><b>${escapeHTML(story.lead_changes)}</b><span>Lead changes</span></div><div class="context-tile"><b>${escapeHTML(story.clutch_points?.[story.away]??0)}–${escapeHTML(story.clutch_points?.[story.home]??0)}</b><span>Clutch pts · away–home</span></div></div></section><section class="panel game-story-card"><div class="subhead"><h3>Shot profile</h3><span>${chart?'LOCATION CACHE':'SUMMARY ONLY'}</span></div>${chart||'<p class="analytics-note">Shot coordinates are not present in this older cache. Shot-type totals remain available below.</p>'}<div style="margin-top:14px">${shotSummary||'<p class="analytics-note">Shot events are unavailable.</p>'}</div></section><section class="panel game-story-card"><div class="subhead"><h3>Top lineups</h3><span>ON-COURT STINTS</span></div>${lineups||'<p class="analytics-note">Rotation data is not cached for this game, so lineup stints cannot be reconstructed.</p>'}</section><section class="panel game-story-card wide"><div class="subhead"><h3>Advanced team box</h3><span>EFFICIENCY · POSSESSION CONTEXT</span></div><div class="split-table"><div class="advanced-row header"><span>Team</span><span>PTS</span><span>eFG%</span><span>TS%</span><span>TOV%</span><span>FT rate</span><span>AST/TO</span><span>OREB</span><span>REB</span></div>${advanced}</div></section><section class="panel game-story-card wide"><div class="subhead"><h3>Latest events</h3><span>PLAY-BY-PLAY FEED</span></div><div class="game-story-list">${feed||'<p class="analytics-note">Detailed events are unavailable.</p>'}</div></section></div>`;
+}
+
+$("games-output").addEventListener("click",async event=>{
+  const row=event.target.closest("[data-game-id]");if(!row)return;
+  const game=(gameData?.games||[]).find(item=>String(item.GAME_ID)===row.dataset.gameId),output=$("box-score-output");if(!game)return;
+  const score=game.STATUS==="Final"?`${game.AWAY_PTS}–${game.HOME_PTS}`:(game.STATUS_TEXT||game.STATUS);
+  const summary=`<section class="panel panel-pad" style="margin-top:20px"><div class="subhead"><h3>${escapeHTML(game.AWAY)} @ ${escapeHTML(game.HOME)}</h3><span>${escapeHTML(game.GAME_DATE)} · ${escapeHTML(game.STATUS)}</span></div><div class="context-grid"><div class="context-tile"><b>${escapeHTML(score)}</b><span>Score / tip</span></div><div class="context-tile"><b>${escapeHTML(game.WINNER||"—")}</b><span>Winner</span></div><div class="context-tile"><b>${escapeHTML(game.TOP_SCORER||"—")}</b><span>Top scorer</span></div><div class="context-tile"><b>${escapeHTML(game.GAME_ID)}</b><span>Game ID</span></div></div></section>`;
+  output.innerHTML=summary+(game.STATUS==="Final"?'<div class="panel empty-state" style="min-height:180px"><div class="loading">LOADING FULL BOX SCORE…</div></div>':'<div class="panel panel-pad"><p class="analytics-note">The player box score becomes available after the game is final.</p></div>');
+  output.scrollIntoView({behavior:"smooth",block:"start"});
+  if(game.STATUS!=="Final")return;
+  const season=encodeURIComponent(gameData.season),gameId=encodeURIComponent(game.GAME_ID);
+  const [boxResult,storyResult]=await Promise.allSettled([api(`/games/${gameId}/box-score?season=${season}`),api(`/games/${gameId}/story?season=${season}`)]);
+  let box;
+  if(boxResult.status==="fulfilled"){
+    const result=boxResult.value;
+    box=`<section class="team-sections panel" style="margin-top:12px"><div class="subhead"><h3>Full box score</h3><span>${escapeHTML(result.source.replaceAll("_"," "))} · GAME ${escapeHTML(result.game_id)}</span></div>${Object.entries(result.teams).map(([team,players])=>`<div class="team-section"><div class="subhead"><h3>${escapeHTML(team)}</h3><span>PLAYER TOTALS</span></div><div class="split-table"><div class="split-row header"><span>Player</span><span>MIN</span><span>PTS</span><span>REB</span><span>AST</span><span>STL</span><span>BLK</span><span>TO</span><span>FG</span></div>${players.map(player=>`<div class="split-row"><b>${escapeHTML(player.PLAYER)}</b><span>${fmt(player.MIN)}</span><span>${escapeHTML(player.PTS)}</span><span>${escapeHTML(player.REB)}</span><span>${escapeHTML(player.AST)}</span><span>${escapeHTML(player.STL)}</span><span>${escapeHTML(player.BLK)}</span><span>${escapeHTML(player.TO)}</span><span>${escapeHTML(player.FG)}</span></div>`).join("")}</div></div>`).join("")}</section>`;
+  }else{box=`<section class="panel panel-pad" style="margin-top:12px"><h3>Player box score unavailable</h3><p class="error">${escapeHTML(boxResult.reason.message)}</p><p class="analytics-note">The score and game summary above remain available. NBA box-score data may not yet be cached or the upstream endpoint may be temporarily unavailable.</p></section>`;}
+  const story=storyResult.status==="fulfilled"?renderGameStory(storyResult.value):`<section class="panel panel-pad" style="margin-top:12px"><h3>Game story unavailable</h3><p class="error">${escapeHTML(storyResult.reason.message)}</p><p class="analytics-note">Timeline analysis requires cached play-by-play data.</p></section>`;
+  output.innerHTML=summary+story+box;
+});
+
+const comparePicks = {a:null,b:null,c:null,d:null};
+function setupCompareSearch(key) {
+  const input = $(`compare-${key}`), results = $(`compare-${key}-results`);
+  let timer;
+  input.addEventListener("input", () => {
+    comparePicks[key] = null;
+    clearTimeout(timer);
+    const q = input.value.trim();
+    if (q.length < 3) { results.classList.add("hidden"); return; }
+    timer = setTimeout(async () => {
+      try {
+        const players = await api(`/players/search?q=${encodeURIComponent(q)}`);
+        results.innerHTML = players.slice(0,8).map(player => `<button data-name="${escapeHTML(player.full_name)}">${escapeHTML(player.full_name)}<span>${player.is_active ? "ACTIVE" : "HISTORICAL"}</span></button>`).join("") || '<div class="search-hint">No matches.</div>';
+        results.classList.remove("hidden");
+      } catch (error) { results.innerHTML = `<div class="error">${escapeHTML(error.message)}</div>`; results.classList.remove("hidden"); }
+    }, 220);
+  });
+  results.addEventListener("click", event => {
+    const button = event.target.closest("button");
+    if (!button) return;
+    comparePicks[key] = button.dataset.name; input.value = button.dataset.name; results.classList.add("hidden");
+  });
+}
+setupCompareSearch("a"); setupCompareSearch("b"); setupCompareSearch("c"); setupCompareSearch("d");
+$("compare-go").addEventListener("click", async () => {
+  const names = Object.values(comparePicks).filter(Boolean);
+  if (names.length < 2 || new Set(names).size !== names.length) {
+    $("compare-output").innerHTML = '<div class="error">Choose two to four different players from the search results.</div>'; return;
+  }
+  $("compare-output").innerHTML = '<div class="empty-state" style="min-height:280px"><div class="loading">BUILDING HEAD-TO-HEAD…</div></div>';
+  try {
+    const query = names.map(name => `names=${encodeURIComponent(name)}`).join("&");
+    const result = await api(`/compare?${query}`), stats = result.stats;
+    const rows = [...new Set(names.flatMap(name => Object.keys(stats[name] || {})))];
+    const lowerBetter = new Set(["TOV"]);
+    const body = rows.map(stat => {
+      const values = names.map(name => Number(stats[name]?.[stat]));
+      const valid = values.filter(Number.isFinite), best = valid.length ? (lowerBetter.has(stat) ? Math.min(...valid) : Math.max(...valid)) : null;
+      return `<div class="compare-table-row"><label>${escapeHTML(stat.replaceAll("_"," "))}</label>${values.map(value => `<span class="${value === best ? "winner" : ""}">${Number.isFinite(value) ? fmt(value, stat === "GP" ? 0 : 1) : "—"}</span>`).join("")}</div>`;
+    }).join("");
+    const grid=`120px repeat(${names.length},1fr)`;
+    const careerStats=[...new Set(names.flatMap(name=>Object.keys(result.career?.[name]||{})))];
+    const careerRows=careerStats.map(stat=>`<div class="compare-table-row" style="grid-template-columns:${grid}"><label>${escapeHTML(stat.replaceAll("_"," "))}</label>${names.map(name=>`<span>${result.career?.[name]?.[stat]==null?"—":fmt(result.career[name][stat],stat==="GP"?0:2)}</span>`).join("")}</div>`).join("");
+    const pctStats=[...new Set(names.flatMap(name=>Object.keys(result.percentiles?.[name]||{})))];
+    const pctRows=pctStats.map(stat=>`<div class="compare-table-row" style="grid-template-columns:${grid}"><label>${escapeHTML(stat.replaceAll("_"," "))}</label>${names.map(name=>`<span>${result.percentiles?.[name]?.[stat]==null?"—":fmt(result.percentiles[name][stat],0)+"th"}</span>`).join("")}</div>`).join("");
+    const qualityRows=[["XEFG","Shot diet (xeFG%)"],["EFG","Actual eFG%"],["MAKING","Shot making"]].map(([stat,label])=>`<div class="compare-table-row" style="grid-template-columns:${grid}"><label>${label}</label>${names.map(name=>`<span>${result.shot_quality?.[name]?.[stat]==null?"—":`${Number(result.shot_quality[name][stat])>=0&&stat==="MAKING"?"+":""}${fmt(Number(result.shot_quality[name][stat])*100,1)}`}</span>`).join("")}</div>`).join("");
+    const seasonRows=[...new Set(names.flatMap(name=>(result.career_seasons?.[name]||[]).map(row=>row.SEASON_ID)))].sort().reverse().map(season=>`<div class="compare-table-row" style="grid-template-columns:${grid}"><label>${escapeHTML(season)}</label>${names.map(name=>{const row=(result.career_seasons?.[name]||[]).find(item=>item.SEASON_ID===season);return `<span>${row?fmt(row.PTS):"—"}</span>`;}).join("")}</div>`).join("");
+    const currentRows=body?body.replaceAll('class="compare-table-row"',`class="compare-table-row" style="grid-template-columns:${grid}"`):'<p class="analytics-note">Current-season stats require every selected player to be active.</p>';
+    const posterLink=result.poster_png?`<a class="btn btn-primary" style="margin-top:24px" href="${escapeHTML(result.poster_png)}" target="_blank" rel="noopener">Download comparison poster ↗</a>`:"";
+    $("compare-output").innerHTML = `<div class="compare-head" style="grid-template-columns:${grid}"><div class="panel-kicker">${escapeHTML(result.season)}</div>${names.map(name=>`<div>${escapeHTML(name)}</div>`).join("")}</div><div class="subhead" style="margin-top:22px"><h3>Current season</h3><span>PER GAME</span></div>${currentRows}<div class="subhead" style="margin-top:28px"><h3>Career averages</h3><span>VOLUME-WEIGHTED</span></div>${careerRows}<div class="subhead" style="margin-top:28px"><h3>Season by season</h3><span>POINTS PER GAME</span></div>${seasonRows}<div class="subhead" style="margin-top:28px"><h3>League percentiles</h3><span>CURRENT SEASON</span></div>${pctRows||'<p class="analytics-note">Requires every player active this season.</p>'}<div class="subhead" style="margin-top:28px"><h3>Shot quality</h3><span>EXPECTED VS ACTUAL</span></div>${qualityRows}${posterLink}`;
+  } catch (error) { $("compare-output").innerHTML = `<div class="empty-state" style="min-height:280px"><div><h3>Comparison unavailable</h3><p class="error">${escapeHTML(error.message)}</p></div></div>`; }
+});
+
+let teamPickerLoaded = false;
+async function loadTeamPicker() {
+  if (teamPickerLoaded) return;
+  try {
+    const teams = pulseData?.team_form?.map(row => row.team) || await api("/teams");
+    $("team-pick").innerHTML = '<option value="">Select a team</option>' + teams.map(team => `<option value="${escapeHTML(team)}">${escapeHTML(team)}</option>`).join("");
+    teamPickerLoaded = true;
+  } catch (error) { $("roster-panel").innerHTML = `<div class="error">${escapeHTML(error.message)}</div>`; }
+}
+$("team-pick").addEventListener("change", async event => {
+  const team = event.target.value;
+  if (!team) return;
+  $("roster-panel").innerHTML = '<div class="empty-state" style="min-height:330px"><div class="loading">OPENING TEAM ROOM…</div></div>';
+  try {
+    const result = await api(`/teams/${encodeURIComponent(team)}/profile`), form = result.form;
+    const metrics = [[`${fmt((Number(form.form_win_pct)||0)*100,0)}%`,"Win rate"],[`${Number(form.form_net)>=0?"+":""}${fmt(form.form_net)}`,"Net rating"],[fmt(form.form_ortg),"Off rating"],[fmt(form.form_drtg),"Def rating"]];
+    $("team-identity").innerHTML = `<div class="team-code">${escapeHTML(team)}</div>${metrics.map(([value,label]) => `<div class="team-metric"><b>${value}</b><span>${label}</span></div>`).join("")}`;
+    const columns = [["MIN","MIN"],["PTS","PTS"],["REB","REB"],["AST","AST"],["NET_RATING","NET"],["DPM","DPM"]];
+    const head = `<div class="roster-head"><span>Player</span>${columns.map(([,label]) => `<span>${label}</span>`).join("")}</div>`;
+    const rows = result.roster.map(player => `<div class="roster-row"><strong>${escapeHTML(player.PLAYER_NAME)}</strong>${columns.map(([key]) => `<span>${player[key] == null ? "—" : `${key === "NET_RATING" && Number(player[key])>0 ? "+" : ""}${fmt(player[key])}`}</span>`).join("")}</div>`).join("");
+    const factorOrder = ["off_efg","off_tov_pct","off_oreb_pct","off_ft_rate","def_efg","def_tov_pct","def_dreb_pct","def_ft_rate"];
+    const factors = factorOrder.filter(key => result.four_factors?.[key] != null).map(key => `<div class="context-tile"><b>${fmt(Number(result.four_factors[key])*100)}%</b><span>${escapeHTML(result.factor_labels?.[key] || key)} · #${escapeHTML(result.four_factors[`${key}_rank`])}</span></div>`).join("");
+    const recent = (result.recent_games || []).map(game => `<div class="team-data-row"><b>${escapeHTML(game.MATCHUP)}</b><span>${escapeHTML(game.GAME_DATE)}</span><span>${escapeHTML(game.WL)}</span><span>${fmt(game.PTS,0)} PTS</span><span>${Number(game.PLUS_MINUS)>=0?"+":""}${fmt(game.PLUS_MINUS,0)}</span><span></span></div>`).join("");
+    const lineups = (result.lineups || []).map(lineup => `<div class="team-data-row"><b>${escapeHTML(lineup.GROUP_NAME)}</b><span>${fmt(lineup.MIN,0)} MIN</span><span>${fmt(lineup.GP,0)} GP</span><span>${Number(lineup.NET_RATING)>=0?"+":""}${fmt(lineup.NET_RATING)} NET</span><span>${fmt(lineup.OFF_RATING)} ORTG</span><span>${fmt(lineup.DEF_RATING)} DRTG</span></div>`).join("");
+    const impact = (result.on_off || []).map(player => `<div class="team-data-row"><b>${escapeHTML(player.PLAYER_NAME)}</b><span>${fmt(player.MIN_ON,0)} MIN</span><span>${Number(player.NET_ON)>=0?"+":""}${fmt(player.NET_ON)} ON</span><span>${Number(player.NET_OFF)>=0?"+":""}${fmt(player.NET_OFF)} OFF</span><span class="${Number(player.NET_DIFF)>=0?"positive":"negative-text"}">${Number(player.NET_DIFF)>=0?"+":""}${fmt(player.NET_DIFF)} SWING</span><span></span></div>`).join("");
+    const standings = ["East","West"].map(conference => {
+      const conferenceRows = (result.standings || []).filter(row => row.Conference === conference).sort((a,b)=>Number(a.PlayoffRank)-Number(b.PlayoffRank));
+      return `<div><div class="subhead"><h3>${conference}</h3><span>STANDINGS</span></div>${conferenceRows.map(row => `<div class="team-data-row" style="grid-template-columns:30px 1fr 45px 45px 60px 55px"><span>${escapeHTML(row.PlayoffRank)}</span><b>${escapeHTML(row.TeamCity)} ${escapeHTML(row.TeamName)}</b><span>${escapeHTML(row.WINS)}W</span><span>${escapeHTML(row.LOSSES)}L</span><span>${escapeHTML(row.L10)}</span><span>${escapeHTML(row.strCurrentStreak)}</span></div>`).join("")}</div>`;
+    }).join("");
+    const finances = result.finances ? `<section class="team-section"><div class="subhead"><h3>Payroll & contract book</h3><span>LOCAL-ONLY · ${money(result.finances.payroll)}</span></div><div class="split-table"><div class="split-row header"><span>Player</span>${result.finances.seasons.map(year=>`<span>${escapeHTML(year)}</span>`).join("")}</div>${result.finances.contracts.map(player=>`<div class="split-row"><b>${escapeHTML(player.PLAYER_NAME)}</b>${result.finances.seasons.map(year=>`<span>${money(player[year])}</span>`).join("")}</div>`).join("")}</div><p class="analytics-note">Current and future commitments from the weekly local salary cache.</p></section>` : "";
+    $("roster-panel").innerHTML = `<div class="team-sections">${result.scouting_take?`<div class="scouting-card">${escapeHTML(result.scouting_take)}</div>`:""}<section><div class="subhead"><h3>Roster</h3><span>${result.record.wins}-${result.record.losses} · ${escapeHTML(result.season)}</span></div>${head}${rows}</section><section class="team-section"><div class="subhead"><h3>Four factors</h3><span>VALUE · LEAGUE RANK</span></div><div class="factor-grid">${factors}</div></section><section class="team-section"><div class="subhead"><h3>Recent games</h3><span>LAST 10</span></div>${recent||'<p class="analytics-note">Recent games unavailable.</p>'}</section><section class="team-section"><div class="subhead"><h3>Five-man lineups</h3><span>MOST USED</span></div>${lineups||'<p class="analytics-note">Lineup data unavailable.</p>'}</section><section class="team-section"><div class="subhead"><h3>On / off impact</h3><span>100+ MINUTES</span></div>${impact||'<p class="analytics-note">On/off data unavailable.</p>'}</section>${finances}<section class="team-section"><div class="subhead"><h3>Conference standings</h3><span>SEASON TO DATE</span></div><div class="standings-grid">${standings}</div></section></div>`;
+  } catch (error) { $("roster-panel").innerHTML = `<div class="empty-state" style="min-height:330px"><div><h3>Team unavailable</h3><p class="error">${escapeHTML(error.message)}</p></div></div>`; }
+});
+
 let teamsLoaded = false;
+let forecastLoadedFor = null;
+async function loadSeasonForecast(force=false){
+  const season=$("prediction-season").value,output=$("season-forecast");
+  if(!season||(!force&&forecastLoadedFor===season))return;
+  output.innerHTML=`<div class="empty-state" style="min-height:260px"><div class="loading">SIMULATING ${escapeHTML(season)} SEASON…</div></div>`;
+  try{
+    const result=await api(`/predict/season?season=${encodeURIComponent(season)}&n_sims=5000`),playerForecast=result.roster_inputs?await api(`/predict/players?season=${encodeURIComponent(season)}&limit=40`):null,pct=value=>`${fmt(Number(value)*100,1)}%`;
+    const table=conference=>`<section><div class="subhead"><h3>${conference}ern Conference</h3><span>PROJECTED ORDER</span></div><div class="forecast-table"><div class="forecast-row header"><span>Seed</span><span>Team</span><span>Wins P10 / 50 / 90</span><span>Roster Δ</span><span>Playoffs</span><span>NBA title</span><span>NBA Cup</span></div>${(result.conferences[conference]||[]).map(team=>`<div class="forecast-row" title="Key drivers: ${(team.KEY_DRIVERS||[]).map(escapeHTML).join(', ')||'current team form'}"><span>${fmt(team.PROJECTED_SEED,1)}</span><b>${escapeHTML(team.TEAM)}</b><span>${fmt(team.PESSIMISTIC_WINS??team.PROJECTED_WINS,0)} / ${fmt(team.MEDIAN_WINS??team.PROJECTED_WINS,0)} / ${fmt(team.OPTIMISTIC_WINS??team.PROJECTED_WINS,0)}</span><span class="${Number(team.NET_ADJUSTMENT)>=0?'positive':'negative-text'}">${team.NET_ADJUSTMENT==null?'—':`${Number(team.NET_ADJUSTMENT)>=0?'+':''}${fmt(team.NET_ADJUSTMENT,1)}`}</span><span>${pct(team.PLAYOFF_PROB)}</span><span>${pct(team.CHAMP_PROB)}</span><span>${pct(team.CUP_PROB)}</span></div>`).join("")}</div></section>`;
+    const cupGroups=Object.entries(result.nba_cup?.groups||{}).map(([group,teams])=>`<section><div class="subhead"><h3>${escapeHTML(group)}</h3><span>OFFICIAL DRAW</span></div><div class="forecast-table"><div class="cup-row header"><span>Rank</span><span>Team</span><span>Group</span><span>Wild card</span><span>Knockout</span><span>Final</span><span>Champion</span></div>${teams.map(team=>`<div class="cup-row"><span>${fmt(team.CUP_PROJECTED_GROUP_RANK,1)}</span><b>${escapeHTML(team.TEAM)}</b><span>${pct(team.CUP_GROUP_WIN_PROB)}</span><span>${pct(team.CUP_WILD_CARD_PROB)}</span><span>${pct(team.CUP_KNOCKOUT_PROB)}</span><span>${pct(team.CUP_FINAL_PROB)}</span><span>${pct(team.CUP_PROB)}</span></div>`).join("")}</div></section>`).join("");
+    const cupSection=cupGroups?`<section style="margin-top:28px"><div class="subhead"><div><div class="panel-kicker">Official 2026 NBA Cup</div><h3>Group and knockout forecast</h3></div><span>${result.nba_cup.schedule_complete?"FULL SCHEDULE LOADED":"GROUP SCHEDULE PENDING"}</span></div><div class="forecast-conferences">${cupGroups}</div><p class="analytics-note">${escapeHTML(result.nba_cup.assumption)} <a href="${escapeHTML(result.nba_cup.source_url)}" target="_blank" rel="noopener">Official groups ↗</a> · source ${escapeHTML(result.nba_cup.source_date)}</p></section>`:"";
+    const allTeams=[...(result.conferences.East||[]),...(result.conferences.West||[])],movers=allTeams.filter(team=>team.NET_ADJUSTMENT!=null).sort((a,b)=>Math.abs(Number(b.NET_ADJUSTMENT))-Math.abs(Number(a.NET_ADJUSTMENT))).slice(0,8);
+    const rosterSection=result.roster_inputs?`<section style="margin-top:28px"><div class="subhead"><div><div class="panel-kicker">${escapeHTML(result.roster_inputs.version)} · generated ${escapeHTML(result.roster_inputs.generated_on)}</div><h3>Roster adjustments driving the table</h3></div><a class="btn" href="/predict/season/roster-inputs?season=${encodeURIComponent(result.season)}" target="_blank" rel="noopener">Audit all inputs ↗</a></div><div class="leader-grid">${movers.map(team=>`<article class="leader-card" style="padding:18px"><div class="leader-title">${escapeHTML(team.TEAM)}<span class="${Number(team.NET_ADJUSTMENT)>=0?'positive':'negative-text'}">${Number(team.NET_ADJUSTMENT)>=0?'+':''}${fmt(team.NET_ADJUSTMENT,1)} NET</span></div><p class="analytics-note">${team.ADDITIONS?.length?`In: ${team.ADDITIONS.map(escapeHTML).join(', ')}. `:''}${team.DEPARTURES?.length?`Out: ${team.DEPARTURES.map(escapeHTML).join(', ')}. `:''}Returning minutes ${fmt(Number(team.RETURNING_MIN_SHARE)*100,0)}% · history coverage ${fmt(Number(team.ROSTER_COVERAGE)*100,0)}%.</p></article>`).join('')}</div><p class="analytics-note">${escapeHTML(result.roster_inputs.method)} ${escapeHTML(result.roster_inputs.limitations)}</p></section>`:'';
+    const playerRows=(playerForecast?.players||[]).map(player=>`<div class="player-forecast-row"><b>${escapeHTML(player.PLAYER_NAME)}<small style="display:block;color:var(--muted-2)">${escapeHTML(player.TRAJECTORY)} · comps ${player.COMPARABLES.map(escapeHTML).join(', ')}</small></b><span>${escapeHTML(player.TEAM)}</span><span>${fmt(player.PROJECTED_MIN,1)}</span><span>${fmt(player.PTS_LOW,1)}–${fmt(player.PROJECTED_PTS,1)}–${fmt(player.PTS_HIGH,1)}</span><span>${fmt(player.PROJECTED_REB,1)}</span><span>${fmt(player.PROJECTED_AST,1)}</span><span>${fmt(Number(player.PROJECTED_FG_PCT)*100,1)}%</span><span>${pct(player.ALL_STAR_PROB)}</span><span>${pct(player.MVP_PROB)}</span></div>`).join('');
+    const playerSection=playerForecast?`<section style="margin-top:28px"><div class="subhead"><div><div class="panel-kicker">${escapeHTML(playerForecast.version)} · ${escapeHTML(playerForecast.count)} projected players</div><h3>Player projections and awards outlook</h3></div><a class="btn" href="/predict/players?season=${encodeURIComponent(result.season)}&limit=500" target="_blank" rel="noopener">Audit full table ↗</a></div><div class="forecast-table"><div class="player-forecast-row header"><span>Player</span><span>Team</span><span>MIN</span><span>PTS low / mid / high</span><span>REB</span><span>AST</span><span>FG%</span><span>All-Star</span><span>MVP</span></div>${playerRows}</div><p class="analytics-note">${escapeHTML(playerForecast.assumptions)} ${escapeHTML(playerForecast.intervals)} Holdout: ${playerForecast.holdout?.metrics?.players||'—'} stable returners, PTS MAE ${fmt(playerForecast.holdout?.metrics?.pts_mae,2)}, interval coverage ${fmt(Number(playerForecast.holdout?.metrics?.pts_interval_coverage)*100,1)}%. ${escapeHTML(playerForecast.awards_method)}</p></section>`:'';
+    output.innerHTML=`<div class="subhead"><div><div class="panel-kicker">${escapeHTML(result.season)} league forecast</div><h3>East, West, playoffs and trophies</h3></div><span>${Number(result.n_sims).toLocaleString()} SIMULATIONS</span></div><div class="forecast-summary"><div class="context-tile"><b>${escapeHTML(result.favorites.championship.team)} ${pct(result.favorites.championship.probability)}</b><span>NBA title favorite</span></div><div class="context-tile"><b>${escapeHTML(result.favorites.nba_cup.team)} ${pct(result.favorites.nba_cup.probability)}</b><span>NBA Cup favorite</span></div><div class="context-tile"><b>${escapeHTML(result.basis_season)}</b><span>Data basis</span></div></div><div class="forecast-conferences">${table("East")}${table("West")}</div><p class="analytics-note">Record columns show pessimistic / median / optimistic win outcomes (10th / 50th / 90th percentiles). ${escapeHTML(result.methodology)}</p>${rosterSection}${playerSection}${cupSection}`;
+    forecastLoadedFor=season;
+  }catch(error){output.innerHTML=`<div class="empty-state" style="min-height:260px"><div><h3>Season forecast unavailable</h3><p class="error">${escapeHTML(error.message)}</p></div></div>`;}
+}
 async function loadTeams() {
   if (teamsLoaded) return;
   try {
+    await loadMeta();
+    loadSeasonForecast();
     const teams = await api("/teams");
-    for (const [sel, pick] of [["home", "LAL"], ["away", "BOS"]]) {
-      $(sel).innerHTML = teams.map(t =>
-        `<option ${t === pick ? "selected" : ""}>${t}</option>`).join("");
-    }
+    [["home","LAL"],["away","BOS"]].forEach(([id,pick]) => {
+      $(id).innerHTML = teams.map(team => `<option value="${escapeHTML(team)}" ${team === pick ? "selected" : ""}>${escapeHTML(team)}</option>`).join("");
+    });
+    $("points-opponent").innerHTML = teams.map(team => `<option>${escapeHTML(team)}</option>`).join("");
+    $("lineup-team").innerHTML = teams.map(team => `<option>${escapeHTML(team)}</option>`).join("");
+    await loadLineupRoster();
     teamsLoaded = true;
-  } catch (err) { $("prediction").innerHTML = `<p class="error">${err.message}</p>`; }
+  } catch (error) { $("form-error").textContent = error.message; $("form-error").classList.remove("hidden"); }
 }
-
-$("go").onclick = async () => {
-  const home = $("home").value, away = $("away").value;
-  if (home === away) { $("prediction").innerHTML = `<p class="error">Pick two different teams.</p>`; return; }
-  $("prediction").innerHTML = `<p class="note">Crunching…</p>`;
+$("prediction-season").addEventListener("change",event=>{const upcoming=event.target.selectedIndex>0;$("prediction-basis-note").textContent=upcoming?`${event.target.value} is a preseason projection using ${metaData.current_season} team form and rosters. It will move to season-to-date inputs once the new season begins.`:"Uses live season-to-date team form, availability assumptions, carried-over Elo, and home court.";loadSeasonForecast(true);});
+$("go").addEventListener("click", async () => {
+  const home = $("home").value, away = $("away").value, button = $("go"), errorEl = $("form-error");
+  errorEl.classList.add("hidden");
+  if (home === away) { errorEl.textContent = "Choose two different teams."; errorEl.classList.remove("hidden"); return; }
+  button.disabled = true; button.textContent = "Running model…";
+  $("prediction").innerHTML = '<div class="court-lines"></div><div class="prediction-empty"><div class="loading">CALCULATING MATCHUP FEATURES…</div></div>';
   try {
-    const r = await api(`/predict/game?home=${home}&away=${away}`);
-    const hp = Math.round(r.home_win_prob * 100), ap = 100 - hp;
-    $("prediction").innerHTML = `
-      <div class="prob-bar">
-        <div class="home" style="flex:${hp}">${home} ${hp}%</div>
-        <div class="away" style="flex:${ap}">${ap}% ${away}</div>
-      </div>
-      <div class="prob-caption"><span>${home} at home</span><span>${away} away</span></div>`;
-  } catch (err) { $("prediction").innerHTML = `<p class="error">${err.message}</p>`; }
+    const season=$("prediction-season").value;
+    const params = new URLSearchParams({home,away,season,home_missing_min:$("home-missing").value||"0",away_missing_min:$("away-missing").value||"0"});
+    const result = await api(`/predict/game?${params}`);
+    const homePct = Math.round(result.home_win_prob * 100), awayPct = 100 - homePct;
+    const poster = `/posters/game?home=${encodeURIComponent(home)}&away=${encodeURIComponent(away)}&season=${encodeURIComponent(season)}&format=png`;
+    const basis=result.projection_mode==="preseason_carry_forward"?`${result.basis_season} carry-forward`:`${result.season} season to date`;
+    $("prediction").innerHTML = `<div class="court-lines"></div><div class="prediction-result"><div style="width:100%"><div class="match-label">${escapeHTML(result.season)} home win probability</div><div class="team-row"><div class="team-name">${escapeHTML(away)}</div><div class="at-mark">@</div><div class="team-name">${escapeHTML(home)}</div></div><div class="probability"><b>${homePct}%</b><span>${escapeHTML(home)} projected win probability</span></div><div class="prob-track"><div class="prob-home" style="width:${homePct}%"></div><div class="prob-away"></div></div><div class="prob-legends"><span>${escapeHTML(home)} ${homePct}%</span><span>${escapeHTML(away)} ${awayPct}%</span></div><p class="analytics-note">Data basis: ${escapeHTML(basis)}</p><a class="btn btn-secondary" style="margin-top:22px" href="${poster}" target="_blank" rel="noopener">Download matchup poster ↗</a></div></div>`;
+  } catch (error) {
+    $("prediction").innerHTML = `<div class="court-lines"></div><div class="prediction-empty"><div><h3>Model unavailable</h3><p class="error">${escapeHTML(error.message)}</p></div></div>`;
+  } finally { button.disabled = false; button.textContent = "Run prediction →"; }
+});
+
+const histogramHTML = rows => {
+  const max = Math.max(1,...(rows||[]).map(row=>Number(row.count)||0));
+  return `<div class="histogram">${(rows||[]).map(row=>`<i style="height:${Math.max(2,Number(row.count)/max*100)}%" title="${fmt(row.mid)}: ${escapeHTML(row.count)} sims"></i>`).join("")}</div>`;
 };
 
-if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
+$("simulate-go").addEventListener("click", async () => {
+  const home=$("home").value, away=$("away").value, output=$("simulation-output");
+  output.innerHTML='<div class="loading" style="margin-top:18px">RUNNING 10,000 GAMES…</div>';
+  try {
+    const params=new URLSearchParams({home,away,season:$("prediction-season").value,n_sims:"10000",home_missing_min:$("home-missing").value||"0",away_missing_min:$("away-missing").value||"0"});
+    const result=await api(`/predict/simulate?${params}`), summary=result.summary;
+    const favorite=Number(summary.median_margin)>=0?home:away;
+    output.innerHTML=`<div class="result-card"><strong>${escapeHTML(home)} ${escapeHTML(result.median_score.home)}–${escapeHTML(result.median_score.away)} ${escapeHTML(away)}</strong><p class="analytics-note">${escapeHTML(result.season)} · Median score · ${escapeHTML(home)} wins ${fmt(Number(summary.home_win_prob)*100,0)}% of simulations · outcome model ${fmt(Number(result.outcome_model_home_win_prob)*100,0)}%</p><div class="context-grid" style="grid-template-columns:1fr 1fr"><div class="context-tile"><b>${escapeHTML(favorite)} by ${fmt(Math.abs(summary.median_margin),0)}</b><span>Median margin</span></div><div class="context-tile"><b>${fmt(summary.median_total,0)}</b><span>Median total</span></div><div class="context-tile"><b>${fmt(Number(summary.overtime_prob)*100)}%</b><span>Overtime</span></div><div class="context-tile"><b>${summary.margin_p10>=0?"+":""}${fmt(summary.margin_p10,0)} to ${summary.margin_p90>=0?"+":""}${fmt(summary.margin_p90,0)}</b><span>80% margin range</span></div></div>${histogramHTML(result.margin_histogram)}<p class="analytics-note">Margin distribution: away wins on the left, home wins on the right. Data basis: ${escapeHTML(result.basis_season)}.</p></div>`;
+  } catch(error) { output.innerHTML=`<p class="error">${escapeHTML(error.message)}</p>`; }
+});
+
+let pointsPick=null, pointsTimer;
+$("points-player").addEventListener("input", event => {
+  pointsPick=null; clearTimeout(pointsTimer); const q=event.target.value.trim(), results=$("points-player-results");
+  if(q.length<3){results.classList.add("hidden");return;}
+  pointsTimer=setTimeout(async()=>{try{const players=await api(`/players/search?q=${encodeURIComponent(q)}`);results.innerHTML=players.slice(0,8).map(player=>`<button data-id="${Number(player.id)}" data-name="${escapeHTML(player.full_name)}">${escapeHTML(player.full_name)}<span>SELECT</span></button>`).join("");results.classList.remove("hidden");}catch(error){results.innerHTML=`<div class="error">${escapeHTML(error.message)}</div>`;}},220);
+});
+$("points-player-results").addEventListener("click",event=>{const button=event.target.closest("button");if(!button)return;pointsPick=Number(button.dataset.id);$("points-player").value=button.dataset.name;$("points-player-results").classList.add("hidden");});
+$("points-go").addEventListener("click",async()=>{const output=$("points-output");if(!pointsPick){output.innerHTML='<p class="error">Choose a player from search results.</p>';return;}output.innerHTML='<div class="loading" style="margin-top:18px">PROJECTING NEXT GAME…</div>';try{const params=new URLSearchParams({opponent:$("points-opponent").value,home:$("points-venue").value});const result=await api(`/predict/player/${pointsPick}?${params}`);output.innerHTML=`<div class="result-card"><strong>${fmt(result.projected_points)} PTS</strong><p>${escapeHTML(result.player)} vs ${escapeHTML(result.opponent)}</p><p class="analytics-note">80% interval: ${result.interval_80?`${fmt(result.interval_80[0],0)}–${fmt(result.interval_80[1],0)}`:"unavailable"} · last 5: ${fmt(result.last_5)} · last 10: ${fmt(result.last_10)} · ${escapeHTML(result.games_in_sample)} games</p></div>`;}catch(error){output.innerHTML=`<p class="error">${escapeHTML(error.message)}</p>`;}});
+
+const lineupLabels=["Guard 1","Guard 2","Wing 1","Wing 2","Big"];
+const lineupSelects=()=>[...document.querySelectorAll(".lineup-player")];
+function syncLineupChoices(){const selected=lineupSelects().map(select=>select.value).filter(Boolean);lineupSelects().forEach(select=>[...select.options].forEach(option=>{option.disabled=Boolean(option.value&&option.value!==select.value&&selected.includes(option.value));}));}
+async function loadLineupRoster(){const team=$("lineup-team").value;if(!team)return;$("lineup-slots").innerHTML='<div class="loading">LOADING ROSTER…</div>';try{const result=await api(`/teams/${encodeURIComponent(team)}/profile`),roster=(result.roster||[]).filter(player=>player.PLAYER_ID!=null);$("lineup-slots").innerHTML=lineupLabels.map((label,index)=>`<div class="lineup-slot"><label for="lineup-player-${index}">${label}</label><div class="select-wrap"><select class="lineup-player" id="lineup-player-${index}"><option value="">Choose player</option>${roster.map((player,playerIndex)=>`<option value="${Number(player.PLAYER_ID)}" ${playerIndex===index?"selected":""}>${escapeHTML(player.PLAYER_NAME)}</option>`).join("")}</select></div></div>`).join("");syncLineupChoices();$("lineup-output").innerHTML="";}catch(error){$("lineup-slots").innerHTML='<p class="error">Roster unavailable.</p>';$("lineup-output").innerHTML=`<p class="error">${escapeHTML(error.message)}</p>`;}}
+$("lineup-team").addEventListener("change",loadLineupRoster);
+$("lineup-slots").addEventListener("change",event=>{if(event.target.matches(".lineup-player"))syncLineupChoices();});
+$("lineup-go").addEventListener("click",async()=>{const ids=lineupSelects().map(select=>select.value).filter(Boolean),output=$("lineup-output");if(ids.length!==5||new Set(ids).size!==5){output.innerHTML='<p class="error">Choose five different players, one in each slot.</p>';return;}output.innerHTML='<div class="loading" style="margin-top:18px">ESTIMATING FIVE-MAN UNIT…</div>';try{const query=ids.map(id=>`player_ids=${encodeURIComponent(id)}`).join("&");const result=await api(`/predict/lineup?team=${encodeURIComponent($("lineup-team").value)}&${query}`);output.innerHTML=`<div class="result-card"><strong>${Number(result.estimated_net_rating)>=0?"+":""}${fmt(result.estimated_net_rating)} NET</strong><p>${result.players.map(escapeHTML).join(" · ")}</p><p class="analytics-note">${fmt(Number(result.win_probability_vs_average)*100,0)}% win probability vs average · ${fmt(result.minutes_together,0)} minutes together · ${escapeHTML(result.source.replaceAll("_"," "))}</p></div>`;}catch(error){output.innerHTML=`<p class="error">${escapeHTML(error.message)}</p>`;}});
+
+let methodologyLoaded=false;
+async function loadMethodology(){if(methodologyLoaded)return;try{const result=await api("/methodology"),metrics=result.metrics||{};const journeyMax=Math.max(...result.journey.map(row=>row.accuracy));$("methodology-output").innerHTML=`<div class="method-grid"><article class="panel method-card"><h3>Evaluation protocol</h3><p>${escapeHTML(result.evaluation.protocol)}</p><p>${escapeHTML(result.evaluation.leakage)}</p><p><b>Decision metrics:</b> ${result.evaluation.decision_metrics.map(escapeHTML).join(" · ")}</p></article><article class="panel method-card"><h3>Artifact record</h3><div class="context-grid" style="grid-template-columns:1fr 1fr"><div class="context-tile"><b>${metrics.outcome?fmt(Number(metrics.outcome.accuracy)*100,1)+"%":"—"}</b><span>Outcome accuracy</span></div><div class="context-tile"><b>${metrics.outcome?fmt(metrics.outcome.log_loss,3):"—"}</b><span>Outcome log loss</span></div><div class="context-tile"><b>${metrics.points?fmt(metrics.points.mae,2):"—"}</b><span>Points MAE</span></div><div class="context-tile"><b>${metrics.points?fmt(Number(metrics.points.interval_coverage)*100,1)+"%":"—"}</b><span>80% interval coverage</span></div></div></article><article class="panel method-card"><h3>Modeling journey</h3>${result.journey.map(row=>`<div class="pct-row"><label>${escapeHTML(row.stage)}</label><div class="track"><div class="fill" style="width:${row.accuracy/journeyMax*100}%"></div></div><b>${fmt(row.accuracy,1)}%</b></div>`).join("")}</article><article class="panel method-card"><h3>Models served</h3>${Object.entries(result.models).map(([name,text])=>`<h4>${escapeHTML(name)}</h4><p>${escapeHTML(text)}</p>`).join("")}</article><article class="panel method-card" style="grid-column:1/-1"><h3>What did not win</h3><p>${result.rejected.map(escapeHTML).join(" · ")}</p><p>Rejected ideas remain documented so the reported gains retain context.</p></article></div>`;methodologyLoaded=true;}catch(error){$("methodology-output").innerHTML=`<div class="panel empty-state"><p class="error">${escapeHTML(error.message)}</p></div>`;}}
+
+const loadMethodologyBase=loadMethodology;
+loadMethodology=async()=>{await loadMethodologyBase();if($("model-registry-card"))return;try{const result=await api("/methodology/registry"),models=result.models||{},backtest=result.season_backtest?.metrics||{},components=result.season_backtest?.component_validation||{},grid=$("methodology-output").querySelector(".method-grid");if(!grid)return;const cutoff=value=>value&&typeof value==="object"?Object.entries(value).map(([season,date])=>`${season}: ${date}`).join(" · "):(value||"—");const registry=`<article class="panel method-card" id="model-registry-card" style="grid-column:1/-1"><h3>Model registry</h3><div class="forecast-conferences">${Object.entries(models).map(([name,model])=>`<div class="result-card"><div class="panel-kicker">${escapeHTML(model.version)}</div><h4>${escapeHTML(name.replaceAll("_"," "))}</h4><p><b>${escapeHTML(model.kind)}</b><br>${escapeHTML(model.status)}</p><p class="analytics-note">Data cutoff: ${escapeHTML(cutoff(model.data_cutoff))}${model.roster_overlay?`<br>Roster overlay: ${escapeHTML(model.roster_overlay.status)}`:''}</p></div>`).join("")}</div></article>`;const record=backtest.record||{},playoffs=backtest.playoffs||{},champ=backtest.championship||{},cup=backtest.nba_cup||{};const validation=`<article class="panel method-card" style="grid-column:1/-1"><h3>Season forecast backtest</h3>${backtest.team_seasons?`<p>${escapeHTML(backtest.season_count)} seasons · ${escapeHTML(backtest.team_seasons)} team-seasons. Lower error is better.</p><div class="context-grid"><div class="context-tile"><b>${fmt(record.mae,2)}</b><span>Record MAE vs ${fmt(record.baseline_mae,2)} baseline</span></div><div class="context-tile"><b>${fmt(playoffs.brier,3)}</b><span>Playoff Brier vs ${fmt(playoffs.baseline_brier,3)}</span></div><div class="context-tile"><b>${fmt(champ.brier,3)}</b><span>Title Brier vs ${fmt(champ.baseline_brier,3)}</span></div><div class="context-tile"><b>${fmt(cup.brier,3)}</b><span>Cup Brier vs ${fmt(cup.baseline_brier,3)}</span></div></div><div style="margin-top:18px">${(playoffs.calibration||[]).map(row=>`<div class="pct-row"><label>${fmt(Number(row.lower)*100,0)}–${fmt(Number(row.upper)*100,0)}% (${row.count})</label><div class="track"><div class="fill" style="width:${Number(row.observed_rate)*100}%"></div></div><b>${fmt(Number(row.mean_probability)*100,0)}% / ${fmt(Number(row.observed_rate)*100,0)}%</b></div>`).join("")}</div><p class="analytics-note">Calibration rows show mean forecast / observed rate. Record and playoff forecasts currently edge their simple baselines; title and Cup results do not yet beat uniform baselines.${components.roster_overlay?` Roster overlay: ${escapeHTML(components.roster_overlay.status)} — ${escapeHTML(components.roster_overlay.reason)}`:''}</p>`:'<p class="analytics-note">Backtest artifact missing. Run uv run python -m nba_insights.ml.backtest.</p>'}</article>`;grid.insertAdjacentHTML("beforeend",registry+validation);}catch(error){console.warn("model registry unavailable",error);}};
+
+$("ask-go").addEventListener("click",async()=>{const question=$("ask-question").value.trim(),output=$("ask-output");if(question.length<3){output.innerHTML='<div class="answer error">Enter a basketball question.</div>';return;}output.innerHTML='<div class="empty-state" style="min-height:330px"><div class="loading">QUERYING THE LEAGUE TABLE…</div></div>';try{const response=await fetch("/ask",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({question})});if(!response.ok){let message=response.statusText;try{message=(await response.json()).detail||message;}catch{}throw new Error(message);}const result=await response.json();output.innerHTML=`<div class="answer">${escapeHTML(result.answer)}<p class="analytics-note">${escapeHTML(result.season)} · ${escapeHTML(result.model)} · verify anything important</p></div>`;}catch(error){output.innerHTML=`<div class="answer"><h3>AI answer unavailable</h3><p class="error">${escapeHTML(error.message)}</p></div>`;}});
+
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").then(registration=>registration.update());
 </script>
 </body>
 </html>

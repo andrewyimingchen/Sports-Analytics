@@ -22,6 +22,7 @@ from nba_insights.analysis import (
     COLUMN_GLOSSARY,
     FACTOR_LABELS,
     attach_salary,
+    box_score_table,
     career_averages,
     career_per_game,
     clutch_shooting_line,
@@ -2662,8 +2663,49 @@ def games_page(client: NBAClient) -> None:
             "Top scorer": finals["TOP_SCORER"],
         }
     )
-    st.caption(f"{len(scores)} games.")
-    st.dataframe(scores, width="stretch", hide_index=True, height=560)
+    st.caption(f"{len(scores)} games. Click a row for the full box score.")
+    event = st.dataframe(
+        scores,
+        width="stretch",
+        hide_index=True,
+        height=560,
+        on_select="rerun",
+        selection_mode="single-row",
+        key="games_scores",
+    )
+    if not event.selection.rows:
+        return
+
+    selected = finals.iloc[event.selection.rows[0]]
+    matchup = f"{selected['AWAY']} @ {selected['HOME']}"
+    st.subheader(f"Box score · {matchup}")
+    st.caption(
+        f"{selected['AWAY']} {int(selected['AWAY_PTS'])} — "
+        f"{selected['HOME']} {int(selected['HOME_PTS'])} · {selected['GAME_DATE']:%b %d, %Y}"
+    )
+    try:
+        box = box_score_table(client.box_score(str(selected["GAME_ID"])))
+    except Exception as e:
+        st.error(f"Could not load the box score: {e}")
+        return
+    if box.empty:
+        st.info("No player box score is available for this game.")
+        return
+    for team in (selected["AWAY"], selected["HOME"]):
+        rows = box[box["TEAM"] == team].drop(columns="TEAM")
+        if rows.empty:
+            continue
+        st.markdown(f"#### {team}")
+        st.dataframe(
+            rows,
+            width="stretch",
+            hide_index=True,
+            height=min(540, 40 + 36 * len(rows)),
+            column_config={
+                "MIN": st.column_config.NumberColumn(format="%.1f"),
+                "+/-": st.column_config.NumberColumn(format="%+d"),
+            },
+        )
 
 
 # Explore page column presets (raw stat codes). Base columns always lead.

@@ -16,6 +16,7 @@ from datetime import UTC, datetime, timedelta
 
 import pandas as pd
 from nba_api.stats.endpoints import (
+    boxscoretraditionalv3,
     draftcombinestats,
     drafthistory,
     gamerotation,
@@ -298,14 +299,44 @@ class NBAClient:
         "scoreHome",
         "scoreAway",
         "isFieldGoal",
+        "xLegacy",
+        "yLegacy",
+        "shotDistance",
     ]
 
     def play_by_play(self, game_id: str) -> pd.DataFrame:
         """Trimmed event log for one completed game. Immutable once played."""
+        try:
+            return self._cached(
+                f"pbp/v4/{game_id}",
+                lambda: self._fetch_pbp(game_id),
+                ttl=None,  # only fetched for finished games; the log never changes
+            )
+        except Exception:
+            legacy = self.cache.get(f"pbp/v3/{game_id}")
+            if legacy is not None:
+                return legacy
+            raise
+
+    def cached_play_by_play(self, game_id: str) -> pd.DataFrame | None:
+        """Best cached PBP version for instant Game Center stories; never fetches."""
+        current = self.cache.get(f"pbp/v4/{game_id}")
+        if current is not None:
+            return current
+        return self.cache.get(f"pbp/v3/{game_id}")
+
+    def box_score(self, game_id: str) -> pd.DataFrame:
+        """Traditional player box score for one completed game.
+
+        Game Center only offers this drill-down for finals, so the response is
+        immutable and can live in the cache without a TTL.
+        """
         return self._cached(
-            f"pbp/v3/{game_id}",
-            lambda: self._fetch_pbp(game_id),
-            ttl=None,  # only fetched for finished games; the log never changes
+            f"box_score/traditional/{game_id}",
+            lambda: boxscoretraditionalv3.BoxScoreTraditionalV3(
+                game_id=game_id
+            ).player_stats.get_data_frame(),
+            ttl=None,
         )
 
     def _fetch_pbp(self, game_id: str) -> pd.DataFrame:

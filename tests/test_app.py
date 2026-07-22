@@ -72,6 +72,17 @@ def test_compare_page_quick_pick():
 
 
 @requires_cache
+def test_games_page_opens_with_selectable_scores():
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_string(_page_script("games_page(A.get_client())"), default_timeout=180)
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert at.dataframe, "expected the schedule or final-scores table"
+    assert any("full box score" in str(c.value) for c in at.caption)
+
+
+@requires_cache
 @requires_models
 def test_predictions_page_renders_all_tabs():
     from streamlit.testing.v1 import AppTest
