@@ -904,7 +904,22 @@ def test_mobile_app_shell_served(api):
     assert "BASELINE IS NEVER OVERWRITTEN" in r.text
     assert "RANKED LOCAL CONTRIBUTIONS" in r.text
     assert "Export JSON" in r.text
+    assert "At-a-glance skill profile" in r.text
+    assert "LEAGUE PERCENTILE · HIGHER IS BETTER" in r.text
+    assert "renderCompareProfile(names,result.percentiles)" in r.text
+    assert 'class="explore-player-link"' in r.text
+    assert 'showPage("players")' in r.text
+    assert "loadProfile(playerId, playerName)" in r.text
+    assert "position percentile octagon" in r.text
+    assert "renderPositionOctagon(positionEntries,name,insights.position_group)" in r.text
+    assert "Higher and farther from center is better" in r.text
+    assert "median · 50th percentile" in r.text
+    assert "grid-template-columns: repeat(3,minmax(0,1fr))" in r.text
+    assert "<h3>Exact percentiles</h3>" not in r.text
     assert "East, West, playoffs and trophies" in r.text
+    assert 'class="wrap matchup-wrap"' in r.text
+    assert "grid-template-columns: repeat(2,minmax(0,1fr))" in r.text
+    assert ".forecast-conferences > section { min-width: 0; }" in r.text
     assert "Model registry" in r.text
     assert "Season forecast backtest" in r.text
     assert 'id="lineup-slots"' in r.text
@@ -913,7 +928,7 @@ def test_mobile_app_shell_served(api):
     service_worker = api.get("/app/sw.js")
     assert service_worker.status_code == 200
     assert "fetch(e.request)" in service_worker.text
-    assert "nba-insights-shell-v11" in service_worker.text
+    assert "nba-insights-shell-v16" in service_worker.text
     assert api.get("/", follow_redirects=False).status_code in (302, 307)
 
 

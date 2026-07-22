@@ -233,7 +233,8 @@ input:focus, select:focus { border-color: var(--orange); box-shadow: 0 0 0 3px r
 .standings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
 .prediction-tools { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; padding-bottom: 90px; }
 .prediction-tools .panel { min-width: 0; }
-.forecast-panel { padding: 24px; margin-bottom: 16px; }
+.matchup-wrap { width: min(1600px, calc(100% - clamp(32px, 5vw, 80px))); }
+.forecast-panel { padding: 24px; margin-bottom: 16px; overflow: hidden; }
 .scenario-lab { padding: 24px; margin-bottom: 16px; }
 .scenario-controls { display: grid; grid-template-columns: 1fr 1fr 1fr .65fr .65fr auto; gap: 10px; align-items: end; }
 .scenario-controls .field { margin: 0; }.scenario-pending { display: grid; gap: 7px; margin-top: 16px; }
@@ -248,9 +249,10 @@ input:focus, select:focus { border-color: var(--orange); box-shadow: 0 0 0 3px r
   border-bottom: 1px solid var(--line-soft); font: 9px var(--mono); text-align: right; }
 .scenario-delta-row span:first-child { text-align: left; }.scenario-delta-row.header { color: var(--muted-2); text-transform: uppercase; }
 .forecast-summary { display: grid; grid-template-columns: repeat(3,1fr); gap: 9px; margin: 16px 0; }
-.forecast-conferences { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
-.forecast-table { overflow-x: auto; }
-.forecast-row { min-width: 760px; display: grid; grid-template-columns: 45px 55px 120px 65px repeat(3,1fr);
+.forecast-conferences { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 18px; }
+.forecast-conferences > section { min-width: 0; }
+.forecast-table { width: 100%; max-width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; }
+.forecast-row { min-width: 700px; display: grid; grid-template-columns: 42px 50px 116px 60px repeat(3,minmax(58px,1fr));
   gap: 8px; align-items: center; padding: 8px 6px; border-bottom: 1px solid var(--line-soft); font: 9px var(--mono); }
 .forecast-row.header { color: var(--muted-2); text-transform: uppercase; }
 .forecast-row b { font: 600 12px var(--display); }.forecast-row span:not(:nth-child(2)) { text-align: right; }
@@ -378,6 +380,25 @@ input:focus, select:focus { border-color: var(--orange); box-shadow: 0 0 0 3px r
   min-height: 46px; border-bottom: 1px solid var(--line-soft); }
 .compare-table-row label { color: var(--muted); font: 9px var(--mono); }.compare-table-row span { font: 600 18px var(--display); }
 .compare-table-row .winner { color: var(--orange-2); }
+.compare-visual { margin: 22px 0 8px; padding: 20px; background: #101419;
+  border: 1px solid var(--line-soft); border-radius: 14px; overflow: hidden; }
+.compare-profile-chart { display: block; width: min(100%,760px); height: auto; margin: 0 auto; }
+.compare-profile-legend { display: grid; grid-template-columns: repeat(auto-fit,minmax(170px,1fr));
+  gap: 8px; margin-top: 10px; }
+.compare-profile-key { display: grid; grid-template-columns: 10px 1fr auto; gap: 9px; align-items: center;
+  padding: 10px 12px; background: #0c1014; border: 1px solid var(--line-soft); border-radius: 9px; }
+.compare-profile-key i { width: 9px; height: 9px; border-radius: 50%; }
+.compare-profile-key b { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 10px; }
+.compare-profile-key span { color: var(--muted); font: 8px/1.5 var(--mono); text-align: right; }
+.position-octagon { margin-top: 12px; padding: 16px; background: #101419;
+  border: 1px solid var(--line-soft); border-radius: 14px; }
+.position-octagon-scroll { width: 100%; overflow-x: auto; overscroll-behavior-inline: contain; }
+.position-octagon-chart { display: block; width: 100%; min-width: 520px; max-width: 700px; height: auto; margin: 0 auto; }
+.position-octagon-legend { display: flex; justify-content: center; flex-wrap: wrap; gap: 18px;
+  color: var(--muted); font: 9px var(--mono); }
+.position-octagon-legend span { display: inline-flex; align-items: center; gap: 7px; }
+.position-octagon-legend i { width: 22px; height: 3px; border-radius: 3px; background: var(--orange); }
+.position-octagon-legend i.median { height: 0; background: transparent; border-top: 2px dashed var(--paper); opacity: .7; }
 .team-control { display: grid; grid-template-columns: minmax(220px,340px) 1fr; gap: 15px; align-items: stretch; }
 .team-selector { padding: 22px; background: var(--panel); border: 1px solid var(--line-soft); border-radius: var(--radius); }
 .team-selector h3 { margin: 0 0 15px; font: 600 23px var(--display); text-transform: uppercase; }
@@ -391,12 +412,12 @@ input:focus, select:focus { border-color: var(--orange); box-shadow: 0 0 0 3px r
 .roster-head { color: var(--muted-2); font: 8px var(--mono); text-transform: uppercase; border-bottom: 1px solid var(--line); }
 .roster-row { min-height: 49px; border-bottom: 1px solid var(--line-soft); font: 10px var(--mono); }
 .roster-row:last-child { border: 0; }.roster-row strong { font: 600 12px var(--body); }.roster-row span { color: var(--muted); }
-.insight-stack { margin-top: 24px; display: grid; grid-template-columns: 1.2fr .8fr; gap: 20px; }
+.insight-stack { margin-top: 24px; display: grid; grid-template-columns: 1fr; gap: 20px; }
 .game-strip { overflow-x: auto; display: flex; gap: 8px; padding-bottom: 5px; }
 .game-chip { flex: 0 0 112px; background: #101419; border: 1px solid var(--line-soft); border-radius: 10px; padding: 11px; }
 .game-chip .game-date { color: var(--muted-2); font: 8px var(--mono); }.game-chip b { display: block; font: 600 21px var(--display); margin: 5px 0; }
 .game-chip span { color: var(--muted); font: 8px var(--mono); }.game-chip.win { border-top-color: var(--lime); }.game-chip.loss { border-top-color: var(--red); }
-.comp-list { display: grid; gap: 7px; }.comp-item { display: grid; grid-template-columns: 1fr 44px; gap: 10px; align-items: center;
+.comp-list { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 7px 18px; }.comp-item { display: grid; grid-template-columns: 1fr 44px; gap: 10px; align-items: center;
   padding: 10px 0; border-bottom: 1px solid var(--line-soft); font-size: 10px; }.comp-item b { font: 600 11px var(--body); }
 .comp-item small { display: block; color: var(--muted-2); margin-top: 2px; }.comp-score { color: var(--orange-2); font: 500 10px var(--mono); text-align: right; }
 .explore-controls { display: grid; grid-template-columns: repeat(5,1fr) auto; gap: 11px; padding: 19px;
@@ -410,6 +431,11 @@ input:focus, select:focus { border-color: var(--orange); box-shadow: 0 0 0 3px r
   align-items: center; padding: 11px 18px; border-bottom: 1px solid var(--line-soft); font: 9px var(--mono); }
 .explore-row.header { position: sticky; top: 0; background: var(--panel-2); color: var(--muted-2); text-transform: uppercase; }
 .explore-row strong { font: 600 11px var(--body); }.explore-row span:not(:first-child) { text-align: right; color: var(--muted); }
+.explore-player-link { min-width: 0; border: 0; background: transparent; color: var(--paper); padding: 0;
+  font: 600 11px var(--body); text-align: left; cursor: pointer; overflow: hidden;
+  white-space: nowrap; text-overflow: ellipsis; }
+.explore-player-link:hover, .explore-player-link:focus-visible { color: var(--orange-2); text-decoration: underline;
+  text-underline-offset: 3px; outline: none; }
 .explore-row:hover:not(.header) { background: rgba(255,255,255,.025); }
 .tracking-controls { display: grid; grid-template-columns: repeat(6,1fr) auto; gap: 10px; padding: 19px;
   background: var(--panel); border: 1px solid var(--line-soft); border-radius: var(--radius); }
@@ -471,6 +497,8 @@ footer { border-top: 1px solid var(--line-soft); padding: 34px 0 100px; }
   .game-story-grid { grid-template-columns: 1fr; }.game-story-card.wide { grid-column: auto; }
   .comparison-grid { grid-template-columns: 1fr; }.team-comparison { margin-top: -72px; }
   .scenario-controls { grid-template-columns: repeat(2,1fr); }.scenario-controls .explore-run { grid-column: 1/-1; }
+  .forecast-conferences { grid-template-columns: 1fr; }
+  .comp-list { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .mobile-nav { display: flex; position: fixed; z-index: 40; left: 12px; right: 12px;
     bottom: calc(10px + env(safe-area-inset-bottom)); height: 58px; padding: 5px; border: 1px solid var(--line);
     background: rgba(21,25,31,.93); backdrop-filter: blur(18px); border-radius: 16px; box-shadow: 0 15px 35px rgba(0,0,0,.45);
@@ -507,6 +535,7 @@ footer { border-top: 1px solid var(--line-soft); padding: 34px 0 100px; }
   .game-story-row span:last-child { display: none; }
   .rotation-grid { grid-template-columns: 1fr; }.team-comparison { padding: 17px; }
   .scenario-controls, .scenario-outcomes { grid-template-columns: 1fr; }
+  .comp-list { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; } }
 </style>
@@ -643,7 +672,7 @@ footer { border-top: 1px solid var(--line-soft); padding: 34px 0 100px; }
   </section>
 
   <section id="page-matchup" class="page">
-    <div class="wrap">
+    <div class="wrap matchup-wrap">
       <div class="app-head"><div><div class="eyebrow">Game outcome model</div><h1 class="section-title">Matchup lab.</h1></div><div class="app-meta">Full-strength assumption<br>Logistic forecast</div></div>
       <section class="panel forecast-panel" id="season-forecast"><div class="empty-state" style="min-height:260px"><div class="loading">SIMULATING 2026–27 SEASON…</div></div></section>
       <section class="panel scenario-lab" id="scenario-lab">
@@ -895,6 +924,31 @@ function splitRows(rows) {
   return header + rows.map(row => `<div class="split-row"><b>${escapeHTML(row.Split)}</b>${columns.map(column => `<span>${row[column] == null ? "—" : column === "FG_PCT" ? fmt(Number(row[column])*100)+"%" : fmt(row[column],column === "GP" ? 0 : 1)}</span>`).join("")}</div>`).join("");
 }
 
+function positionOctagonEntries(percentiles) {
+  const preferred = ["PTS","AST","REB","STL","BLK","FG_PCT","NET_RATING","DPM"];
+  const available = Object.entries(percentiles || {}).filter(([,value]) => Number.isFinite(Number(value)));
+  const selected = preferred.filter(stat => Number.isFinite(Number(percentiles?.[stat])));
+  available.forEach(([stat]) => { if (selected.length < 8 && !selected.includes(stat)) selected.push(stat); });
+  return selected.slice(0,8).map(stat => [stat,Number(percentiles[stat])]);
+}
+
+function renderPositionOctagon(entries, playerName, positionGroup) {
+  if (entries.length !== 8) return '<p class="analytics-note">The octagon requires eight qualifying position metrics; exact available percentiles are shown below.</p>';
+  const group = positionGroup || "position";
+  const labels={PTS:"Scoring",AST:"Creation",REB:"Rebounding",STL:"Steals",BLK:"Blocks",
+    FG_PCT:"FG efficiency",NET_RATING:"Net rating",DPM:"DPM",FG3_PCT:"3PT efficiency",FT_PCT:"FT efficiency"};
+  const width=640,height=500,cx=320,cy=235,radius=165,labelRadius=207;
+  const point=(index,value,r=radius)=>{const angle=-Math.PI/2+index*Math.PI/4;
+    return [cx+Math.cos(angle)*r*value/100,cy+Math.sin(angle)*r*value/100];};
+  const polygon=value=>entries.map((_,index)=>point(index,value).map(number=>number.toFixed(1)).join(",")).join(" ");
+  const grid=[25,50,75,100].map(level=>`<polygon points="${polygon(level)}" fill="none" stroke="#303741" stroke-width="1"/><text x="${cx+5}" y="${(cy-radius*level/100+4).toFixed(1)}" fill="#6f7681" font-size="10">${level}</text>`).join("");
+  const axes=entries.map(([stat],index)=>{const [x,y]=point(index,100),[lx,ly]=point(index,100,labelRadius),anchor=lx<cx-12?"end":lx>cx+12?"start":"middle";
+    return `<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="#303741"/><text x="${lx.toFixed(1)}" y="${(ly+5).toFixed(1)}" text-anchor="${anchor}" fill="#979da8" font-size="13">${escapeHTML(labels[stat]||stat.replaceAll("_"," "))}</text>`;}).join("");
+  const shape=entries.map(([,value],index)=>point(index,value).map(number=>number.toFixed(1)).join(",")).join(" ");
+  const dots=entries.map(([stat,value],index)=>{const [x,y]=point(index,value);return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5" fill="#ff5c35"><title>${escapeHTML(labels[stat]||stat)}: ${Math.round(value)}th percentile among ${escapeHTML(group)}s</title></circle>`;}).join("");
+  return `<div class="position-octagon"><div class="position-octagon-scroll"><svg class="position-octagon-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHTML(playerName)} position percentile octagon"><title>${escapeHTML(playerName)} compared with inferred ${escapeHTML(group)} peers</title>${grid}${axes}<polygon points="${polygon(50)}" fill="none" stroke="#f2f0e9" stroke-opacity=".7" stroke-width="2" stroke-dasharray="7 6"/><polygon points="${shape}" fill="#ff5c35" fill-opacity=".13" stroke="#ff5c35" stroke-width="4" stroke-linejoin="round"/>${dots}</svg></div><div class="position-octagon-legend"><span><i></i>${escapeHTML(playerName)}</span><span><i class="median"></i>${escapeHTML(group)} median · 50th percentile</span></div><p class="analytics-note">Shape is percentile rank against inferred ${escapeHTML(group)} peers. Higher and farther from center is better.</p></div>`;
+}
+
 async function loadProfileDeep(id, name, season, seasonType) {
   const target = $("profile-deep");
   target.innerHTML = '<div class="loading">REFRESHING DEEP ANALYTICS…</div>';
@@ -908,8 +962,9 @@ async function loadProfileDeep(id, name, season, seasonType) {
   ]);
   const insights = deepValue(insightsResult), shots = deepValue(shotsResult), splits = deepValue(splitsResult);
   const onOff = deepValue(onOffResult)?.on_off, contract = deepValue(contractResult);
-  const ratings = insights?.ratings || {}, positionEntries = Object.entries(insights?.position_percentiles || {}).slice(0,8);
+  const ratings = insights?.ratings || {}, positionEntries = positionOctagonEntries(insights?.position_percentiles);
   const quality = shots?.quality || {}, breakdown = shots?.breakdown || [];
+  // Exact position-percentile bars intentionally stay hidden; octagon dots retain values.
   target.innerHTML = `
     <section class="deep-panel"><div class="subhead"><h3>Scouting context</h3><span>${escapeHTML(insights?.season || season)} · ${escapeHTML(insights?.position_group || "League")}</span></div>
       ${insights?.scouting_take ? `<div class="scouting-card">${escapeHTML(insights.scouting_take)}</div>` : '<p class="analytics-note">Scouting context is unavailable for this sample.</p>'}
@@ -918,7 +973,7 @@ async function loadProfileDeep(id, name, season, seasonType) {
         <div class="context-tile"><b>${ratings.CLUTCH_NET_RATING == null ? "—" : `${Number(ratings.CLUTCH_NET_RATING)>=0?"+":""}${fmt(ratings.CLUTCH_NET_RATING)}`}</b><span>Clutch net</span></div>
         <div class="context-tile"><b>${ratings.DPM == null ? "—" : `${Number(ratings.DPM)>=0?"+":""}${fmt(ratings.DPM)}`}</b><span>DARKO DPM</span></div>
         <div class="context-tile"><b>${escapeHTML(insights?.draft || "Undrafted")}</b><span>Draft pedigree</span></div>
-      </div>${positionEntries.length ? `<div class="subhead" style="margin-top:20px"><h3>Position percentiles</h3><span>Inferred ${escapeHTML(insights.position_group)}</span></div>${percentileRows(positionEntries)}` : ""}
+      </div>${positionEntries.length ? `<div class="subhead" style="margin-top:20px"><h3>Position percentiles</h3><span>Inferred ${escapeHTML(insights.position_group)}</span></div>${renderPositionOctagon(positionEntries,name,insights.position_group)}` : ""}
     </section>
     <section class="deep-panel"><div class="subhead"><h3>On / off impact</h3><span>${escapeHTML(onOff ? "CURRENT TEAM" : "UNAVAILABLE")}</span></div>
       ${onOff ? `<div class="context-grid"><div class="context-tile"><b>${fmt(onOff.NET_ON)}</b><span>Team net · on</span></div><div class="context-tile"><b>${fmt(onOff.NET_OFF)}</b><span>Team net · off</span></div><div class="context-tile"><b>${Number(onOff.NET_DIFF)>=0?"+":""}${fmt(onOff.NET_DIFF)}</b><span>On/off swing</span></div><div class="context-tile"><b>${fmt(onOff.MIN_ON,0)}</b><span>Minutes on</span></div></div>` : '<p class="analytics-note">On/off data is available for active players with a current team row.</p>'}
@@ -996,12 +1051,22 @@ async function loadExplore() {
     exploreData = result;
     const columns = [["TEAM_ABBREVIATION","TM"],["GP","GP"],["MIN","MIN"],["PTS","PTS"],["REB","REB"],["AST","AST"],["STL","STL"],["BLK","BLK"],["FG3M","3PM"],["NET_RATING","NET"],["DPM","DPM"]];
     const header = `<div class="explore-row header"><span>Player · ${result.count} results</span>${columns.map(([,label]) => `<span>${label}</span>`).join("")}</div>`;
-    const rows = result.players.map(player => `<div class="explore-row"><strong>${escapeHTML(player.PLAYER_NAME)}</strong>${columns.map(([key]) => `<span>${player[key] == null ? "—" : key === "TEAM_ABBREVIATION" ? escapeHTML(player[key]) : `${["NET_RATING","DPM"].includes(key) && Number(player[key]) > 0 ? "+" : ""}${fmt(player[key], key === "GP" ? 0 : 1)}`}</span>`).join("")}</div>`).join("");
+    const rows = result.players.map(player => `<div class="explore-row"><button class="explore-player-link" data-player-id="${Number(player.PLAYER_ID)}" data-player-name="${escapeHTML(player.PLAYER_NAME)}" aria-label="Open ${escapeHTML(player.PLAYER_NAME)} profile">${escapeHTML(player.PLAYER_NAME)}</button>${columns.map(([key]) => `<span>${player[key] == null ? "—" : key === "TEAM_ABBREVIATION" ? escapeHTML(player[key]) : `${["NET_RATING","DPM"].includes(key) && Number(player[key]) > 0 ? "+" : ""}${fmt(player[key], key === "GP" ? 0 : 1)}`}</span>`).join("")}</div>`).join("");
     $("explore-output").innerHTML = header + rows + `<button class="explore-run" style="margin:16px" id="explore-download">Download CSV ↓</button>`;
     $("explore-download").addEventListener("click",downloadExplore);
   } catch (error) { $("explore-output").innerHTML = `<div class="empty-state" style="min-height:390px"><div><h3>League table unavailable</h3><p class="error">${escapeHTML(error.message)}</p></div></div>`; }
 }
 $("explore-go").addEventListener("click", loadExplore);
+$("explore-output").addEventListener("click", event => {
+  const link = event.target.closest(".explore-player-link");
+  if (!link) return;
+  const playerId = Number(link.dataset.playerId), playerName = link.dataset.playerName;
+  if (!Number.isFinite(playerId) || !playerName) return;
+  $("search").value = playerName;
+  $("results").innerHTML = "";
+  showPage("players");
+  loadProfile(playerId, playerName);
+});
 function downloadExplore(){if(!exploreData?.players?.length)return;const columns=Object.keys(exploreData.players[0]),quote=value=>`"${String(value??"").replaceAll('"','""')}"`,csv=[columns.join(","),...exploreData.players.map(row=>columns.map(column=>quote(row[column])).join(","))].join("\n"),link=document.createElement("a");link.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));link.download=`nba_${exploreData.season}_${exploreData.rate}.csv`;link.click();URL.revokeObjectURL(link.href);}
 
 const FAVORITES_KEY="nba-insights-favorites-v1",ALERTS_KEY="nba-insights-tracking-alerts-v1",TRACKING_SEEN_KEY="nba-insights-tracking-seen-v1";
@@ -1143,6 +1208,36 @@ function setupCompareSearch(key) {
   });
 }
 setupCompareSearch("a"); setupCompareSearch("b"); setupCompareSearch("c"); setupCompareSearch("d");
+const compareProfileMetrics = [
+  ["PTS","Scoring"], ["AST","Playmaking"], ["REB","Rebounding"],
+  ["STL","Steals"], ["BLK","Rim protection"], ["FG_PCT","FG efficiency"],
+  ["DPM","Overall impact"]
+];
+const compareProfileColors = ["#ff5c35", "#7ab8ff", "#c7ff4a", "#c58cff"];
+function renderCompareProfile(names, percentiles) {
+  const eligible = names.filter(name => compareProfileMetrics.filter(([stat]) =>
+    Number.isFinite(Number(percentiles?.[name]?.[stat]))).length >= 3);
+  if (eligible.length < 2) return `<section class="compare-visual"><div class="subhead"><h3>At-a-glance profile</h3><span>CURRENT SEASON</span></div><p class="analytics-note">The normalized visual needs at least two active players with a qualifying current-season sample. Exact career and season values remain below.</p></section>`;
+  const metrics = compareProfileMetrics.filter(([stat]) => eligible.every(name =>
+    Number.isFinite(Number(percentiles[name][stat]))));
+  if (metrics.length < 3) return "";
+  const width=640,height=470,cx=320,cy=224,radius=158,labelRadius=195;
+  const point=(index,value,r=radius)=>{const angle=-Math.PI/2+index*2*Math.PI/metrics.length;
+    return [cx+Math.cos(angle)*r*value/100,cy+Math.sin(angle)*r*value/100];};
+  const points=value=>metrics.map((_,index)=>point(index,value).map(number=>number.toFixed(1)).join(",")).join(" ");
+  const leaders=Object.fromEntries(eligible.map(name=>[name,0]));
+  metrics.forEach(([stat])=>{const best=Math.max(...eligible.map(name=>Number(percentiles[name][stat])));
+    eligible.forEach(name=>{if(Number(percentiles[name][stat])===best)leaders[name]++;});});
+  const grid=[25,50,75,100].map(level=>`<polygon points="${points(level)}" fill="none" stroke="#303741" stroke-width="1"/><text x="${cx+4}" y="${(cy-radius*level/100+4).toFixed(1)}" fill="#6f7681" font-size="9">${level}</text>`).join("");
+  const axes=metrics.map(([stat,label],index)=>{const [x,y]=point(index,100),[lx,ly]=point(index,100,labelRadius),anchor=lx<cx-12?"end":lx>cx+12?"start":"middle";
+    return `<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="#303741"/><text x="${lx.toFixed(1)}" y="${(ly+4).toFixed(1)}" text-anchor="${anchor}" fill="#979da8" font-size="11">${escapeHTML(label)}</text>`;}).join("");
+  const profiles=eligible.map((name,index)=>{const color=compareProfileColors[index],values=metrics.map(([stat])=>Number(percentiles[name][stat])),shape=values.map((value,metric)=>point(metric,value).map(number=>number.toFixed(1)).join(",")).join(" ");
+    return `<g><polygon points="${shape}" fill="${color}" fill-opacity=".07" stroke="${color}" stroke-width="3" stroke-linejoin="round"/>${values.map((value,metric)=>{const [x,y]=point(metric,value);return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4" fill="${color}"><title>${escapeHTML(name)} · ${escapeHTML(metrics[metric][1])}: ${Math.round(value)}th percentile</title></circle>`;}).join("")}</g>`;}).join("");
+  const legend=eligible.map((name,index)=>{const average=metrics.reduce((sum,[stat])=>sum+Number(percentiles[name][stat]),0)/metrics.length;
+    return `<div class="compare-profile-key"><i style="background:${compareProfileColors[index]}"></i><b>${escapeHTML(name)}</b><span>${Math.round(average)} avg<br>${leaders[name]} lead${leaders[name]===1?"":"s"}</span></div>`;}).join("");
+  const excluded=names.filter(name=>!eligible.includes(name));
+  return `<section class="compare-visual"><div class="subhead"><div><div class="panel-kicker">Normalized on one honest scale</div><h3>At-a-glance skill profile</h3></div><span>LEAGUE PERCENTILE · HIGHER IS BETTER</span></div><svg class="compare-profile-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="League percentile profile comparison for ${eligible.map(escapeHTML).join(", ")}"><title>Current-season league percentile comparison</title>${grid}${axes}${profiles}</svg><div class="compare-profile-legend">${legend}</div><p class="analytics-note">Shape shows current-season league percentile, not raw totals or position-adjusted value. Exact numbers are below.${excluded.length?` No qualifying percentile shape for ${excluded.map(escapeHTML).join(", ")}.`:""}</p></section>`;
+}
 $("compare-go").addEventListener("click", async () => {
   const names = Object.values(comparePicks).filter(Boolean);
   if (names.length < 2 || new Set(names).size !== names.length) {
@@ -1168,7 +1263,7 @@ $("compare-go").addEventListener("click", async () => {
     const seasonRows=[...new Set(names.flatMap(name=>(result.career_seasons?.[name]||[]).map(row=>row.SEASON_ID)))].sort().reverse().map(season=>`<div class="compare-table-row" style="grid-template-columns:${grid}"><label>${escapeHTML(season)}</label>${names.map(name=>{const row=(result.career_seasons?.[name]||[]).find(item=>item.SEASON_ID===season);return `<span>${row?fmt(row.PTS):"—"}</span>`;}).join("")}</div>`).join("");
     const currentRows=body?body.replaceAll('class="compare-table-row"',`class="compare-table-row" style="grid-template-columns:${grid}"`):'<p class="analytics-note">Current-season stats require every selected player to be active.</p>';
     const posterLink=result.poster_png?`<a class="btn btn-primary" style="margin-top:24px" href="${escapeHTML(result.poster_png)}" target="_blank" rel="noopener">Download comparison poster ↗</a>`:"";
-    $("compare-output").innerHTML = `<div class="compare-head" style="grid-template-columns:${grid}"><div class="panel-kicker">${escapeHTML(result.season)}</div>${names.map(name=>`<div>${escapeHTML(name)}</div>`).join("")}</div><div class="subhead" style="margin-top:22px"><h3>Current season</h3><span>PER GAME</span></div>${currentRows}<div class="subhead" style="margin-top:28px"><h3>Career averages</h3><span>VOLUME-WEIGHTED</span></div>${careerRows}<div class="subhead" style="margin-top:28px"><h3>Season by season</h3><span>POINTS PER GAME</span></div>${seasonRows}<div class="subhead" style="margin-top:28px"><h3>League percentiles</h3><span>CURRENT SEASON</span></div>${pctRows||'<p class="analytics-note">Requires every player active this season.</p>'}<div class="subhead" style="margin-top:28px"><h3>Shot quality</h3><span>EXPECTED VS ACTUAL</span></div>${qualityRows}${posterLink}`;
+    $("compare-output").innerHTML = `<div class="compare-head" style="grid-template-columns:${grid}"><div class="panel-kicker">${escapeHTML(result.season)}</div>${names.map(name=>`<div>${escapeHTML(name)}</div>`).join("")}</div>${renderCompareProfile(names,result.percentiles)}<div class="subhead" style="margin-top:22px"><h3>Current season</h3><span>PER GAME</span></div>${currentRows}<div class="subhead" style="margin-top:28px"><h3>Career averages</h3><span>VOLUME-WEIGHTED</span></div>${careerRows}<div class="subhead" style="margin-top:28px"><h3>Season by season</h3><span>POINTS PER GAME</span></div>${seasonRows}<div class="subhead" style="margin-top:28px"><h3>League percentiles</h3><span>CURRENT SEASON</span></div>${pctRows||'<p class="analytics-note">Requires every player active this season.</p>'}<div class="subhead" style="margin-top:28px"><h3>Shot quality</h3><span>EXPECTED VS ACTUAL</span></div>${qualityRows}${posterLink}`;
   } catch (error) { $("compare-output").innerHTML = `<div class="empty-state" style="min-height:280px"><div><h3>Comparison unavailable</h3><p class="error">${escapeHTML(error.message)}</p></div></div>`; }
 });
 

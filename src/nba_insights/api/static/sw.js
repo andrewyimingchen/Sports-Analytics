@@ -1,6 +1,6 @@
 // App shell is network-first so a deployed UI cannot stay pinned behind an
 // older service worker. The cache is only an offline fallback.
-const SHELL_CACHE = "nba-insights-shell-v11";
+const SHELL_CACHE = "nba-insights-shell-v16";
 const SHELL = ["/app/", "/app/index.html", "/app/manifest.json", "/app/icon.svg"];
 
 self.addEventListener("install", (e) => {
