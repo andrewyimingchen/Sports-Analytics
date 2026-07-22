@@ -32,6 +32,21 @@ def test_round_trip(tmp_path, df):
     pd.testing.assert_frame_equal(cache.get("k"), df)
 
 
+def test_entry_info_reports_freshness_without_payload(tmp_path, df):
+    clock = FakeClock()
+    cache = make_cache(tmp_path, clock)
+    assert cache.entry_info("missing") is None
+    cache.put("k", df)
+    clock.advance(hours=25)
+
+    info = cache.entry_info("k", ttl=timedelta(hours=24))
+
+    assert info["rows"] == 2
+    assert info["age_seconds"] == 25 * 3600
+    assert info["stale"] is True
+    assert info["fetched_at"] == "2026-01-01T00:00:00+00:00"
+
+
 def test_round_trip_preserves_string_ids(tmp_path):
     # numeric-looking IDs must stay strings (leading zeros are meaningful)
     df = pd.DataFrame({"GAME_ID": ["0022401187", "0022401196"], "PTS": [93, 100]})

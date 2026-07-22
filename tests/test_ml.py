@@ -11,6 +11,7 @@ from nba_insights.ml import (
     observed_lineup,
 )
 from nba_insights.ml.features import (
+    OUTCOME_FEATURES,
     availability_features,
     game_matchup_frame,
     matchup_features,
@@ -124,6 +125,22 @@ def test_matchup_frame_pairs_home_and_away():
     assert not matchups.empty
     assert matchups["GAME_ID"].is_unique
     assert set(matchups["home_win"].unique()) <= {0, 1}
+
+
+def test_outcome_explanation_reconstructs_model_logit():
+    matchups = game_matchup_frame(team_form_features(synthetic_team_games(60), window=5))
+    model = GameOutcomeModel().fit(matchups)
+    features = matchups.iloc[[0]]
+
+    explanation = model.explain(features)
+    explained_logit = sum(row["log_odds_contribution"] for row in explanation)
+    probability = float(model.predict_proba(features).iloc[0])
+
+    assert probability == pytest.approx(1 / (1 + np.exp(-explained_logit)))
+    assert {row["feature"] for row in explanation} == {*OUTCOME_FEATURES, "model_intercept"}
+    assert explanation == sorted(
+        explanation, key=lambda row: abs(row["log_odds_contribution"]), reverse=True
+    )
 
 
 def test_snapshot_and_matchup_features():

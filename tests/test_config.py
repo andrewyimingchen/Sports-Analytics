@@ -1,6 +1,6 @@
 from datetime import date
 
-from nba_insights.config import current_season, seasons_since
+from nba_insights.config import current_season, next_season, prediction_seasons, seasons_since
 
 
 def test_season_rolls_over_in_october():
@@ -19,3 +19,9 @@ def test_seasons_since_newest_first_down_to_dashboard_era():
     assert out[-1] == "1996-97"  # dashboard data ends here
     assert len(out) == 30
     assert seasons_since(2024, today=date(2026, 7, 16)) == ["2025-26", "2024-25"]
+
+
+def test_prediction_seasons_include_upcoming_year():
+    today = date(2026, 7, 21)
+    assert next_season(today=today) == "2026-27"
+    assert prediction_seasons(today) == ["2025-26", "2026-27"]

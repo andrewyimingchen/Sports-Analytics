@@ -28,6 +28,18 @@ def seasons_since(start_year: int = FIRST_DASHBOARD_SEASON, today: date | None =
     return [f"{y}-{(y + 1) % 100:02d}" for y in range(current_start, start_year - 1, -1)]
 
 
+def next_season(season: str | None = None, today: date | None = None) -> str:
+    """Season immediately after *season* (or the date-derived current season)."""
+    start_year = int((season or current_season(today))[:4]) + 1
+    return f"{start_year}-{(start_year + 1) % 100:02d}"
+
+
+def prediction_seasons(today: date | None = None) -> list[str]:
+    """Seasons offered by forecasts: current data plus next-year carry-forward."""
+    current = current_season(today)
+    return [current, next_season(current)]
+
+
 def current_season(today: date | None = None) -> str:
     """Return the NBA season string (e.g. "2025-26") for a given date.
 

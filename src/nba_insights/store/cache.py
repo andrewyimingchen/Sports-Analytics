@@ -95,6 +95,21 @@ class Cache:
             return None
         return df
 
+    def entry_info(self, key: str, ttl: timedelta | None = None) -> dict | None:
+        """Non-payload cache metadata for freshness/status displays."""
+        loaded = self._load(key)
+        if loaded is None:
+            return None
+        fetched_at, frame = loaded
+        age = self._now() - fetched_at
+        return {
+            "key": key,
+            "fetched_at": fetched_at.isoformat(),
+            "age_seconds": max(0.0, age.total_seconds()),
+            "stale": ttl is not None and age > ttl,
+            "rows": int(len(frame)),
+        }
+
     def put(self, key: str, df: pd.DataFrame) -> None:
         self._write(key, self._now(), df)
 

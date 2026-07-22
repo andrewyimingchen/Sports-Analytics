@@ -2,8 +2,9 @@
 
 Owner decision 2026-07-16 (see CLAUDE.md): scraping is permitted at
 minimal volume for personal/educational use — this module reads exactly
-one summary page (every current contract, seasons forward) and the
-client caches it for a week. Scraped data must never be exposed through
+one summary page (every current contract, seasons forward) plus a player
+page only when its local profile is opened. The client caches those pages
+for a week/month respectively. Scraped data must never be exposed through
 the public API/PWA or redistributed; license the data for anything
 commercial.
 
@@ -17,13 +18,16 @@ import re
 from io import StringIO
 
 import pandas as pd
+from lxml import html as lxml_html
 
 CONTRACTS_URL = "https://www.basketball-reference.com/contracts/players.html"
+PLAYER_URL = "https://www.basketball-reference.com/players/{slug}"
 
 # B-Ref tricodes that differ from stats.nba.com's
 _TEAM_FIX = {"BRK": "BKN", "PHO": "PHX", "CHO": "CHA"}
 
 _SEASON_RE = re.compile(r"\d{4}-\d{2}")
+_PLAYER_SLUG_RE = re.compile(r"[a-z]/[a-z0-9]+\.html")
 
 
 def _money(col: pd.Series) -> pd.Series:
@@ -56,10 +60,23 @@ def parse_contracts(html: str) -> pd.DataFrame:
     seasons = [c for c in table.columns if _SEASON_RE.fullmatch(str(c))]
     if not seasons:
         raise ValueError("no season salary columns found")
+    slugs: dict[str, str] = {}
+    try:
+        root = lxml_html.fromstring(html)
+        for cell in root.xpath('//tbody/tr/*[@data-stat="player"]'):
+            hrefs = cell.xpath('.//a[starts-with(@href, "/players/")]/@href')
+            if hrefs:
+                slugs[" ".join(cell.text_content().split())] = hrefs[0].removeprefix(
+                    "/players/"
+                )
+    except (ValueError, TypeError):
+        pass
+
     out = pd.DataFrame(
         {
             "PLAYER_NAME": table["Player"].astype(str),
             "TEAM_ABBREVIATION": table["Tm"].astype(str).replace(_TEAM_FIX),
+            "BREF_SLUG": table["Player"].astype(str).map(slugs),
         }
     )
     for season in seasons:
@@ -67,6 +84,37 @@ def parse_contracts(html: str) -> pd.DataFrame:
     if "Guaranteed" in table.columns:
         out["GUARANTEED"] = _money(table["Guaranteed"]).values
     return out.reset_index(drop=True)
+
+
+def parse_career_salaries(html: str) -> pd.DataFrame:
+    """Parse one player's complete salary history, including commented tables."""
+    match = re.search(
+        r'<table\b[^>]*\bid=["\']all_salaries["\'][\s\S]*?</table>',
+        html,
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        raise ValueError("no career salaries table found in player page")
+    try:
+        table = pd.read_html(StringIO(match.group(0)))[0]
+    except (ValueError, IndexError, ImportError) as error:
+        raise ValueError("career salaries table could not be parsed") from error
+    if isinstance(table.columns, pd.MultiIndex):
+        table.columns = [column[-1] for column in table.columns]
+    team_column = "Team" if "Team" in table.columns else "Tm"
+    required = {"Season", team_column, "Salary"}
+    if not required.issubset(table.columns):
+        raise ValueError(f"unexpected career salary columns: {list(table.columns)}")
+    rows = table[table["Season"].astype("string").str.fullmatch(_SEASON_RE.pattern, na=False)]
+    if rows.empty:
+        raise ValueError("no season salary rows found")
+    return pd.DataFrame(
+        {
+            "SEASON": rows["Season"].astype(str),
+            "TEAM": rows[team_column].astype(str),
+            "SALARY": _money(rows["Salary"]).values,
+        }
+    ).reset_index(drop=True)
 
 
 def fetch_contracts() -> pd.DataFrame:
@@ -81,3 +129,19 @@ def fetch_contracts() -> pd.DataFrame:
     # latin-1 and every diacritic name breaks the league-table join
     r.encoding = "utf-8"
     return parse_contracts(r.text)
+
+
+def fetch_career_salaries(slug: str) -> pd.DataFrame:
+    """Download one player's salary table after validating its B-Ref path."""
+    if not _PLAYER_SLUG_RE.fullmatch(slug):
+        raise ValueError("invalid Basketball-Reference player slug")
+    import requests
+
+    response = requests.get(
+        PLAYER_URL.format(slug=slug),
+        headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64)"},
+        timeout=30,
+    )
+    response.raise_for_status()
+    response.encoding = "utf-8"
+    return parse_career_salaries(response.text)

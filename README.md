@@ -1,6 +1,6 @@
 # NBA Insights 🏀
 
-A Streamlit app in seven pages:
+A Streamlit app in nine pages:
 
 - **League pulse** — the landing page: per-game and net/clutch-rating leaders,
   Elo power rankings, best/worst net ratings, and the next slate with win
@@ -15,19 +15,24 @@ A Streamlit app in seven pages:
   onward); the header carries draft pedigree and current salary
 - **Compare players** — side-by-side stats, percentile bars, shot quality, and
   a downloadable share poster (the Predictions page has one per matchup too)
+- **Explore stats** — a sortable, filterable league-wide player table with
+  per-game/per-36 views and CSV export
 - **Teams** — record/ratings/Elo tiles, season margin trend, roster with
   ratings and salaries (plus committed payroll), per-player on/off impact,
   last ten games, and conference standings
-- **Draft** — every draft class back to 1947 with combine measurements
-  (wingspan, standing reach, athletic testing) from 2000 on; drafted players
-  carry their pick pedigree on the profile header
+- **Games** — season scores and schedule with team filtering; finals open a
+  cached game story with win-probability flow, turning points, shots, lineups,
+  clutch context, advanced team stats, play-by-play, and the full player box
+- **Ask (AI)** — optional natural-language questions over the cached league
+  table, enabled with the `anthropic` extra and an API credential
 - **Predictions** — game outcome probabilities, a 10,000-run Monte Carlo game
   simulator (margin/total distributions), player points projections with 80%
-  intervals, and starting-five estimates
-- **Season outlook** — a 5,000-run Monte Carlo of the coming season from
-  offseason-regressed Elo: projected standings (win totals with 10–90%
-  bands, playoff/top-6/#1-seed odds) and postseason odds (conference finals,
-  Finals, championship)
+  intervals, and five-slot starting-lineup estimates
+- **Season outlook** — a 5,000-run Monte Carlo with full East/West tables,
+  projected records and pessimistic/median/optimistic bands, plus playoff,
+  top-6, #1-seed, conference finals, Finals, championship, and NBA Cup odds.
+  The upcoming season uses versioned contract rosters, projected 240-minute
+  rotations, availability and age adjustments, and explainable team deltas.
 - **Methodology** — how every model is built, judged, and what was rejected
 
 Built on the official-ish [`nba_api`](https://github.com/swar/nba_api)
@@ -89,6 +94,19 @@ past seasons through the cache, ~a minute cold):
 uv run python -m nba_insights.ml.train
 ```
 
+Backtest the league-wide season simulation separately. Each target season uses
+only the preceding completed regular season, and the resulting registry records
+data cutoffs, record error, playoff calibration/Brier score, and title/Cup Brier
+scores against simple baselines:
+
+```bash
+uv run python -m nba_insights.ml.backtest --seasons 2024-25 2025-26
+```
+
+The Methodology page labels trained, holdout-evaluated, heuristic, mechanistic,
+and historically backtested outputs separately. A backtest does not imply that
+an output beats its baseline; the registry exposes that comparison directly.
+
 | Model | Approach | Holdout result (2025-26) |
 |---|---|---|
 | Game outcome | Logistic regression on prior-seeded season-to-date form differentials (win%, net rating, four factors, pace, ORtg/DRtg), rest/back-to-backs, expected minutes out (derived absences), carried-over Elo + home court | 70.2% accuracy, log loss 0.589 over the **full season** incl. opening weeks (55% baseline: always pick home) |
@@ -104,20 +122,30 @@ quote — the table above is the record from the last full evaluation.
 Retrain whenever you want fresher form; artifacts live in `data/models/`
 (never committed).
 
-## Phone app (PWA)
+## Installable web app (PWA)
 
-A minimal installable mobile app ships with the API — no app store, no
-native toolchain:
+The full analytics product ships with the API as a responsive, installable
+web app — no app store or native toolchain:
 
 ```bash
 uv run uvicorn nba_insights.api:app --port 8000
 ```
 
-Open `http://<your-host>:8000/app/` on a phone (or desktop) and "Add to
-Home Screen". Two tabs: player search → profile (headshot, stat tiles,
-league percentiles) and game prediction (team pickers → win probability
-from the 70%-accuracy model). Vanilla HTML/JS, ~300 lines, served from
-`src/nba_insights/api/static/`.
+Open `http://127.0.0.1:8000/app/` on a phone or desktop and choose "Add to
+Home Screen". It includes League Pulse, deep player profiles (shot charts,
+hot zones, league/position context, splits, on/off, and local contracts),
+Explore with CSV export, two-to-four-player comparisons, Team Room, Game
+Center with full box scores, shared-sample team matchup comparisons with
+ranked model drivers and JSON export, an ephemeral roster/injury/trade scenario
+lab with paired before/after simulations, outcome/simulation/player/lineup tools,
+official tracking/hustle tables with definitions and cache freshness, browser-local
+favorites and opt-in refresh alerts, optional structured AI Q&A, and methodology/model cards.
+
+Salary data stays local-only. AI Q&A requires `uv sync --extra ai` plus a
+server-side `ANTHROPIC_API_KEY`; prediction tools explain how to train missing
+model artifacts. The service worker uses the network first for the app shell,
+with its cache reserved as an offline fallback, so browser installations pick
+up UI releases instead of remaining on an old shell.
 
 ## JSON API & share cards
 
@@ -128,12 +156,35 @@ The same FastAPI service exposes the data as JSON:
 | `/players/search?q=jokic` | matching players with IDs |
 | `/players/{id}/career` | per-game averages by season |
 | `/players/{id}/percentiles` | current-season league percentile ranks |
+| `/players/{id}/insights` | scouting take, league/position ranks, ratings, draft line |
+| `/players/{id}/shots` | attempts, zones, hex hot zones, shot diet, xeFG quality |
+| `/players/{id}/splits` | home/away, month, rest, and opponent splits |
+| `/players/{id}/on-off` | current-team on/off impact |
+| `/players/{id}/contract` | local-only career salary history and current/future contract detail |
 | `/compare?names=A&names=B` | side-by-side per-game stats (2–4 players) |
 | `/players/{id}/card` | self-contained HTML share card |
 | `/posters/compare?names=A&names=B` | 1:1 share poster of a comparison (`&format=png` for an image) |
 | `/posters/game?home=LAL&away=BOS` | 16:9 share poster of a game prediction (`&format=png`) |
 | `/teams` | tricodes of all teams this season |
-| `/predict/game?home=LAL&away=BOS` | home-team win probability |
+| `/teams/{team}/profile` | factors, roster, form, lineups, on/off, standings, local payroll |
+| `/teams/compare?home=LAL&away=BOS&season=2026-27` | same-sample team metrics, rotations, bench/clutch/head-to-head context, probability drivers, limitations, and share/export metadata |
+| `/tracking?category=drives&scope=player&min_games=10` | official drives/touches/passing/defense/speed/hustle rows with definitions, sample filters, schema audit, cache freshness, and share metadata |
+
+The real-feed category/schema audit is recorded in
+[`docs/TRACKING_AVAILABILITY.md`](docs/TRACKING_AVAILABILITY.md).
+| `/games/{game_id}/box-score?season=2025-26` | cached player box score grouped by team, with traditional endpoint fallback |
+| `/games/{game_id}/story?season=2025-26` | cached timeline, shots, lineups, win probability, turning points, clutch, and advanced team box |
+| `/predict/game?home=LAL&away=BOS&season=2026-27` | home-team win probability and forecast data basis |
+| `/predict/simulate?home=LAL&away=BOS&season=2026-27` | Monte Carlo score/margin/total distributions |
+| `/predict/season?season=2026-27` | East/West projected standings with playoff, title, and NBA Cup odds |
+| `/predict/season/roster-inputs?season=2026-27&team=LAL` | versioned projected minutes, roster changes, age/availability adjustments, and team forecast deltas |
+| `POST /predict/season/scenario` | validated ephemeral minutes, games-missed, roster, and trade-package changes with paired before/after records, seeds, trophy odds, causal-player deltas, and advisory salary checks |
+| `/predict/players?season=2026-27&team=LAL` | player minutes/box-stat ranges, trajectories, comparables, and field-normalized award outlook |
+| `/predict/player/{id}?opponent=BOS` | points projection with empirical 80% interval |
+| `/predict/lineup?team=LAL&player_ids=…` | five-man net and win estimate |
+| `/methodology` | evaluation protocol, artifact metrics, journey, rejected ideas |
+| `/methodology/registry` | model versions, validation status, data cutoffs, baselines, and calibration |
+| `POST /ask` | optional structured natural-language league Q&A |
 | `/players/{id}/headshot` | headshot proxy (CDN blocks hotlinking) |
 
 Interactive docs at `/docs`. The API reads through the same cache as the app,
@@ -157,7 +208,10 @@ uv run python -m nba_insights.warm --seasons 1996-97 1997-98 2015-16
 ```
 
 The stint-level lineup table (used by the Predictions page's starting-five
-tab) is built offline from play-by-play and rotation data:
+tab) and Game Center stories are built offline from play-by-play and rotation
+data. New v4 play-by-play caches include shot coordinates; older v3 caches
+still provide timelines and shot-type summaries with an explicit location-data
+fallback in the website:
 
 ```bash
 uv run python -m nba_insights.pbp.backfill --seasons 2025-26  # fetch corpus

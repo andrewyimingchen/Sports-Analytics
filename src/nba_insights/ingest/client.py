@@ -16,13 +16,17 @@ from datetime import UTC, datetime, timedelta
 
 import pandas as pd
 from nba_api.stats.endpoints import (
+    boxscoretraditionalv3,
     draftcombinestats,
     drafthistory,
     gamerotation,
     leaguedashlineups,
     leaguedashplayerclutch,
     leaguedashplayerstats,
+    leaguedashptstats,
     leaguegamefinder,
+    leaguehustlestatsplayer,
+    leaguehustlestatsteam,
     leaguestandings,
     playbyplayv3,
     playercareerstats,
@@ -37,7 +41,7 @@ from nba_api.stats.static import players
 
 from nba_insights.config import CACHE_DB, current_season
 from nba_insights.ingest.darko import fetch_darko
-from nba_insights.ingest.salaries import fetch_contracts
+from nba_insights.ingest.salaries import fetch_career_salaries, fetch_contracts
 from nba_insights.store import Cache
 
 logger = logging.getLogger(__name__)
@@ -46,6 +50,7 @@ CURRENT_SEASON_TTL = timedelta(hours=24)
 # contracts change rarely outside July; a weekly refresh keeps scrape
 # volume at the guardrailed minimum (one page/week — see ingest.salaries)
 CONTRACTS_TTL = timedelta(days=7)
+CAREER_SALARY_TTL = timedelta(days=30)
 
 
 def _type_suffix(season_type: str) -> str:
@@ -298,14 +303,44 @@ class NBAClient:
         "scoreHome",
         "scoreAway",
         "isFieldGoal",
+        "xLegacy",
+        "yLegacy",
+        "shotDistance",
     ]
 
     def play_by_play(self, game_id: str) -> pd.DataFrame:
         """Trimmed event log for one completed game. Immutable once played."""
+        try:
+            return self._cached(
+                f"pbp/v4/{game_id}",
+                lambda: self._fetch_pbp(game_id),
+                ttl=None,  # only fetched for finished games; the log never changes
+            )
+        except Exception:
+            legacy = self.cache.get(f"pbp/v3/{game_id}")
+            if legacy is not None:
+                return legacy
+            raise
+
+    def cached_play_by_play(self, game_id: str) -> pd.DataFrame | None:
+        """Best cached PBP version for instant Game Center stories; never fetches."""
+        current = self.cache.get(f"pbp/v4/{game_id}")
+        if current is not None:
+            return current
+        return self.cache.get(f"pbp/v3/{game_id}")
+
+    def box_score(self, game_id: str) -> pd.DataFrame:
+        """Traditional player box score for one completed game.
+
+        Game Center only offers this drill-down for finals, so the response is
+        immutable and can live in the cache without a TTL.
+        """
         return self._cached(
-            f"pbp/v3/{game_id}",
-            lambda: self._fetch_pbp(game_id),
-            ttl=None,  # only fetched for finished games; the log never changes
+            f"box_score/traditional/{game_id}",
+            lambda: boxscoretraditionalv3.BoxScoreTraditionalV3(
+                game_id=game_id
+            ).player_stats.get_data_frame(),
+            ttl=None,
         )
 
     def _fetch_pbp(self, game_id: str) -> pd.DataFrame:
@@ -364,6 +399,51 @@ class NBAClient:
             fetched_after=self._season_fetched_after(season),
         )
 
+    def tracking_stats(
+        self,
+        measure: str,
+        season: str | None = None,
+        scope: str = "Player",
+    ) -> pd.DataFrame:
+        """Official optical-tracking dashboard for players or teams."""
+        season = season or current_season()
+        if scope not in {"Player", "Team"}:
+            raise ValueError("tracking scope must be Player or Team")
+        return self._cached(
+            f"tracking/{scope.lower()}/{measure}/{season}",
+            lambda: leaguedashptstats.LeagueDashPtStats(
+                season=season,
+                player_or_team=scope,
+                pt_measure_type=measure,
+                per_mode_simple="PerGame",
+            ).get_data_frames()[0],
+            ttl=self._season_ttl(season),
+            fetched_after=self._season_fetched_after(season),
+        )
+
+    def hustle_stats(
+        self,
+        season: str | None = None,
+        scope: str = "Player",
+    ) -> pd.DataFrame:
+        """Official hustle dashboard: contests, deflections, screens, and box-outs."""
+        season = season or current_season()
+        if scope not in {"Player", "Team"}:
+            raise ValueError("hustle scope must be Player or Team")
+        endpoint = leaguehustlestatsplayer if scope == "Player" else leaguehustlestatsteam
+        return self._cached(
+            f"hustle/{scope.lower()}/{season}",
+            lambda: endpoint.LeagueHustleStatsPlayer(
+                season=season, per_mode_time="PerGame"
+            ).get_data_frames()[0]
+            if scope == "Player"
+            else endpoint.LeagueHustleStatsTeam(
+                season=season, per_mode_time="PerGame"
+            ).get_data_frames()[0],
+            ttl=self._season_ttl(season),
+            fetched_after=self._season_fetched_after(season),
+        )
+
     def team_player_on_off(self, team_id: int, season: str | None = None) -> pd.DataFrame:
         """Per-player on/off splits for one team: total minutes and team
         ORtg/DRtg/net rating with each player on vs off the floor
@@ -415,6 +495,15 @@ class NBAClient:
         salary per forward season plus guaranteed total. Personal use only —
         never serve through the public API/PWA (see ingest.salaries)."""
         return self._cached("contracts/bref", fetch_contracts, ttl=CONTRACTS_TTL)
+
+    def player_salary_history(self, slug: str) -> pd.DataFrame:
+        """One player's career salary history, fetched on demand and cached monthly."""
+        safe_key = slug.removesuffix(".html").replace("/", "-")
+        return self._cached(
+            f"contracts/bref/history/{safe_key}",
+            lambda: fetch_career_salaries(slug),
+            ttl=CAREER_SALARY_TTL,
+        )
 
     def darko_dpm(self) -> pd.DataFrame:
         """Today's DARKO plus-minus projections (darko.app), one row per
