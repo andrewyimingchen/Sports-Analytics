@@ -261,6 +261,32 @@ score-level what-ifs.
     )
 
     st.divider()
+    st.markdown("### Season outlook")
+    st.markdown(
+        """
+The Season outlook page plays the **whole upcoming season 5,000 times** from
+a single set of Elo ratings — no per-game model, just the Elo win expectancy
+(home team's rating **+70** points) turned into a coin flip for every game.
+Ratings are first regressed **25% toward the mean**, exactly as Elo does at
+every real season boundary, so end-of-season form becomes opening-night form.
+
+Each simulated season runs on a **representative 82-game schedule**: 4 games
+against each division rival, three-or-four against the other conference
+teams, and two against every other-conference team — every club at exactly
+82 games and a balanced 41/41 home split. From each simulated standings the
+page runs the **play-in and a best-of-seven bracket** (2-2-1-1-1 home court
+to the higher seed), and reports the shares across all 5,000 runs: projected
+win totals with a 10th–90th percentile band, playoff and top-6 odds, and
+conference-finals, Finals, and championship odds.
+
+It deliberately ignores summer roster moves — it answers "how would the
+season go if the league entered it at today's Elo," not "what will the
+depth chart look like in October." That is the honest limit of a
+ratings-only projection.
+"""
+    )
+
+    st.divider()
     st.markdown("### Player points model")
     st.markdown(
         """

@@ -85,3 +85,19 @@ def test_predictions_page_renders_all_tabs():
     assert any("duel-track" in str(md.value) for md in at.markdown)
     labels = [m.label for m in at.metric]
     assert any("10,000 sims" in label for label in labels)  # simulate tab
+
+
+@requires_cache
+def test_season_outlook_page_renders():
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_string(
+        _page_script("season_outlook_page(A.get_client())"), default_timeout=300
+    )
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert not at.error, [e.value for e in at.error]
+    # projected standings for both conferences + the postseason odds table
+    assert len(at.dataframe) >= 2
+    assert any("Projected standings" in str(sh.value) for sh in at.subheader)
+    assert any("Postseason odds" in str(sh.value) for sh in at.subheader)

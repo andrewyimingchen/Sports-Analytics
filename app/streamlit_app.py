@@ -72,6 +72,7 @@ from nba_insights.ml.features import (
     team_rest_features,
     upcoming_games,
 )
+from nba_insights.ml.season import simulate_season
 from nba_insights.ml.train import METRICS_PATH, OUTCOME_PATH, POINTS_PATH, WIN_CURVE_PATH
 from nba_insights.pbp.lineups import load_season as load_stint_lineups
 from nba_insights.posters import compare_poster_png, prediction_poster_png
@@ -2041,6 +2042,183 @@ def league_elo() -> pd.Series:
     return current_elo(pd.concat([client.team_games(s) for s in seasons], ignore_index=True))
 
 
+def _next_season_label() -> str:
+    """The season being projected: the one after the latest completed data."""
+    start = int(current_season()[:4]) + 1
+    return f"{start}-{(start + 1) % 100:02d}"
+
+
+@st.cache_data(ttl=6 * 3600, show_spinner="Simulating the season…")
+def _season_projection(_client: NBAClient, n_sims: int = 5000) -> pd.DataFrame:
+    """Monte-Carlo projection of the coming season from current Elo.
+
+    Cached for six hours — the ratings only move when new games land. The
+    seed is fixed so the standings don't reshuffle on every rerun."""
+    seasons = [*past_seasons(2), current_season()]
+    games = pd.concat([_client.team_games(s) for s in seasons], ignore_index=True)
+    elo = current_elo(games)
+    return simulate_season(elo, n_sims=n_sims, seed=0)
+
+
+def title_odds_chart(proj: pd.DataFrame, n: int = 12) -> go.Figure:
+    """Championship odds for the top *n* contenders, East vs West colored."""
+    top = proj.sort_values("champ_pct", ascending=False).head(n)
+    colors = [
+        PAL["series"][0] if proj.loc[t, "conf"] == "East" else PAL["series"][2]
+        for t in top.index
+    ]
+    fig = go.Figure(
+        go.Bar(
+            x=top["champ_pct"].values,
+            y=top.index,
+            orientation="h",
+            marker=dict(color=colors, cornerradius=3),
+            text=[f"{v:.0%}" for v in top["champ_pct"].values],
+            textposition="outside",
+            cliponaxis=False,
+            hovertemplate="%{y}: %{x:.1%} title odds<extra></extra>",
+        )
+    )
+    fig = base_layout(fig, f"Championship odds — top {n}")
+    fig.update_layout(hovermode="closest", showlegend=False, height=380)
+    pad = float(top["champ_pct"].max()) * 0.18
+    fig.update_xaxes(
+        range=[0, float(top["champ_pct"].max()) + pad],
+        tickformat=".0%",
+        gridcolor=PAL["grid"],
+    )
+    fig.update_yaxes(autorange="reversed", showgrid=False)
+    return fig
+
+
+def _standings_table(proj: pd.DataFrame, conf: str, id_to_tri: pd.Series) -> None:
+    """Projected standings for one conference, click-through to the team."""
+    rows = proj[proj["conf"] == conf].sort_values("proj_wins", ascending=False)
+    table = pd.DataFrame(
+        {
+            "#": range(1, len(rows) + 1),
+            "Team": rows.index,
+            "Proj W": rows["proj_wins"],
+            "Proj L": rows["proj_losses"],
+            "Range": [
+                f"{lo}–{hi}"
+                for lo, hi in zip(rows["wins_p10"], rows["wins_p90"], strict=True)
+            ],
+            "Playoffs": rows["playoff_pct"] * 100,
+            "Top-6": rows["top6_pct"] * 100,
+            "#1 seed": rows["seed1_pct"] * 100,
+            "Title": rows["champ_pct"] * 100,
+        }
+    )
+    st.caption(conf)
+    event = st.dataframe(
+        table,
+        width="stretch",
+        hide_index=True,
+        height=563,
+        on_select="rerun",
+        selection_mode="single-row",
+        key=f"proj_standings_{conf}",
+        column_config={
+            "Proj W": st.column_config.NumberColumn(format="%.1f"),
+            "Proj L": st.column_config.NumberColumn(format="%.1f"),
+            "Range": st.column_config.TextColumn(
+                "10–90%", help="10th–90th percentile win total across simulations"
+            ),
+            "Playoffs": st.column_config.ProgressColumn(
+                "Playoffs", min_value=0.0, max_value=100.0, format="%.0f%%",
+                help="Reached the 8-team bracket (survived any play-in)",
+            ),
+            "Top-6": st.column_config.NumberColumn(
+                format="%.0f%%", help="Finished top-6 — a berth with no play-in"
+            ),
+            "#1 seed": st.column_config.NumberColumn(format="%.0f%%"),
+            "Title": st.column_config.NumberColumn(format="%.1f%%"),
+        },
+    )
+    if event.selection.rows:
+        tri = table.iloc[event.selection.rows[0]]["Team"]
+        open_team(str(tri))
+
+
+def season_outlook_page(client: NBAClient) -> None:
+    label = _next_season_label()
+    st.caption(
+        f"Projected {label} season — 5,000 Monte-Carlo seasons from each team's "
+        "current Elo, regressed toward the mean for the off-season."
+    )
+    try:
+        proj = _season_projection(client)
+    except Exception as e:
+        st.error(f"Could not build the season projection: {e}")
+        logger.warning("season projection unavailable", exc_info=True)
+        return
+
+    # TeamID -> tricode so a projected-standings click can open that team.
+    try:
+        id_to_tri = (
+            client.team_games(current_season())
+            .dropna(subset=["TEAM_ID", "TEAM_ABBREVIATION"])
+            .drop_duplicates("TEAM_ID")
+            .set_index("TEAM_ABBREVIATION")["TEAM_ID"]
+        )
+    except Exception:
+        id_to_tri = pd.Series(dtype="int64")
+
+    tabs = st.tabs(["Regular season", "Postseason"])
+
+    with tabs[0]:
+        st.subheader(f"Projected standings · {label}")
+        st.caption("Click a team to open it on the Teams page.")
+        cols = st.columns(2)
+        with cols[0]:
+            _standings_table(proj, "East", id_to_tri)
+        with cols[1]:
+            _standings_table(proj, "West", id_to_tri)
+        st.caption(
+            "Projected wins are the mean of 5,000 simulated 82-game seasons on a "
+            "balanced schedule; the range is the 10th–90th percentile. Elo carries "
+            "last season's results but not summer roster moves."
+        )
+
+    with tabs[1]:
+        st.subheader(f"Postseason odds · {label}")
+        st.caption(
+            "The play-in and a best-of-seven bracket run on every simulated "
+            "standings — reseeding by finish, home court to the better team."
+        )
+        st.plotly_chart(title_odds_chart(proj), width="stretch")
+        odds = proj.sort_values("champ_pct", ascending=False)
+        odds = odds[odds["playoff_pct"] > 0.005]
+        table = pd.DataFrame(
+            {
+                "Team": odds.index,
+                "Conf": odds["conf"],
+                "Playoffs": odds["playoff_pct"] * 100,
+                "Conf finals": odds["conf_finals_pct"] * 100,
+                "Finals": odds["finals_pct"] * 100,
+                "Champion": odds["champ_pct"] * 100,
+            }
+        )
+        st.dataframe(
+            table,
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "Playoffs": st.column_config.NumberColumn(format="%.0f%%"),
+                "Conf finals": st.column_config.NumberColumn(format="%.0f%%"),
+                "Finals": st.column_config.ProgressColumn(
+                    "Finals", min_value=0.0, max_value=100.0, format="%.0f%%",
+                    help="Reached the NBA Finals (won the conference)",
+                ),
+                "Champion": st.column_config.NumberColumn(format="%.1f%%"),
+            },
+        )
+        st.caption(
+            "Odds are shares of simulated postseasons. Blue = East, gold = West."
+        )
+
+
 def predictions_page(client: NBAClient) -> None:
     models = load_models()
     if models is None:
@@ -2975,6 +3153,10 @@ def main() -> None:
     #                          url_path="draft")
     PAGES["predictions"] = st.Page(
         lambda: predictions_page(client), title="Predictions", icon="🔮", url_path="predictions"
+    )
+    PAGES["season"] = st.Page(
+        lambda: season_outlook_page(client), title="Season outlook", icon="🗓️",
+        url_path="season",
     )
     PAGES["methodology"] = st.Page(
         lambda: methodology_page(client), title="Methodology", icon="📐", url_path="methodology"
