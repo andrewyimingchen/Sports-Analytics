@@ -819,7 +819,15 @@ def test_roster_scenario_is_ephemeral_and_returns_before_after(api, monkeypatch)
     assert duplicate.status_code == 422
 
 
-def test_player_season_projection_exposes_ranges_and_award_method(api):
+def test_player_season_projection_exposes_ranges_and_award_method(api, monkeypatch):
+    import importlib
+
+    api_module = importlib.import_module("nba_insights.api.app")
+    monkeypatch.setattr(
+        api_module,
+        "get_player_season_metrics",
+        lambda: {"metrics": {"players": 241}},
+    )
     upcoming = prediction_seasons()[1]
     response = api.get("/predict/players", params={"season": upcoming, "limit": 10})
     assert response.status_code == 200
