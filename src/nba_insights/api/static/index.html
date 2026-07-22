@@ -234,6 +234,19 @@ input:focus, select:focus { border-color: var(--orange); box-shadow: 0 0 0 3px r
 .prediction-tools { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; padding-bottom: 90px; }
 .prediction-tools .panel { min-width: 0; }
 .forecast-panel { padding: 24px; margin-bottom: 16px; }
+.scenario-lab { padding: 24px; margin-bottom: 16px; }
+.scenario-controls { display: grid; grid-template-columns: 1fr 1fr 1fr .65fr .65fr auto; gap: 10px; align-items: end; }
+.scenario-controls .field { margin: 0; }.scenario-pending { display: grid; gap: 7px; margin-top: 16px; }
+.scenario-change { display: grid; grid-template-columns: 1fr auto; gap: 12px; padding: 11px 13px;
+  background: #101419; border: 1px solid var(--line-soft); border-radius: 9px; font-size: 10px; }
+.scenario-change button { border: 0; background: transparent; color: var(--red); cursor: pointer; }
+.scenario-actions { display: flex; gap: 9px; margin-top: 14px; }.scenario-actions button { flex: 1; }
+.scenario-outcomes { display: grid; grid-template-columns: repeat(2,1fr); gap: 12px; margin-top: 18px; }
+.scenario-outcome { padding: 18px; background: #101419; border: 1px solid var(--line-soft); border-radius: 12px; }
+.scenario-outcome h4 { margin: 0 0 12px; font: 600 26px var(--display); }
+.scenario-delta-row { display: grid; grid-template-columns: 1fr repeat(3,72px); gap: 8px; padding: 8px 0;
+  border-bottom: 1px solid var(--line-soft); font: 9px var(--mono); text-align: right; }
+.scenario-delta-row span:first-child { text-align: left; }.scenario-delta-row.header { color: var(--muted-2); text-transform: uppercase; }
 .forecast-summary { display: grid; grid-template-columns: repeat(3,1fr); gap: 9px; margin: 16px 0; }
 .forecast-conferences { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 .forecast-table { overflow-x: auto; }
@@ -299,6 +312,25 @@ input:focus, select:focus { border-color: var(--orange); box-shadow: 0 0 0 3px r
 .prob-home { background: var(--orange); transition: width .7s ease; }.prob-away { background: var(--blue); flex: 1; }
 .prob-legends { width: min(620px,100%); display: flex; justify-content: space-between; margin: 10px auto 0;
   color: var(--muted); font: 9px var(--mono); }
+.team-comparison { margin: -72px 0 18px; padding: 25px; }
+.comparison-actions { display: flex; flex-wrap: wrap; gap: 9px; }
+.comparison-grid { display: grid; grid-template-columns: 1.2fr .8fr; gap: 18px; }
+.metric-board { overflow-x: auto; }
+.team-metric-row { min-width: 590px; display: grid; grid-template-columns: 86px minmax(145px,1fr) 90px 90px;
+  gap: 10px; align-items: center; min-height: 45px; border-bottom: 1px solid var(--line-soft); font: 9px var(--mono); }
+.team-metric-row.header { color: var(--muted-2); text-transform: uppercase; }
+.team-metric-row b { font: 600 15px var(--display); text-align: right; }.team-metric-row span:last-child { text-align: right; }
+.team-metric-row .leader { color: var(--orange-2); }
+.driver-row { display: grid; grid-template-columns: 1fr 90px; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line-soft); }
+.driver-row b { font-size: 11px; }.driver-row small { display: block; color: var(--muted-2); margin-top: 3px; }
+.driver-row span { text-align: right; font: 500 10px var(--mono); }
+.rotation-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 18px; }
+.rotation-card { background: #101419; border: 1px solid var(--line-soft); border-radius: 12px; padding: 18px; }
+.rotation-card h4 { margin: 0 0 11px; font: 600 25px var(--display); color: var(--orange-2); }
+.rotation-player { display: grid; grid-template-columns: 1fr 48px 48px; gap: 8px; padding: 8px 0;
+  border-bottom: 1px solid var(--line-soft); font: 9px var(--mono); }.rotation-player span:not(:first-child) { text-align: right; }
+.limitations { margin: 18px 0 0; padding: 16px 20px; background: rgba(255,255,255,.025); border-radius: 10px; }
+.limitations li { color: var(--muted-2); font-size: 10px; line-height: 1.65; margin: 4px 0; }
 .error { color: var(--red); font-size: 11px; line-height: 1.6; padding: 10px 0; }
 .loading { color: var(--muted); font: 10px var(--mono); }
 .hidden { display: none !important; }
@@ -379,6 +411,18 @@ input:focus, select:focus { border-color: var(--orange); box-shadow: 0 0 0 3px r
 .explore-row.header { position: sticky; top: 0; background: var(--panel-2); color: var(--muted-2); text-transform: uppercase; }
 .explore-row strong { font: 600 11px var(--body); }.explore-row span:not(:first-child) { text-align: right; color: var(--muted); }
 .explore-row:hover:not(.header) { background: rgba(255,255,255,.025); }
+.tracking-controls { display: grid; grid-template-columns: repeat(6,1fr) auto; gap: 10px; padding: 19px;
+  background: var(--panel); border: 1px solid var(--line-soft); border-radius: var(--radius); }
+.tracking-source { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; margin: 14px 0;
+  padding: 13px 16px; border: 1px solid var(--line-soft); border-radius: 10px; color: var(--muted); font-size: 10px; }
+.tracking-source b { color: var(--lime); font: 500 9px var(--mono); text-transform: uppercase; }
+.tracking-table { overflow-x: auto; background: var(--panel); border: 1px solid var(--line-soft); border-radius: var(--radius); }
+.tracking-row { min-width: 920px; display: grid; gap: 8px; align-items: center; padding: 10px 16px;
+  border-bottom: 1px solid var(--line-soft); font: 9px var(--mono); }
+.tracking-row.header { color: var(--muted-2); text-transform: uppercase; background: var(--panel-2); }
+.tracking-row span:not(:nth-child(2)) { text-align: right; }.tracking-row b { font: 600 11px var(--body); }
+.favorite-toggle { border: 0; background: transparent; color: var(--muted-2); cursor: pointer; font-size: 18px; }
+.favorite-toggle.saved { color: var(--orange); }.tracking-actions { display: flex; flex-wrap: wrap; gap: 9px; }
 .game-filters { display: grid; grid-template-columns: 220px 1fr; gap: 12px; margin-bottom: 15px; }
 .game-section { margin-bottom: 15px; background: var(--panel); border: 1px solid var(--line-soft); border-radius: var(--radius); overflow: hidden; }
 .game-section-title { padding: 18px 20px; border-bottom: 1px solid var(--line); font: 600 20px var(--display); text-transform: uppercase; }
@@ -423,8 +467,10 @@ footer { border-top: 1px solid var(--line-soft); padding: 34px 0 100px; }
   .compare-picker { grid-template-columns: repeat(2,1fr); }.compare-run { grid-column: 1/-1; }
   .team-control { grid-template-columns: 1fr; }.team-identity { grid-template-columns: repeat(4,1fr); }
   .team-code { grid-column: 1/-1; }.roster-panel { overflow-x: auto; }.roster-head, .roster-row { min-width: 720px; }
-  .insight-stack { grid-template-columns: 1fr; }.explore-controls { grid-template-columns: repeat(2,1fr); }.explore-run { grid-column: 1/-1; }
+  .insight-stack { grid-template-columns: 1fr; }.explore-controls, .tracking-controls { grid-template-columns: repeat(2,1fr); }.explore-run { grid-column: 1/-1; }
   .game-story-grid { grid-template-columns: 1fr; }.game-story-card.wide { grid-column: auto; }
+  .comparison-grid { grid-template-columns: 1fr; }.team-comparison { margin-top: -72px; }
+  .scenario-controls { grid-template-columns: repeat(2,1fr); }.scenario-controls .explore-run { grid-column: 1/-1; }
   .mobile-nav { display: flex; position: fixed; z-index: 40; left: 12px; right: 12px;
     bottom: calc(10px + env(safe-area-inset-bottom)); height: 58px; padding: 5px; border: 1px solid var(--line);
     background: rgba(21,25,31,.93); backdrop-filter: blur(18px); border-radius: 16px; box-shadow: 0 15px 35px rgba(0,0,0,.45);
@@ -455,10 +501,12 @@ footer { border-top: 1px solid var(--line-soft); padding: 34px 0 100px; }
   .leader-grid { grid-template-columns: 1fr; }.compare-picker { grid-template-columns: 1fr; }
   .vs-small { display: none; }.compare-head, .compare-table-row { grid-template-columns: 74px repeat(2,1fr); }
   .team-identity { grid-template-columns: repeat(2,1fr); }.team-code { grid-column: 1/-1; }
-  .explore-controls, .game-filters { grid-template-columns: 1fr; }.game-row { min-width: 690px; }
+  .explore-controls, .tracking-controls, .game-filters { grid-template-columns: 1fr; }.game-row { min-width: 690px; }
   .game-section { overflow-x: auto; }
   .game-story-card { padding: 17px; }.game-story-row { grid-template-columns: 54px 74px 1fr; }
   .game-story-row span:last-child { display: none; }
+  .rotation-grid { grid-template-columns: 1fr; }.team-comparison { padding: 17px; }
+  .scenario-controls, .scenario-outcomes { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; } }
 </style>
@@ -475,6 +523,7 @@ footer { border-top: 1px solid var(--line-soft); padding: 34px 0 100px; }
     <button class="nav-link" data-page="compare">Compare</button>
     <button class="nav-link" data-page="teams">Teams</button>
     <button class="nav-link" data-page="games">Games</button>
+    <button class="nav-link" data-page="tracking">Tracking</button>
     <button class="nav-link" data-page="matchup">Matchup lab</button>
     <button class="nav-link" data-page="ask">Ask AI</button>
     <button class="nav-link" data-page="methodology">Methodology</button>
@@ -597,6 +646,21 @@ footer { border-top: 1px solid var(--line-soft); padding: 34px 0 100px; }
     <div class="wrap">
       <div class="app-head"><div><div class="eyebrow">Game outcome model</div><h1 class="section-title">Matchup lab.</h1></div><div class="app-meta">Full-strength assumption<br>Logistic forecast</div></div>
       <section class="panel forecast-panel" id="season-forecast"><div class="empty-state" style="min-height:260px"><div class="loading">SIMULATING 2026–27 SEASON…</div></div></section>
+      <section class="panel scenario-lab" id="scenario-lab">
+        <div class="subhead"><div><div class="panel-kicker">Ephemeral what-if model</div><h3>Roster, injury and trade lab</h3></div><span>BASELINE IS NEVER OVERWRITTEN</span></div>
+        <p class="analytics-note">Build a package one player at a time. Change projected minutes, games missed, or destination team; add both sides to model a trade.</p>
+        <div class="scenario-controls">
+          <div class="field"><label for="scenario-team">Current team</label><div class="select-wrap"><select id="scenario-team"><option>Loading…</option></select></div></div>
+          <div class="field"><label for="scenario-player">Player</label><div class="select-wrap"><select id="scenario-player"><option>Loading…</option></select></div></div>
+          <div class="field"><label for="scenario-destination">Roster move</label><div class="select-wrap"><select id="scenario-destination"><option value="">Keep current team</option></select></div></div>
+          <div class="field"><label for="scenario-minutes">Minutes / game</label><input id="scenario-minutes" type="number" min="0" max="48" step="0.5" placeholder="Model default"></div>
+          <div class="field"><label for="scenario-missed">Games missed</label><input id="scenario-missed" type="number" min="0" max="82" placeholder="0"></div>
+          <button class="explore-run" id="scenario-add">Add change →</button>
+        </div>
+        <div class="scenario-pending" id="scenario-pending"><p class="analytics-note">No changes yet. The published forecast remains the baseline above.</p></div>
+        <div class="scenario-actions"><button class="btn btn-primary" id="scenario-run" disabled>Run scenario</button><button class="btn" id="scenario-reset" disabled>Reset to baseline</button></div>
+        <div id="scenario-output"></div>
+      </section>
       <div class="match-grid">
         <aside class="panel match-form">
           <h3>Build a matchup</h3><p>Choose the visitors and home team. The model blends season-to-date form with schedule and strength context.</p>
@@ -613,6 +677,9 @@ footer { border-top: 1px solid var(--line-soft); padding: 34px 0 100px; }
           <div class="court-lines"></div><div class="prediction-empty"><div><div class="versus">VS</div><h3>Your matchup starts here</h3><p>The output is a probability, not a promise. Team form can move the number; unmodeled late news can move the game.</p></div></div>
         </section>
       </div>
+      <section class="panel team-comparison" id="team-comparison-output" aria-live="polite">
+        <div class="empty-state" style="min-height:220px"><div><h3>Compare the matchup</h3><p>Run a prediction to align both teams on one sample and reveal the model drivers beneath the probability.</p></div></div>
+      </section>
       <div class="prediction-tools">
         <section class="panel panel-pad"><div class="subhead"><h3>10,000-game simulation</h3><span>MARGIN + TOTAL DISTRIBUTIONS</span></div><p class="analytics-note">Uses the matchup and minutes-out assumptions above.</p><button class="explore-run" id="simulate-go">Run simulation →</button><div id="simulation-output"></div></section>
         <section class="panel panel-pad"><div class="subhead"><h3>Player points</h3><span>80% INTERVAL</span></div><div class="field"><label for="points-player">Player</label><div class="search-wrap"><input id="points-player" type="search" placeholder="Search player"></div><div class="results hidden" id="points-player-results"></div></div><div class="field"><label for="points-opponent">Opponent</label><div class="select-wrap"><select id="points-opponent"></select></div></div><div class="field"><label for="points-venue">Venue</label><div class="select-wrap"><select id="points-venue"><option value="true">Home</option><option value="false">Away</option></select></div></div><button class="explore-run" id="points-go">Project points →</button><div id="points-output"></div></section>
@@ -625,6 +692,24 @@ footer { border-top: 1px solid var(--line-soft); padding: 34px 0 100px; }
     <div class="wrap data-shell">
       <div class="app-head"><div><div class="eyebrow">Transparent by design</div><h1 class="section-title">Methodology.</h1></div><div class="app-meta">Holdout discipline<br>What worked + what failed</div></div>
       <div id="methodology-output"><div class="panel empty-state"><div class="loading">LOADING MODEL CARDS…</div></div></div>
+    </div>
+  </section>
+
+  <section id="page-tracking" class="page">
+    <div class="wrap data-shell">
+      <div class="app-head"><div><div class="eyebrow">Beyond the box score</div><h1 class="section-title">Tracking + hustle.</h1></div><div class="app-meta">Official optical tracking<br>Local favorites + alerts</div></div>
+      <div class="tracking-controls">
+        <div class="control"><label for="tracking-season">Season</label><div class="select-wrap"><select id="tracking-season"><option>Loading…</option></select></div></div>
+        <div class="control"><label for="tracking-category">Category</label><div class="select-wrap"><select id="tracking-category"><option value="drives">Drives</option><option value="touches">Touches</option><option value="passing">Passing</option><option value="defense">Rim defense</option><option value="speed">Speed + distance</option><option value="hustle">Hustle</option></select></div></div>
+        <div class="control"><label for="tracking-scope">View</label><div class="select-wrap"><select id="tracking-scope"><option value="player">Players</option><option value="team">Teams</option></select></div></div>
+        <div class="control"><label for="tracking-team">Team</label><div class="select-wrap"><select id="tracking-team"><option value="">All teams</option></select></div></div>
+        <div class="control"><label for="tracking-query">Name</label><input id="tracking-query" placeholder="Contains"></div>
+        <div class="control"><label for="tracking-min-games">Minimum games</label><input id="tracking-min-games" type="number" min="0" max="82" value="10"></div>
+        <button class="explore-run" id="tracking-go">Apply →</button>
+      </div>
+      <div class="tracking-source" id="tracking-source"><span>Choose a category to audit its official feed.</span><div class="tracking-actions"><button class="btn" id="tracking-share">Copy filtered link</button><button class="btn" id="tracking-notifications">Enable local alerts</button></div></div>
+      <div id="tracking-definitions"></div>
+      <div id="tracking-output"><div class="panel empty-state"><div class="loading">LOADING TRACKING FEED…</div></div></div>
     </div>
   </section>
 
@@ -655,6 +740,7 @@ footer { border-top: 1px solid var(--line-soft); padding: 34px 0 100px; }
   <button data-page="compare"><span>⇄</span>Compare</button>
   <button data-page="teams"><span>◇</span>Teams</button>
   <button data-page="games"><span>□</span>Games</button>
+  <button data-page="tracking"><span>◉</span>Tracking</button>
   <button data-page="matchup"><span>↗</span>Matchup</button>
   <button data-page="ask"><span>?</span>Ask</button>
   <button data-page="methodology"><span>∴</span>Method</button>
@@ -663,8 +749,8 @@ footer { border-top: 1px solid var(--line-soft); padding: 34px 0 100px; }
 <script>
 const $ = (id) => document.getElementById(id);
 const escapeHTML = (value) => String(value ?? "").replace(/[&<>'"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"}[c]));
-const api = async (path) => {
-  const response = await fetch(path);
+const api = async (path, options = {}) => {
+  const response = await fetch(path, options);
   if (!response.ok) {
     let message = response.statusText;
     try { message = (await response.json()).detail || message; } catch {}
@@ -684,13 +770,14 @@ function showPage(page, updateHash = true) {
   if (page === "explore") loadExplore();
   if (page === "teams") loadTeamPicker();
   if (page === "games") loadGames();
+  if (page === "tracking") loadTracking();
   if (page === "matchup") loadTeams();
   if (page === "methodology") loadMethodology();
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 document.querySelectorAll("[data-page]").forEach(el => el.addEventListener("click", () => showPage(el.dataset.page)));
-const initialPage = ["pulse", "players", "explore", "compare", "teams", "games", "matchup", "ask", "methodology"].includes(location.hash.slice(1)) ? location.hash.slice(1) : "overview";
-showPage(initialPage, false);
+const initialPage = ["pulse", "players", "explore", "compare", "teams", "games", "tracking", "matchup", "ask", "methodology"].includes(location.hash.slice(1)) ? location.hash.slice(1) : "overview";
+queueMicrotask(() => showPage(initialPage, false));
 
 let debounce;
 $("search").addEventListener("input", event => {
@@ -856,7 +943,7 @@ async function loadProfileDeep(id, name, season, seasonType) {
 let pulseLoaded = false;
 let pulseData = null;
 let metaData = null;
-async function loadMeta(){if(metaData)return metaData;metaData=await api("/meta");const options=metaData.seasons.map(season=>`<option value="${escapeHTML(season)}">${escapeHTML(season)}</option>`).join("");["pulse-season","explore-season","games-season"].forEach(id=>{if($(id))$(id).innerHTML=options;});const forecastOptions=(metaData.prediction_seasons||[metaData.current_season]).map((season,index)=>`<option value="${escapeHTML(season)}" ${index?"selected":""}>${escapeHTML(season)}${index?" · preseason projection":""}</option>`).join("");if($("prediction-season"))$("prediction-season").innerHTML=forecastOptions;return metaData;}
+async function loadMeta(){if(metaData)return metaData;metaData=await api("/meta");const options=metaData.seasons.map(season=>`<option value="${escapeHTML(season)}">${escapeHTML(season)}</option>`).join("");["pulse-season","explore-season","games-season","tracking-season"].forEach(id=>{if($(id))$(id).innerHTML=options;});const forecastOptions=(metaData.prediction_seasons||[metaData.current_season]).map((season,index)=>`<option value="${escapeHTML(season)}" ${index?"selected":""}>${escapeHTML(season)}${index?" · preseason projection":""}</option>`).join("");if($("prediction-season"))$("prediction-season").innerHTML=forecastOptions;return metaData;}
 const leaderLabels = {points:"Points",assists:"Assists",rebounds:"Rebounds",threes:"Threes",net_rating:"Net rating",clutch_net:"Clutch net"};
 const leaderStats = {points:"PTS",assists:"AST",rebounds:"REB",threes:"FG3M",net_rating:"NET_RATING",clutch_net:"CLUTCH_NET_RATING"};
 async function loadPulse() {
@@ -916,6 +1003,51 @@ async function loadExplore() {
 }
 $("explore-go").addEventListener("click", loadExplore);
 function downloadExplore(){if(!exploreData?.players?.length)return;const columns=Object.keys(exploreData.players[0]),quote=value=>`"${String(value??"").replaceAll('"','""')}"`,csv=[columns.join(","),...exploreData.players.map(row=>columns.map(column=>quote(row[column])).join(","))].join("\n"),link=document.createElement("a");link.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"}));link.download=`nba_${exploreData.season}_${exploreData.rate}.csv`;link.click();URL.revokeObjectURL(link.href);}
+
+const FAVORITES_KEY="nba-insights-favorites-v1",ALERTS_KEY="nba-insights-tracking-alerts-v1",TRACKING_SEEN_KEY="nba-insights-tracking-seen-v1";
+let trackingInitialized=false,trackingResult=null;
+const loadFavorites=()=>{try{return JSON.parse(localStorage.getItem(FAVORITES_KEY))||[];}catch{return [];}};
+const saveFavorites=favorites=>localStorage.setItem(FAVORITES_KEY,JSON.stringify(favorites));
+async function initializeTracking(){
+  if(trackingInitialized)return;await loadMeta();
+  const teams=await api("/teams"),params=new URLSearchParams(location.search);
+  $("tracking-team").innerHTML='<option value="">All teams</option>'+teams.map(team=>`<option>${escapeHTML(team)}</option>`).join('');
+  if(params.get("tracking_category"))$("tracking-category").value=params.get("tracking_category");
+  if(params.get("tracking_scope"))$("tracking-scope").value=params.get("tracking_scope");
+  if(params.get("tracking_season"))$("tracking-season").value=params.get("tracking_season");
+  if(params.get("tracking_team"))$("tracking-team").value=params.get("tracking_team");
+  if(params.get("tracking_min_games"))$("tracking-min-games").value=params.get("tracking_min_games");
+  if(params.get("tracking_query"))$("tracking-query").value=params.get("tracking_query");
+  $("tracking-notifications").textContent=localStorage.getItem(ALERTS_KEY)==="enabled"?"Local alerts enabled":"Enable local alerts";
+  trackingInitialized=true;
+}
+async function loadTracking(){
+  const output=$("tracking-output");output.innerHTML='<div class="panel empty-state"><div class="loading">LOADING OFFICIAL TRACKING FEED…</div></div>';
+  try{
+    await initializeTracking();
+    const params=new URLSearchParams({season:$("tracking-season").value,category:$("tracking-category").value,scope:$("tracking-scope").value,min_games:$("tracking-min-games").value||"0",team:$("tracking-team").value,query:$("tracking-query").value.trim(),limit:"150"});
+    const result=await api(`/tracking?${params}`);trackingResult=result;
+    const source=result.source||{},fresh=source.fetched_at?new Date(source.fetched_at).toLocaleString():"timestamp unavailable";
+    $("tracking-source").querySelector("span").innerHTML=`<b>${escapeHTML(source.status||'unknown')} · ${escapeHTML(source.endpoint||'official feed')}</b><br>${escapeHTML(result.count)} displayed of ${escapeHTML(source.upstream_rows??0)} upstream rows · fetched ${escapeHTML(fresh)}${source.stale?' · stale cache':''}`;
+    const definitions=Object.entries(result.definitions||{}).map(([key,value])=>`<div class="context-tile"><b>${escapeHTML(key.replaceAll('_',' '))}</b><span>${escapeHTML(value)}</span></div>`).join('');
+    $("tracking-definitions").innerHTML=`<div class="subhead"><h3>${escapeHTML(result.label)} definitions</h3><span>${escapeHTML(result.scope)} · ${escapeHTML(result.season)} · ${escapeHTML(result.minimum_games)}+ GAMES</span></div><div class="context-grid">${definitions}</div><p class="analytics-note">Schema audit: ${(source.schema_audit?.available||[]).length} expected fields available${source.schema_audit?.missing?.length?` · unavailable upstream: ${source.schema_audit.missing.map(value=>escapeHTML(value)).join(', ')}`:''}.</p>`;
+    if(source.status==="unavailable"||!result.records?.length){output.innerHTML=`<div class="panel empty-state"><div><h3>${source.status==="unavailable"?'Upstream category unavailable':'No qualified rows'}</h3><p>${escapeHTML(source.detail||'Try a lower games threshold or a different category.')}</p></div></div>`;return;}
+    const metrics=result.available_metrics||Object.keys(result.definitions||{}),pct=new Set(result.percentage_metrics||[]),favorites=loadFavorites(),scope=result.scope;
+    const identity=row=>scope==="player"?{id:row.PLAYER_ID,name:row.PLAYER_NAME,team:row.TEAM_ABBREVIATION}:{id:row.TEAM_ID,name:row.TEAM_NAME,team:row.TEAM_ABBREVIATION};
+    const template=`36px minmax(160px,1.3fr) 55px repeat(${metrics.length},minmax(76px,1fr))`;
+    const header=`<div class="tracking-row header" style="grid-template-columns:${template}"><span>Save</span><span>${scope==="player"?'Player':'Team'}</span><span>GP</span>${metrics.map(metric=>`<span title="${escapeHTML(result.definitions[metric])}">${escapeHTML(metric.replaceAll('_',' '))}</span>`).join('')}</div>`;
+    const rows=result.records.map(row=>{const item=identity(row),key=`${scope}:${item.id}`,saved=favorites.includes(key),games=row.GP??row.G??'—';return `<div class="tracking-row" style="grid-template-columns:${template}"><button class="favorite-toggle ${saved?'saved':''}" data-favorite="${escapeHTML(key)}" aria-label="${saved?'Remove':'Save'} ${escapeHTML(item.name)} favorite">★</button><b>${escapeHTML(item.name)}<small style="display:block;color:var(--muted-2)">${escapeHTML(item.team)}</small></b><span>${escapeHTML(games)}</span>${metrics.map(metric=>`<span>${row[metric]==null?'—':pct.has(metric)?`${fmt(Number(row[metric])*100,1)}%`:fmt(row[metric],2)}</span>`).join('')}</div>`;}).join('');
+    output.innerHTML=`<div class="tracking-table">${header}${rows}</div>`;
+    const filterQuery=new URLSearchParams({tracking_category:result.category,tracking_scope:result.scope,tracking_season:result.season,tracking_team:$("tracking-team").value,tracking_min_games:$("tracking-min-games").value||"0",tracking_query:$("tracking-query").value.trim()});history.replaceState(null,"",`${location.pathname}?${filterQuery}#tracking`);
+    const seen=localStorage.getItem(TRACKING_SEEN_KEY),alerts=localStorage.getItem(ALERTS_KEY)==="enabled";if(alerts&&"Notification" in window&&seen&&source.fetched_at&&seen!==source.fetched_at&&favorites.length&&Notification.permission==="granted")new Notification("NBA tracking data refreshed",{body:`${result.label} has new cached data for your saved players and teams.`});if(source.fetched_at)localStorage.setItem(TRACKING_SEEN_KEY,source.fetched_at);
+  }catch(error){output.innerHTML=`<div class="panel empty-state"><div><h3>Tracking feed unavailable</h3><p class="error">${escapeHTML(error.message)}</p></div></div>`;}
+}
+$("tracking-go").addEventListener("click",loadTracking);
+$("tracking-category").addEventListener("change",loadTracking);
+$("tracking-scope").addEventListener("change",loadTracking);
+$("tracking-output").addEventListener("click",event=>{const button=event.target.closest("[data-favorite]");if(!button)return;let favorites=loadFavorites(),key=button.dataset.favorite;if(favorites.includes(key))favorites=favorites.filter(value=>value!==key);else favorites.push(key);saveFavorites(favorites);button.classList.toggle("saved",favorites.includes(key));button.setAttribute("aria-label",`${favorites.includes(key)?'Remove':'Save'} favorite`);});
+$("tracking-share").addEventListener("click",async event=>{const url=trackingResult?.share_url?new URL(trackingResult.share_url,location.origin).href:location.href;try{await navigator.clipboard.writeText(url);event.currentTarget.textContent="Link copied";}catch{prompt("Copy this filtered tracking link",url);}});
+$("tracking-notifications").addEventListener("click",async event=>{if(!("Notification" in window)){event.currentTarget.textContent="Notifications unsupported";return;}const permission=await Notification.requestPermission();if(permission==="granted"){localStorage.setItem(ALERTS_KEY,"enabled");event.currentTarget.textContent="Local alerts enabled";}else{localStorage.removeItem(ALERTS_KEY);event.currentTarget.textContent="Alerts not enabled";}});
 
 let gameData = null;
 function renderGames(team = "") {
@@ -1076,6 +1208,8 @@ $("team-pick").addEventListener("change", async event => {
 
 let teamsLoaded = false;
 let forecastLoadedFor = null;
+let scenarioRoster = [];
+let scenarioChanges = [];
 async function loadSeasonForecast(force=false){
   const season=$("prediction-season").value,output=$("season-forecast");
   if(!season||(!force&&forecastLoadedFor===season))return;
@@ -1099,16 +1233,76 @@ async function loadTeams() {
     await loadMeta();
     loadSeasonForecast();
     const teams = await api("/teams");
-    [["home","LAL"],["away","BOS"]].forEach(([id,pick]) => {
+    const shared = new URLSearchParams(location.search);
+    [["home",shared.get("home")||"LAL"],["away",shared.get("away")||"BOS"]].forEach(([id,pick]) => {
       $(id).innerHTML = teams.map(team => `<option value="${escapeHTML(team)}" ${team === pick ? "selected" : ""}>${escapeHTML(team)}</option>`).join("");
     });
     $("points-opponent").innerHTML = teams.map(team => `<option>${escapeHTML(team)}</option>`).join("");
     $("lineup-team").innerHTML = teams.map(team => `<option>${escapeHTML(team)}</option>`).join("");
+    $("scenario-team").innerHTML = teams.map(team => `<option>${escapeHTML(team)}</option>`).join("");
+    $("scenario-destination").innerHTML = '<option value="">Keep current team</option><option value="__REMOVE__">Remove from roster</option>' + teams.map(team => `<option>${escapeHTML(team)}</option>`).join("");
+    await loadScenarioRoster(true);
     await loadLineupRoster();
     teamsLoaded = true;
   } catch (error) { $("form-error").textContent = error.message; $("form-error").classList.remove("hidden"); }
 }
-$("prediction-season").addEventListener("change",event=>{const upcoming=event.target.selectedIndex>0;$("prediction-basis-note").textContent=upcoming?`${event.target.value} is a preseason projection using ${metaData.current_season} team form and rosters. It will move to season-to-date inputs once the new season begins.`:"Uses live season-to-date team form, availability assumptions, carried-over Elo, and home court.";loadSeasonForecast(true);});
+$("prediction-season").addEventListener("change",event=>{const upcoming=event.target.selectedIndex>0;$("prediction-basis-note").textContent=upcoming?`${event.target.value} is a preseason projection using ${metaData.current_season} team form and rosters. It will move to season-to-date inputs once the new season begins.`:"Uses live season-to-date team form, availability assumptions, carried-over Elo, and home court.";loadSeasonForecast(true);loadScenarioRoster(true);});
+
+function syncScenarioPlayers(){
+  const team=$("scenario-team").value,players=scenarioRoster.filter(player=>player.TEAM===team);
+  $("scenario-player").innerHTML=players.map(player=>`<option value="${escapeHTML(player.PLAYER_NAME)}">${escapeHTML(player.PLAYER_NAME)} · ${fmt(player.PROJECTED_MIN)} min</option>`).join("")||'<option value="">No roster inputs</option>';
+  const selected=players[0];$("scenario-minutes").placeholder=selected?fmt(selected.PROJECTED_MIN):"Model default";
+}
+async function loadScenarioRoster(reset=false){
+  const season=$("prediction-season").value;if(!season)return;
+  if(reset){scenarioChanges=[];renderScenarioPending();$("scenario-output").innerHTML="";}
+  if(metaData&&season===metaData.current_season){scenarioRoster=[];syncScenarioPlayers();$("scenario-output").innerHTML='<p class="analytics-note">Scenario Lab uses the next-season roster forecast. Select the preseason projection above.</p>';return;}
+  try{const result=await api(`/predict/season/roster-inputs?season=${encodeURIComponent(season)}`);scenarioRoster=result.players||[];syncScenarioPlayers();}
+  catch(error){scenarioRoster=[];syncScenarioPlayers();$("scenario-output").innerHTML=`<p class="error">${escapeHTML(error.message)}</p>`;}
+}
+function renderScenarioPending(){
+  const pending=$("scenario-pending");
+  pending.innerHTML=scenarioChanges.length?scenarioChanges.map((change,index)=>`<div class="scenario-change"><span><b>${escapeHTML(change.player)}</b> · ${change.remove?'remove from roster':change.new_team?`to ${escapeHTML(change.new_team)}`:'same team'}${change.projected_minutes!=null?` · ${fmt(change.projected_minutes)} min/game`:''}${change.games_missed!=null?` · ${escapeHTML(change.games_missed)} games missed`:''}</span><button data-remove-scenario="${index}" aria-label="Remove change">Remove</button></div>`).join(""):'<p class="analytics-note">No changes yet. The published forecast remains the baseline above.</p>';
+  $("scenario-run").disabled=!scenarioChanges.length;$("scenario-reset").disabled=!scenarioChanges.length;
+}
+$("scenario-team").addEventListener("change",syncScenarioPlayers);
+$("scenario-player").addEventListener("change",()=>{const player=scenarioRoster.find(row=>row.PLAYER_NAME===$("scenario-player").value);$("scenario-minutes").placeholder=player?fmt(player.PROJECTED_MIN):"Model default";});
+$("scenario-add").addEventListener("click",()=>{
+  const player=$("scenario-player").value,destination=$("scenario-destination").value,minutes=$("scenario-minutes").value,missed=$("scenario-missed").value;
+  if(!player){$("scenario-output").innerHTML='<p class="error">Choose a player.</p>';return;}
+  if(scenarioChanges.some(change=>change.player===player)){$("scenario-output").innerHTML='<p class="error">Each player can appear only once. Remove the existing change first.</p>';return;}
+  if(!destination&&minutes===""&&missed===""){$("scenario-output").innerHTML='<p class="error">Change minutes, games missed, or roster membership.</p>';return;}
+  const change={player};if(destination==="__REMOVE__")change.remove=true;else if(destination)change.new_team=destination;if(minutes!=="")change.projected_minutes=Number(minutes);if(missed!=="")change.games_missed=Number(missed);
+  scenarioChanges.push(change);$("scenario-minutes").value="";$("scenario-missed").value="";$("scenario-destination").value="";$("scenario-output").innerHTML="";renderScenarioPending();
+});
+$("scenario-pending").addEventListener("click",event=>{const button=event.target.closest("[data-remove-scenario]");if(button){scenarioChanges.splice(Number(button.dataset.removeScenario),1);renderScenarioPending();}});
+$("scenario-reset").addEventListener("click",()=>{scenarioChanges=[];renderScenarioPending();$("scenario-output").innerHTML='<p class="analytics-note">Reset complete. The immutable published baseline is unchanged.</p>';});
+$("scenario-run").addEventListener("click",async()=>{
+  const output=$("scenario-output"),button=$("scenario-run");button.disabled=true;output.innerHTML='<div class="loading" style="margin-top:18px">RUNNING PAIRED BASELINE + SCENARIO SIMULATIONS…</div>';
+  try{
+    const result=await api("/predict/season/scenario",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({season:$("prediction-season").value,n_sims:2000,changes:scenarioChanges})});
+    const labels={projected_wins:"Projected wins",projected_seed:"Average seed",playoff_probability:"Playoffs",championship_probability:"NBA title",cup_probability:"NBA Cup"},percentage=new Set(["playoff_probability","championship_probability","cup_probability"]);
+    const cards=(result.outcomes||[]).map(team=>`<article class="scenario-outcome"><h4>${escapeHTML(team.team)}</h4><div class="scenario-delta-row header"><span>Metric</span><span>Before</span><span>After</span><span>Change</span></div>${Object.keys(labels).map(key=>{const scale=percentage.has(key)?100:1,suffix=percentage.has(key)?'%':'';return `<div class="scenario-delta-row"><span>${labels[key]}</span><span>${fmt(Number(team.before[key])*scale,percentage.has(key)?1:2)}${suffix}</span><span>${fmt(Number(team.after[key])*scale,percentage.has(key)?1:2)}${suffix}</span><b class="${Number(team.change[key])>=0?'positive':'negative-text'}">${Number(team.change[key])>=0?'+':''}${fmt(Number(team.change[key])*scale,percentage.has(key)?1:2)}${suffix}</b></div>`;}).join('')}<p class="analytics-note">Strength adjustment ${team.strength.before_net_adjustment>=0?'+':''}${fmt(team.strength.before_net_adjustment)} → ${team.strength.after_net_adjustment>=0?'+':''}${fmt(team.strength.after_net_adjustment)} · drivers: ${team.strength.causal_players.map(escapeHTML).join(', ')}</p></article>`).join('');
+    const salary=(result.salary_validation||[]).map(row=>`<div class="scenario-change"><span><b>${escapeHTML(row.team)} · ${escapeHTML(row.status.toUpperCase())}</b><br>${escapeHTML(row.detail)} Incoming $${fmt(Number(row.incoming_salary)/1e6,1)}M · outgoing $${fmt(Number(row.outgoing_salary)/1e6,1)}M.</span></div>`).join('');
+    output.innerHTML=`<div class="subhead" style="margin-top:22px"><div><div class="panel-kicker">${escapeHTML(result.scenario_id)} · ${Number(result.n_sims).toLocaleString()} paired simulations</div><h3>Before vs after</h3></div><span>BASELINE IMMUTABLE</span></div><div class="scenario-outcomes">${cards}</div><div class="subhead" style="margin-top:22px"><h3>Salary screen</h3><span>ADVISORY · NOT FULL CBA VALIDATION</span></div>${salary}<p class="analytics-note">${escapeHTML(result.methodology)} ${escapeHTML(result.salary_method)}</p>`;
+  }catch(error){output.innerHTML=`<p class="error">${escapeHTML(error.message)}</p>`;}finally{button.disabled=false;}
+});
+
+const comparisonValue=(metric,value)=>{
+  if(value==null)return "—";
+  const percentage=["win_pct","off_efg","off_tov_pct","off_oreb_pct","off_ft_rate","def_efg","def_tov_pct","def_dreb_pct","def_ft_rate","three_rate"].includes(metric.key);
+  return percentage?`${fmt(Number(value)*100,1)}%`:fmt(value,metric.key==="elo"?0:1);
+};
+function renderTeamComparison(result){
+  const output=$("team-comparison-output"),away=result.away,home=result.home;
+  const metricRows=(result.metrics||[]).map(metric=>`<div class="team-metric-row"><span>${escapeHTML(metric.category)}</span><b class="${metric.leader==="first"?'leader':''}">${comparisonValue(metric,metric.first)}${metric.first_rank?` <small>#${escapeHTML(metric.first_rank)}</small>`:''}</b><span>${escapeHTML(metric.label)}</span><b class="${metric.leader==="second"?'leader':''}">${comparisonValue(metric,metric.second)}${metric.second_rank?` <small>#${escapeHTML(metric.second_rank)}</small>`:''}</b></div>`).join("");
+  const drivers=(result.drivers||[]).slice(0,8).map(driver=>`<div class="driver-row"><div><b>${escapeHTML(driver.label)}</b><small>Raw home–away difference: ${driver.raw_difference==null?'baseline':fmt(driver.raw_difference,2)}</small></div><span class="${driver.favors===home?'positive':driver.favors===away?'negative-text':''}">${driver.log_odds_contribution>=0?'+':''}${fmt(driver.log_odds_contribution,3)}<br>favors ${escapeHTML(driver.favors)}</span></div>`).join("");
+  const rotation=team=>{const profile=result.teams?.[team]||{},players=(profile.rotation||[]).map(player=>`<div class="rotation-player"><span>${escapeHTML(player.PLAYER_NAME)}</span><span>${fmt(player.MIN)} MIN</span><span>${fmt(player.PTS)} PTS</span></div>`).join(""),lineup=profile.top_lineup;return `<article class="rotation-card"><h4>${escapeHTML(team)}</h4><div class="context-grid" style="grid-template-columns:repeat(2,1fr)"><div class="context-tile"><b>${profile.bench_points_per_game==null?'—':fmt(profile.bench_points_per_game)}</b><span>Bench PTS / game</span></div><div class="context-tile"><b>${profile.clutch?`${profile.clutch.net_rating>=0?'+':''}${fmt(profile.clutch.net_rating)}`:'—'}</b><span>Clutch net rating</span></div></div><div style="margin-top:12px">${players||'<p class="analytics-note">Rotation unavailable.</p>'}</div><p class="analytics-note">${lineup?`Top unit: ${escapeHTML(lineup.GROUP_NAME)} · ${fmt(lineup.MIN,0)} minutes · ${Number(lineup.NET_RATING)>=0?'+':''}${fmt(lineup.NET_RATING)} net.`:'Five-player lineup sample unavailable.'}</p></article>`;};
+  const h2h=result.head_to_head||{};
+  output.innerHTML=`<div class="subhead"><div><div class="panel-kicker">${escapeHTML(result.season)} · data through ${escapeHTML(result.sample.as_of)}</div><h3>${escapeHTML(away)} at ${escapeHTML(home)} · full comparison</h3></div><div class="comparison-actions"><button class="btn" id="comparison-share">Copy share link</button><button class="btn" id="comparison-export">Export JSON</button></div></div><p class="analytics-note">${escapeHTML(result.sample.definition)} · ${escapeHTML(away)} ${escapeHTML(result.sample.games[away])} games · ${escapeHTML(home)} ${escapeHTML(result.sample.games[home])} games.</p><div class="comparison-grid"><section><div class="subhead" style="margin-top:20px"><h3>Same-sample profile</h3><span>VALUE · LEAGUE RANK</span></div><div class="metric-board"><div class="team-metric-row header"><span>Category</span><b>${escapeHTML(away)}</b><span>Metric</span><b>${escapeHTML(home)}</b></div>${metricRows}</div></section><section><div class="subhead" style="margin-top:20px"><h3>Why the model moved</h3><span>RANKED LOCAL CONTRIBUTIONS</span></div>${drivers||'<p class="analytics-note">Driver detail unavailable.</p>'}<p class="analytics-note">Positive log-odds move the forecast toward the home team; negative values move it toward the visitor.</p></section></div><div class="rotation-grid">${rotation(away)}${rotation(home)}</div><div class="context-grid"><div class="context-tile"><b>${escapeHTML(h2h.first_wins??0)}–${escapeHTML(h2h.second_wins??0)}</b><span>${escapeHTML(away)}–${escapeHTML(home)} head to head</span></div><div class="context-tile"><b>${h2h.first_average_margin==null?'—':`${Number(h2h.first_average_margin)>=0?'+':''}${fmt(h2h.first_average_margin)}`}</b><span>${escapeHTML(away)} average margin</span></div><div class="context-tile"><b>${fmt(Number(result.home_win_prob)*100,0)}%</b><span>${escapeHTML(home)} model probability</span></div><div class="context-tile"><b>${escapeHTML(result.basis_season)}</b><span>Model data basis</span></div></div><ul class="limitations">${(result.limitations||[]).map(item=>`<li>${escapeHTML(item)}</li>`).join("")}</ul>`;
+  $("comparison-share").addEventListener("click",async event=>{const url=new URL(result.share_url,location.origin).href;try{await navigator.clipboard.writeText(url);event.currentTarget.textContent="Link copied";}catch{prompt("Copy this matchup link",url);}});
+  $("comparison-export").addEventListener("click",()=>{const blob=new Blob([JSON.stringify(result,null,2)],{type:"application/json"}),url=URL.createObjectURL(blob),link=document.createElement("a");link.href=url;link.download=result.export_filename;link.click();URL.revokeObjectURL(url);});
+}
 $("go").addEventListener("click", async () => {
   const home = $("home").value, away = $("away").value, button = $("go"), errorEl = $("form-error");
   errorEl.classList.add("hidden");
@@ -1118,13 +1312,15 @@ $("go").addEventListener("click", async () => {
   try {
     const season=$("prediction-season").value;
     const params = new URLSearchParams({home,away,season,home_missing_min:$("home-missing").value||"0",away_missing_min:$("away-missing").value||"0"});
-    const result = await api(`/predict/game?${params}`);
+    const [result,comparison] = await Promise.all([api(`/predict/game?${params}`),api(`/teams/compare?${params}`)]);
     const homePct = Math.round(result.home_win_prob * 100), awayPct = 100 - homePct;
     const poster = `/posters/game?home=${encodeURIComponent(home)}&away=${encodeURIComponent(away)}&season=${encodeURIComponent(season)}&format=png`;
     const basis=result.projection_mode==="preseason_carry_forward"?`${result.basis_season} carry-forward`:`${result.season} season to date`;
     $("prediction").innerHTML = `<div class="court-lines"></div><div class="prediction-result"><div style="width:100%"><div class="match-label">${escapeHTML(result.season)} home win probability</div><div class="team-row"><div class="team-name">${escapeHTML(away)}</div><div class="at-mark">@</div><div class="team-name">${escapeHTML(home)}</div></div><div class="probability"><b>${homePct}%</b><span>${escapeHTML(home)} projected win probability</span></div><div class="prob-track"><div class="prob-home" style="width:${homePct}%"></div><div class="prob-away"></div></div><div class="prob-legends"><span>${escapeHTML(home)} ${homePct}%</span><span>${escapeHTML(away)} ${awayPct}%</span></div><p class="analytics-note">Data basis: ${escapeHTML(basis)}</p><a class="btn btn-secondary" style="margin-top:22px" href="${poster}" target="_blank" rel="noopener">Download matchup poster ↗</a></div></div>`;
+    renderTeamComparison(comparison);
   } catch (error) {
     $("prediction").innerHTML = `<div class="court-lines"></div><div class="prediction-empty"><div><h3>Model unavailable</h3><p class="error">${escapeHTML(error.message)}</p></div></div>`;
+    $("team-comparison-output").innerHTML = `<div class="empty-state" style="min-height:220px"><div><h3>Comparison unavailable</h3><p class="error">${escapeHTML(error.message)}</p></div></div>`;
   } finally { button.disabled = false; button.textContent = "Run prediction →"; }
 });
 

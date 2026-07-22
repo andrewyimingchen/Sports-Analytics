@@ -186,6 +186,52 @@ class FakeNBAClient:
             }
         )
 
+    def tracking_stats(self, measure, season=None, scope="Player"):
+        if scope == "Team":
+            return pd.DataFrame(
+                {
+                    "TEAM_ID": [1, 2],
+                    "TEAM_NAME": ["Team One", "Team Two"],
+                    "TEAM_ABBREVIATION": ["T1", "T2"],
+                    "GP": [60, 60],
+                    "DRIVES": [50.0, 44.0],
+                    "DRIVE_PTS": [30.0, 24.0],
+                    "DRIVE_FG_PCT": [0.54, 0.49],
+                }
+            )
+        return pd.DataFrame(
+            {
+                "PLAYER_ID": [1, 2],
+                "PLAYER_NAME": ["Alice Hooper", "Bob Rimson"],
+                "TEAM_ABBREVIATION": ["T1", "T2"],
+                "GP": [60, 58],
+                "MIN": [36.0, 34.0],
+                "DRIVES": [18.0, 14.0],
+                "DRIVE_PTS": [11.0, 8.0],
+                "DRIVE_FG_PCT": [0.56, 0.51],
+                "DRIVE_PASSES": [7.0, 6.0],
+                "DRIVE_AST": [2.0, 1.5],
+                "DRIVE_TOV": [1.2, 1.0],
+            }
+        )
+
+    def hustle_stats(self, season=None, scope="Player"):
+        return pd.DataFrame(
+            {
+                "PLAYER_ID": [1],
+                "PLAYER_NAME": ["Alice Hooper"],
+                "TEAM_ABBREVIATION": ["T1"],
+                "G": [60],
+                "MIN": [36.0],
+                "CONTESTED_SHOTS": [9.0],
+                "DEFLECTIONS": [3.0],
+                "CHARGES_DRAWN": [0.2],
+                "SCREEN_ASSISTS": [1.0],
+                "LOOSE_BALLS_RECOVERED": [1.4],
+                "BOX_OUTS": [2.0],
+            }
+        )
+
     def standings(self, season=None):
         return pd.DataFrame(
             {
@@ -207,9 +253,20 @@ class FakeNBAClient:
             {
                 "PLAYER_NAME": ["Alice Hooper"],
                 "TEAM_ABBREVIATION": ["T1"],
+                "BREF_SLUG": ["h/hoopeal01.html"],
                 "2025-26": [30_000_000],
                 "2026-27": [32_000_000],
                 "GUARANTEED": [62_000_000],
+            }
+        )
+
+    def player_salary_history(self, slug):
+        assert slug == "h/hoopeal01.html"
+        return pd.DataFrame(
+            {
+                "SEASON": ["2023-24", "2024-25"],
+                "TEAM": ["Team One", "Team One"],
+                "SALARY": [24_000_000, 27_000_000],
             }
         )
 
@@ -338,6 +395,7 @@ def test_player_splits_on_off_and_contract(api):
     assert contract.status_code == 200
     assert contract.json()["local_only"] is True
     assert contract.json()["salaries"]["2025-26"] == 30_000_000
+    assert contract.json()["history"][0]["SALARY"] == 24_000_000
 
 
 def test_compare(api):
@@ -416,6 +474,32 @@ def test_league_pulse(api):
     assert {row["team"] for row in body["team_form"]} == {"T1", "T2", "T3", "T4"}
 
 
+def test_tracking_surface_definitions_filters_and_failure_state(api):
+    response = api.get(
+        "/tracking",
+        params={"category": "drives", "scope": "player", "team": "T1", "min_games": 10},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["source"]["status"] == "available"
+    assert body["records"][0]["PLAYER_NAME"] == "Alice Hooper"
+    assert body["definitions"]["DRIVES"] == "Drives per game"
+    assert "DRIVE_FG_PCT" in body["percentage_metrics"]
+    assert "DRIVE_AST" in body["source"]["schema_audit"]["available"]
+    assert "tracking_category=drives" in body["share_url"]
+
+    client = FakeNBAClient()
+    client.tracking_stats = lambda *args, **kwargs: (_ for _ in ()).throw(
+        RuntimeError("upstream blocked")
+    )
+    app.dependency_overrides[get_client] = lambda: client
+    unavailable = api.get("/tracking", params={"category": "defense"})
+    assert unavailable.status_code == 200
+    assert unavailable.json()["source"]["status"] == "unavailable"
+    assert unavailable.json()["records"] == []
+
+
 def test_team_profile(api):
     r = api.get("/teams/T1/profile")
     assert r.status_code == 200
@@ -431,6 +515,36 @@ def test_team_profile(api):
     assert body["standings"]
     assert body["finances"]["payroll"] == 30_000_000
     assert api.get("/teams/ZZZ/profile").status_code == 404
+
+
+def test_team_comparison_and_model_drivers(api_with_model):
+    response = api_with_model.get(
+        "/teams/compare", params={"away": "T4", "home": "T1", "season": "2026-27"}
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["away"] == "T4" and body["home"] == "T1"
+    assert body["basis_season"] == "2025-26"
+    assert 0 < body["home_win_prob"] < 1
+    assert body["sample"]["definition"].startswith("Same season")
+    assert {row["category"] for row in body["metrics"]} >= {
+        "Results",
+        "Efficiency",
+        "Four factors",
+    }
+    assert body["teams"]["T1"]["rotation"]
+    assert body["drivers"] == sorted(
+        body["drivers"], key=lambda row: abs(row["log_odds_contribution"]), reverse=True
+    )
+    assert all(row["favors"] in {"T1", "T4", "neutral"} for row in body["drivers"])
+    assert "home=T1" in body["share_url"]
+    assert body["export_filename"].endswith(".json")
+    assert len(body["limitations"]) >= 3
+
+    assert api_with_model.get(
+        "/teams/compare", params={"away": "T1", "home": "T1"}
+    ).status_code == 422
 
 
 def test_player_recent_games(api):
@@ -621,6 +735,90 @@ def test_roster_forecast_inputs_are_auditable(api):
     assert body["players"][0]["PROJECTED_MIN"] == pytest.approx(240)
 
 
+def test_roster_scenario_is_ephemeral_and_returns_before_after(api, monkeypatch):
+    import importlib
+
+    from nba_insights.analysis.roster_forecast import RosterForecastInputs
+
+    api_module = importlib.import_module("nba_insights.api.app")
+    players = pd.DataFrame(
+        {
+            "PLAYER_NAME": [f"A{i}" for i in range(6)] + [f"B{i}" for i in range(6)],
+            "TEAM": ["T1"] * 6 + ["T2"] * 6,
+            "PROJECTED_MIN": [40.0] * 12,
+            "PROJECTED_IMPACT": [5, 3, 2, 1, 0, -1] + [4, 2, 1, 0, -1, -2],
+            "SALARY": [30_000_000, 20_000_000, 15_000_000, 10_000_000, 5_000_000, 2_000_000] * 2,
+        }
+    )
+    teams = pd.DataFrame(
+        {
+            "CURRENT_IMPACT": [1.0, 0.5],
+            "ROSTER_IMPACT": [1.7, 0.7],
+            "NET_ADJUSTMENT": [0.7, 0.2],
+            "STRENGTH_ADJUSTMENT": [0.05, 0.014],
+            "UNCERTAINTY": [0.2, 0.2],
+            "PLAYER_COUNT": [6, 6],
+            "KEY_DRIVERS": [["A0"], ["B0"]],
+        },
+        index=pd.Index(["T1", "T2"], name="TEAM"),
+    )
+    inputs = RosterForecastInputs(players=players, teams=teams, metadata={})
+    baseline = pd.DataFrame(
+        {
+            "TEAM": ["T1", "T2"],
+            "PROJECTED_WINS": [50.0, 42.0],
+            "PROJECTED_SEED": [3.0, 8.0],
+            "PLAYOFF_PROB": [0.8, 0.5],
+            "CHAMP_PROB": [0.15, 0.04],
+            "CUP_PROB": [0.12, 0.05],
+        }
+    )
+
+    monkeypatch.setattr(api_module, "_roster_forecast_inputs", lambda *args: inputs)
+    monkeypatch.setattr(api_module, "_season_forecast_table", lambda *args: baseline)
+    monkeypatch.setattr(api_module, "_snapshot_for_day", lambda *args: pd.DataFrame())
+    monkeypatch.setattr(api_module, "_forecast_conferences", lambda *args: {})
+
+    def fake_scenario_forecast(*args, **kwargs):
+        result = baseline.copy()
+        result.loc[result["TEAM"] == "T1", ["PROJECTED_WINS", "PLAYOFF_PROB", "CHAMP_PROB"]] = [
+            46.0,
+            0.68,
+            0.09,
+        ]
+        return result
+
+    monkeypatch.setattr(api_module, "season_forecast", fake_scenario_forecast)
+    upcoming = prediction_seasons()[1]
+    response = api.post(
+        "/predict/season/scenario",
+        json={
+            "season": upcoming,
+            "n_sims": 1_000,
+            "changes": [{"player": "A0", "games_missed": 30, "projected_minutes": 34}],
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["baseline_immutable"] is True
+    assert body["outcomes"][0]["before"]["projected_wins"] == 50
+    assert body["outcomes"][0]["after"]["projected_wins"] == 46
+    assert body["outcomes"][0]["change"]["championship_probability"] == pytest.approx(-0.06)
+    assert body["changes"][0]["games_missed"] == 30
+    assert body["salary_validation"][0]["status"] == "pass"
+    assert inputs.players.set_index("PLAYER_NAME").at["A0", "PROJECTED_MIN"] == 40
+
+    duplicate = api.post(
+        "/predict/season/scenario",
+        json={
+            "season": upcoming,
+            "changes": [{"player": "A0"}, {"player": "A0"}],
+        },
+    )
+    assert duplicate.status_code == 422
+
+
 def test_player_season_projection_exposes_ranges_and_award_method(api):
     upcoming = prediction_seasons()[1]
     response = api.get("/predict/players", params={"season": upcoming, "limit": 10})
@@ -698,6 +896,14 @@ def test_mobile_app_shell_served(api):
     assert "Methodology" in r.text
     assert 'id="prediction-season"' in r.text
     assert 'id="season-forecast"' in r.text
+    assert 'id="team-comparison-output"' in r.text
+    assert 'id="scenario-lab"' in r.text
+    assert 'id="page-tracking"' in r.text
+    assert "nba-insights-favorites-v1" in r.text
+    assert "Notification.requestPermission" in r.text
+    assert "BASELINE IS NEVER OVERWRITTEN" in r.text
+    assert "RANKED LOCAL CONTRIBUTIONS" in r.text
+    assert "Export JSON" in r.text
     assert "East, West, playoffs and trophies" in r.text
     assert "Model registry" in r.text
     assert "Season forecast backtest" in r.text
@@ -707,6 +913,7 @@ def test_mobile_app_shell_served(api):
     service_worker = api.get("/app/sw.js")
     assert service_worker.status_code == 200
     assert "fetch(e.request)" in service_worker.text
+    assert "nba-insights-shell-v11" in service_worker.text
     assert api.get("/", follow_redirects=False).status_code in (302, 307)
 
 

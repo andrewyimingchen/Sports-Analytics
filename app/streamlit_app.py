@@ -1011,7 +1011,9 @@ def on_off_tiles(client: NBAClient, player: dict, totals: pd.DataFrame) -> None:
     )
 
 
-def contract_section(player: dict, contracts: pd.DataFrame | None) -> None:
+def contract_section(
+    client: NBAClient, player: dict, contracts: pd.DataFrame | None
+) -> None:
     """Season-by-season contract breakdown from the scraped B-Ref table.
 
     Local personal-use data (see ingest.salaries) — shown only in this app.
@@ -1026,6 +1028,24 @@ def contract_section(player: dict, contracts: pd.DataFrame | None) -> None:
     salaries = pd.to_numeric(row[seasons], errors="coerce").dropna()
     if salaries.empty:
         return
+    history = pd.DataFrame(columns=["SEASON", "TEAM", "SALARY"])
+    slug = row.get("BREF_SLUG")
+    if pd.notna(slug):
+        try:
+            history = client.player_salary_history(str(slug))
+        except Exception:
+            logger.warning("career salary history unavailable for profile", exc_info=True)
+
+    chart = history[["SEASON", "SALARY"]].copy()
+    chart["TYPE"] = "Career salary"
+    committed = pd.DataFrame(
+        {"SEASON": salaries.index, "SALARY": salaries.values, "TYPE": "Current contract"}
+    )
+    # The summary page is the fresher source for overlapping/current seasons.
+    chart = chart[~chart["SEASON"].isin(committed["SEASON"])]
+    chart = pd.concat([chart, committed], ignore_index=True)
+    chart["SALARY"] = pd.to_numeric(chart["SALARY"], errors="coerce")
+    chart = chart.dropna(subset=["SALARY"]).sort_values("SEASON")
     # surfaced inline (not tucked in an expander) so the salary chart is visible
     st.subheader("Contract & salary")
     tiles = st.columns(3)
@@ -1042,25 +1062,35 @@ def contract_section(player: dict, contracts: pd.DataFrame | None) -> None:
         f"${guaranteed / 1e6:.2f}M" if pd.notna(guaranteed) else "—",
         help="Total guaranteed money remaining on the deal.",
     )
-    fig = go.Figure(
-        go.Bar(
-            x=list(salaries.index),
-            y=salaries.values / 1e6,
-            marker=dict(color=PAL["series"][0], cornerradius=4),
-            text=[f"${v / 1e6:.1f}M" for v in salaries.values],
-            textposition="outside",
-            cliponaxis=False,
-            hovertemplate="%{x}: $%{y:.2f}M<extra></extra>",
-        )
-    )
-    fig = base_layout(fig, "Salary by season")
-    fig.update_layout(hovermode="closest", showlegend=False, height=300, margin=dict(t=60))
+    fig = go.Figure()
+    for label, color in (
+        ("Career salary", PAL["series"][0]),
+        ("Current contract", PAL["series"][1]),
+    ):
+        part = chart[chart["TYPE"] == label]
+        if not part.empty:
+            fig.add_trace(
+                go.Bar(
+                    name=label,
+                    x=part["SEASON"],
+                    y=part["SALARY"] / 1e6,
+                    marker=dict(color=color, cornerradius=4),
+                    text=[f"${value / 1e6:.1f}M" for value in part["SALARY"]],
+                    textposition="outside",
+                    cliponaxis=False,
+                    hovertemplate="%{x}: $%{y:.2f}M<extra>%{fullData.name}</extra>",
+                )
+            )
+    fig = base_layout(fig, "Career salary progression")
+    fig.update_layout(hovermode="closest", height=330, margin=dict(t=60))
     fig.update_xaxes(type="category")
     fig.update_yaxes(tickprefix="$", ticksuffix="M", gridcolor=PAL["grid"])
     st.plotly_chart(fig, width="stretch", key="profile_contract")
     st.caption(
-        "Contract data scraped weekly from Basketball-Reference; "
-        "personal use only. Blank future seasons mean no committed money."
+        "Basketball-Reference contract data is local-only and for personal use. "
+        "The summary refreshes weekly; this player's career page is fetched only "
+        "when viewed and cached for 30 days. Historical figures may mix salary and "
+        "cap values; blank future seasons mean no committed money."
     )
 
 
@@ -1350,7 +1380,7 @@ def profile_page(client: NBAClient) -> None:
         skill_badges(ranks)
     if player["is_active"]:
         on_off_tiles(client, player, totals)
-        contract_section(player, contracts)
+        contract_section(client, player, contracts)
 
     seasons = list(per_game["SEASON_ID"])
     st.plotly_chart(career_chart(per_game), width="stretch", key="profile_career")

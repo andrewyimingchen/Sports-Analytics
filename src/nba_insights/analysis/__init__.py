@@ -47,6 +47,11 @@ from nba_insights.analysis.roster_forecast import (
     RosterForecastInputs,
     build_roster_forecast_inputs,
 )
+from nba_insights.analysis.roster_scenario import (
+    SCENARIO_VERSION,
+    RosterScenario,
+    apply_roster_scenario,
+)
 from nba_insights.analysis.salaries import (
     attach_salary,
     player_contract,
@@ -63,6 +68,8 @@ from nba_insights.analysis.shots import (
 )
 from nba_insights.analysis.similarity import similar_players
 from nba_insights.analysis.splits import DIMENSIONS, player_splits
+from nba_insights.analysis.team_compare import compare_teams
+from nba_insights.analysis.tracking import TRACKING_CATEGORIES, tracking_table
 from nba_insights.analysis.trends import career_averages, career_per_game, rolling_form
 
 __all__ = [
@@ -83,6 +90,7 @@ __all__ = [
     "calibration_table",
     "clutch_shooting_line",
     "comparison_table",
+    "compare_teams",
     "draft_class",
     "evaluate_season_forecasts",
     "filter_players",
@@ -109,7 +117,10 @@ __all__ = [
     "rolling_form",
     "ROSTER_INPUT_METHOD",
     "ROSTER_INPUT_VERSION",
+    "SCENARIO_VERSION",
     "RosterForecastInputs",
+    "RosterScenario",
+    "apply_roster_scenario",
     "build_roster_forecast_inputs",
     "salary_seasons",
     "scoreboard",
@@ -122,5 +133,7 @@ __all__ = [
     "team_on_off",
     "team_payroll",
     "team_scouting_take",
+    "TRACKING_CATEGORIES",
+    "tracking_table",
     "zone_efficiency",
 ]

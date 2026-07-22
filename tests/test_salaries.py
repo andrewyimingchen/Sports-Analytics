@@ -13,7 +13,11 @@ from nba_insights.analysis import (
     team_payroll,
 )
 from nba_insights.analysis.salaries import normalize_name
-from nba_insights.ingest.salaries import parse_contracts
+from nba_insights.ingest.salaries import (
+    fetch_career_salaries,
+    parse_career_salaries,
+    parse_contracts,
+)
 
 # mimics the real page: two-level header, repeated header row in the body,
 # $-formatted money, blanks for expired years, B-Ref tricodes (BRK)
@@ -24,12 +28,15 @@ PAGE = """
 <tr><th>Rk</th><th>Player</th><th>Tm</th><th>2026-27</th><th>2027-28</th><th>Guaranteed</th></tr>
 </thead>
 <tbody>
-<tr><td>1</td><td>Nikola Jokić</td><td>DEN</td>
+<tr><td>1</td><td data-stat="player">
+<a href="/players/j/jokicni01.html">Nikola Jokić</a></td><td>DEN</td>
 <td>$59,033,114</td><td>$62,841,702</td><td>$59,033,114</td></tr>
-<tr><td>2</td><td>Big Spender Jr.</td><td>BRK</td>
+<tr><td>2</td><td data-stat="player">
+<a href="/players/s/spendbi01.html">Big Spender Jr.</a></td><td>BRK</td>
 <td>$10,000,000</td><td></td><td>$10,000,000</td></tr>
 <tr><td>Rk</td><td>Player</td><td>Tm</td><td>2026-27</td><td>2027-28</td><td>Guaranteed</td></tr>
-<tr><td>3</td><td>Cheap Guy</td><td>BRK</td>
+<tr><td>3</td><td data-stat="player">
+<a href="/players/g/guych01.html">Cheap Guy</a></td><td>BRK</td>
 <td>$2,000,000</td><td>$2,100,000</td><td>$4,100,000</td></tr>
 </tbody>
 </table>
@@ -44,6 +51,33 @@ def test_parse_contracts_shapes_and_money():
     assert pd.isna(out.loc[1, "2027-28"])  # expired year stays NaN
     assert out.loc[2, "GUARANTEED"] == 4100000.0
     assert set(out["TEAM_ABBREVIATION"]) == {"DEN", "BKN"}  # BRK fixed to BKN
+    assert out.loc[0, "BREF_SLUG"] == "j/jokicni01.html"
+
+
+def test_parse_career_salaries_from_commented_table():
+    page = """
+    <html><body><!--
+    <table id="all_salaries">
+      <thead><tr><th>Season</th><th>Team</th><th>Lg</th><th>Salary</th></tr></thead>
+      <tbody>
+        <tr><td>2023-24</td><td>Denver Nuggets</td><td>NBA</td><td>$47,607,350</td></tr>
+        <tr><td>2024-25</td><td>Denver Nuggets</td><td>NBA</td><td>$51,415,938</td></tr>
+      </tbody>
+      <tfoot><tr><th>Career</th><td></td><td></td><td>$99,023,288</td></tr></tfoot>
+    </table>
+    --></body></html>
+    """
+    out = parse_career_salaries(page)
+    assert list(out["SEASON"]) == ["2023-24", "2024-25"]
+    assert list(out["SALARY"]) == [47_607_350, 51_415_938]
+    assert list(out["TEAM"]) == ["Denver Nuggets", "Denver Nuggets"]
+
+
+def test_career_salary_parser_and_fetch_reject_bad_inputs():
+    with pytest.raises(ValueError, match="career salaries"):
+        parse_career_salaries("<html>rate limited</html>")
+    with pytest.raises(ValueError, match="invalid Basketball-Reference"):
+        fetch_career_salaries("../../contracts/players.html")
 
 
 def test_parse_contracts_rejects_unrecognized_page():

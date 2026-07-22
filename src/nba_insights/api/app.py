@@ -35,12 +35,16 @@ from nba_insights.analysis import (
     FACTOR_LABELS,
     PLAYER_FORECAST_VERSION,
     ROSTER_INPUT_VERSION,
+    SCENARIO_VERSION,
+    TRACKING_CATEGORIES,
     RosterForecastInputs,
+    apply_roster_scenario,
     attach_salary,
     box_score_table,
     build_roster_forecast_inputs,
     career_averages,
     career_per_game,
+    compare_teams,
     comparison_table,
     filter_players,
     four_factors_table,
@@ -69,6 +73,7 @@ from nba_insights.analysis import (
     team_on_off,
     team_payroll,
     team_scouting_take,
+    tracking_table,
     zone_efficiency,
 )
 from nba_insights.api.cards import render_player_card
@@ -451,6 +456,127 @@ def league_pulse(client: Client, season: str | None = None) -> dict:
     }
 
 
+@app.get("/tracking")
+def tracking_surface(
+    client: Client,
+    category: str = "drives",
+    scope: str = "player",
+    season: str | None = None,
+    min_games: Annotated[int, Query(ge=0, le=82)] = 10,
+    team: str | None = None,
+    query: str | None = None,
+    sort: str | None = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+) -> dict:
+    """Official tracking/hustle table with definitions and cache freshness."""
+    selected = season or current_season()
+    if selected not in seasons_since():
+        raise HTTPException(422, f"season must be one of {', '.join(seasons_since())}")
+    if category not in TRACKING_CATEGORIES:
+        raise HTTPException(
+            422, f"category must be one of {', '.join(TRACKING_CATEGORIES)}"
+        )
+    normalized_scope = scope.capitalize()
+    if normalized_scope not in {"Player", "Team"}:
+        raise HTTPException(422, "scope must be player or team")
+    config = TRACKING_CATEGORIES[category]
+    key = (
+        f"hustle/{scope.lower()}/{selected}"
+        if category == "hustle"
+        else f"tracking/{scope.lower()}/{config['measure']}/{selected}"
+    )
+    endpoint = (
+        "LeagueHustleStatsPlayer/Team"
+        if category == "hustle"
+        else "LeagueDashPtStats"
+    )
+    try:
+        frame = (
+            client.hustle_stats(selected, normalized_scope)
+            if category == "hustle"
+            else client.tracking_stats(config["measure"], selected, normalized_scope)
+        )
+        if (
+            normalized_scope == "Team"
+            and "TEAM_ABBREVIATION" not in frame
+            and "TEAM_ID" in frame
+        ):
+            games = client.team_games(selected)
+            if {"TEAM_ID", "TEAM_ABBREVIATION"} <= set(games.columns):
+                team_codes = games[["TEAM_ID", "TEAM_ABBREVIATION"]].drop_duplicates(
+                    "TEAM_ID", keep="last"
+                )
+                frame = frame.merge(team_codes, on="TEAM_ID", how="left")
+        table, metadata = tracking_table(
+            frame,
+            category,
+            scope=normalized_scope,
+            min_games=min_games,
+            team=team,
+            query=query,
+            sort=sort,
+            limit=limit,
+        )
+        cache_info = (
+            client.cache.entry_info(key, ttl=client._season_ttl(selected))
+            if hasattr(client, "cache") and hasattr(client.cache, "entry_info")
+            else None
+        )
+        source = {
+            "status": "available" if not frame.empty else "empty",
+            "endpoint": endpoint,
+            "provider": "stats.nba.com via nba_api",
+            "fetched_at": cache_info.get("fetched_at") if cache_info else None,
+            "age_seconds": cache_info.get("age_seconds") if cache_info else None,
+            "stale": cache_info.get("stale") if cache_info else None,
+            "upstream_rows": int(len(frame)),
+            "schema_audit": {
+                "available": metadata["available_metrics"],
+                "missing": metadata["missing_metrics"],
+            },
+        }
+        return {
+            "season": selected,
+            **metadata,
+            "source": source,
+            "count": int(len(table)),
+            "records": _finite_records(table),
+            "share_url": (
+                "/app/?"
+                + urlencode(
+                    {
+                        "tracking_category": category,
+                        "tracking_scope": scope.lower(),
+                        "tracking_season": selected,
+                        "tracking_team": team or "",
+                        "tracking_min_games": min_games,
+                        "tracking_query": query or "",
+                    }
+                )
+                + "#tracking"
+            ),
+        }
+    except Exception as exc:
+        logger.warning("tracking category %s unavailable", category, exc_info=True)
+        return {
+            "season": selected,
+            "category": category,
+            "label": config["label"],
+            "scope": scope.lower(),
+            "definitions": config["metrics"],
+            "percentage_metrics": [],
+            "minimum_games": min_games,
+            "source": {
+                "status": "unavailable",
+                "endpoint": endpoint,
+                "provider": "stats.nba.com via nba_api",
+                "detail": str(exc),
+            },
+            "count": 0,
+            "records": [],
+        }
+
+
 @app.get("/teams/{team}/profile")
 def team_profile(team: str, request: Request, client: Client) -> dict:
     """Full Team Room: identity, factors, roster, lineups, impact, and money."""
@@ -582,6 +708,122 @@ def team_profile(team: str, request: Request, client: Client) -> dict:
     }
 
 
+_DRIVER_LABELS = {
+    "form_win_pct_diff": "Season win rate",
+    "form_pts_diff": "Scoring",
+    "form_net_diff": "Point differential",
+    "form_efg_diff": "Shooting efficiency",
+    "form_tov_pct_diff": "Turnover rate",
+    "form_oreb_pct_diff": "Offensive rebounding",
+    "form_ft_rate_diff": "Free-throw pressure",
+    "form_pace_diff": "Pace",
+    "form_ortg_diff": "Offensive rating",
+    "form_drtg_diff": "Defensive rating",
+    "rest_diff": "Rest advantage",
+    "b2b_diff": "Back-to-back difference",
+    "three_in_four_diff": "Schedule density",
+    "missing_min_diff": "Expected minutes missing",
+    "elo_diff": "Elo strength",
+    "model_intercept": "Model baseline / home court",
+}
+
+
+@app.get("/teams/compare")
+def team_comparison(
+    home: str,
+    away: str,
+    client: Client,
+    model: OutcomeModel,
+    season: str | None = None,
+    home_missing_min: Annotated[float, Query(ge=0, le=240)] = 0,
+    away_missing_min: Annotated[float, Query(ge=0, le=240)] = 0,
+) -> dict:
+    """Shared-sample team profile plus a ranked local matchup explanation."""
+    home, away = home.upper(), away.upper()
+    selected, basis, mode = _prediction_context(season)
+    day = pd.Timestamp.now("UTC").date().isoformat()
+    prediction_snapshot = _snapshot_for_day(day, client)
+    for team in (home, away):
+        if team not in prediction_snapshot.index:
+            raise HTTPException(404, f"unknown team {team!r}")
+    if home == away:
+        raise HTTPException(422, "home and away must differ")
+
+    games = client.team_games(basis)
+    league = league_with_ratings(client, basis)
+    try:
+        lineups = client.lineups(basis)
+    except Exception:
+        logger.warning("lineup comparison unavailable", exc_info=True)
+        lineups = pd.DataFrame()
+    try:
+        clutch = client.league_player_clutch(basis)
+    except Exception:
+        logger.warning("clutch comparison unavailable", exc_info=True)
+        clutch = pd.DataFrame()
+
+    try:
+        comparison = compare_teams(
+            games,
+            league,
+            lineups,
+            clutch,
+            away,
+            home,
+            elo=prediction_snapshot.get("elo"),
+        )
+    except (KeyError, ValueError) as exc:
+        raise HTTPException(503, f"team comparison unavailable: {exc}") from exc
+
+    features = matchup_features(
+        prediction_snapshot,
+        home,
+        away,
+        home_missing_min=home_missing_min,
+        away_missing_min=away_missing_min,
+    )
+    probability = float(model.predict_proba(features).iloc[0])
+    drivers = []
+    for row in model.explain(features):
+        contribution = row["log_odds_contribution"]
+        drivers.append(
+            {
+                **row,
+                "label": _DRIVER_LABELS.get(row["feature"], row["feature"]),
+                "favors": home if contribution > 0 else away if contribution < 0 else "neutral",
+            }
+        )
+
+    query = urlencode({"home": home, "away": away, "season": selected})
+    return {
+        "home": home,
+        "away": away,
+        "season": selected,
+        "basis_season": basis,
+        "projection_mode": mode,
+        "home_win_prob": round(probability, 4),
+        **comparison,
+        "drivers": drivers,
+        "limitations": [
+            (
+                "The matchup assumes neutral rest; expected minutes out comes from the "
+                "availability controls and does not identify specific players."
+            ),
+            (
+                "Feature contributions explain the fitted logistic model; correlated "
+                "inputs are not independent or causal effects."
+            ),
+            (
+                "Clutch, lineup, and bench summaries are descriptive and may be absent "
+                "when their upstream samples are unavailable."
+            ),
+            f"{selected} uses {basis} team form as a {mode.replace('_', ' ')} basis.",
+        ],
+        "share_url": f"/app/?{query}#matchup",
+        "export_filename": f"{away}-at-{home}-{selected}-comparison.json",
+    }
+
+
 def _matchup_prob(
     client: NBAClient,
     model: GameOutcomeModel,
@@ -696,24 +938,8 @@ def _season_forecast_table(
     client: NBAClient,
 ) -> pd.DataFrame:
     snapshot = _snapshot_for_day(day, client)
-    standings = client.standings(basis)
-    games = client.team_games(basis)
-    required_standings = {"TeamID", "Conference"}
-    required_games = {"TEAM_ID", "TEAM_ABBREVIATION"}
-    if not required_standings <= set(standings) or not required_games <= set(games):
-        raise HTTPException(503, "conference mapping is unavailable for the forecast")
-    team_ids = (
-        games[["TEAM_ID", "TEAM_ABBREVIATION"]]
-        .dropna()
-        .drop_duplicates("TEAM_ID", keep="last")
-        .set_index("TEAM_ID")["TEAM_ABBREVIATION"]
-        .to_dict()
-    )
-    conferences = {
-        str(team_ids.get(row.TeamID)): str(row.Conference)
-        for row in standings[["TeamID", "Conference"]].itertuples(index=False)
-        if row.TeamID in team_ids
-    }
+
+    conferences = _forecast_conferences(client, basis)
     roster_inputs = None
     if selected != basis:
         roster_inputs = _roster_forecast_inputs(selected, basis, day, client)
@@ -734,6 +960,28 @@ def _season_forecast_table(
         return table
     except (KeyError, ValueError) as error:
         raise HTTPException(503, str(error)) from error
+
+
+def _forecast_conferences(client: NBAClient, basis: str) -> dict[str, str]:
+    """Map team tricodes to conferences from the same forecast basis season."""
+    standings = client.standings(basis)
+    games = client.team_games(basis)
+    required_standings = {"TeamID", "Conference"}
+    required_games = {"TEAM_ID", "TEAM_ABBREVIATION"}
+    if not required_standings <= set(standings) or not required_games <= set(games):
+        raise HTTPException(503, "conference mapping is unavailable for the forecast")
+    team_ids = (
+        games[["TEAM_ID", "TEAM_ABBREVIATION"]]
+        .dropna()
+        .drop_duplicates("TEAM_ID", keep="last")
+        .set_index("TEAM_ID")["TEAM_ABBREVIATION"]
+        .to_dict()
+    )
+    return {
+        str(team_ids.get(row.TeamID)): str(row.Conference)
+        for row in standings[["TeamID", "Conference"]].itertuples(index=False)
+        if row.TeamID in team_ids
+    }
 
 
 @lru_cache(maxsize=4)
@@ -779,6 +1027,139 @@ def predict_season_roster_inputs(
         "metadata": inputs.metadata,
         "teams": _finite_records(teams),
         "players": _finite_records(players),
+    }
+
+
+class RosterScenarioChange(BaseModel):
+    player: str = Field(min_length=1)
+    new_team: str | None = None
+    remove: bool = False
+    projected_minutes: float | None = Field(default=None, ge=0, le=48)
+    games_missed: int | None = Field(default=None, ge=0, le=82)
+
+
+class RosterScenarioBody(BaseModel):
+    season: str | None = None
+    n_sims: int = Field(default=2_000, ge=1_000, le=10_000)
+    changes: list[RosterScenarioChange] = Field(min_length=1, max_length=30)
+
+
+@app.post("/predict/season/scenario")
+def predict_roster_scenario(body: RosterScenarioBody, client: Client) -> dict:
+    """Run an ephemeral roster/minutes/availability scenario against baseline."""
+    selected, basis, _ = _prediction_context(body.season or prediction_seasons()[1])
+    if selected == basis:
+        raise HTTPException(422, "roster scenarios are available for the next season")
+    day = pd.Timestamp.now("UTC").date().isoformat()
+    baseline_inputs = _roster_forecast_inputs(selected, basis, day, client)
+    requested = [change.model_dump() for change in body.changes]
+    if any(change["remove"] and change["new_team"] for change in requested):
+        raise HTTPException(422, "a player cannot be removed and assigned a new team")
+    try:
+        scenario = apply_roster_scenario(baseline_inputs, requested)
+    except (KeyError, ValueError) as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+    snapshot = _snapshot_for_day(day, client)
+    conferences = _forecast_conferences(client, basis)
+    baseline_table = _season_forecast_table(selected, basis, body.n_sims, day, client)
+    seed = zlib.crc32(f"{selected}|{basis}|{body.n_sims}".encode())
+    try:
+        scenario_table = season_forecast(
+            snapshot,
+            conferences,
+            n_sims=body.n_sims,
+            seed=seed,
+            cup_groups=CUP_2026_GROUPS if selected == "2026-27" else None,
+            roster_adjustments=scenario.teams,
+        )
+    except (KeyError, ValueError) as exc:
+        raise HTTPException(503, str(exc)) from exc
+
+    affected = sorted(
+        {
+            team
+            for change in scenario.changes
+            for team in (change["from_team"], change["to_team"])
+            if team is not None
+        }
+    )
+    outcome_columns = {
+        "projected_wins": "PROJECTED_WINS",
+        "projected_seed": "PROJECTED_SEED",
+        "playoff_probability": "PLAYOFF_PROB",
+        "championship_probability": "CHAMP_PROB",
+        "cup_probability": "CUP_PROB",
+    }
+    outcomes = []
+    for team in affected:
+        before_rows = baseline_table[baseline_table["TEAM"] == team]
+        after_rows = scenario_table[scenario_table["TEAM"] == team]
+        if before_rows.empty or after_rows.empty:
+            continue
+        before_row, after_row = before_rows.iloc[0], after_rows.iloc[0]
+        before = {label: float(before_row[column]) for label, column in outcome_columns.items()}
+        after = {label: float(after_row[column]) for label, column in outcome_columns.items()}
+        outcomes.append(
+            {
+                "team": team,
+                "before": before,
+                "after": after,
+                "change": {label: after[label] - before[label] for label in before},
+                "strength": {
+                    "before_net_adjustment": float(
+                        baseline_inputs.teams.at[team, "NET_ADJUSTMENT"]
+                    ),
+                    "after_net_adjustment": float(
+                        scenario.teams.at[team, "NET_ADJUSTMENT"]
+                    ),
+                    "causal_players": [
+                        change["player"]
+                        for change in scenario.changes
+                        if team in {change["from_team"], change["to_team"]}
+                    ],
+                },
+            }
+        )
+
+    roster_columns = [
+        column
+        for column in (
+            "TEAM",
+            "PLAYER_NAME",
+            "PROJECTED_MIN",
+            "GAMES_MISSED",
+            "PROJECTED_IMPACT",
+            "SALARY",
+        )
+        if column in scenario.players
+    ]
+    scenario_key = json.dumps(requested, sort_keys=True, separators=(",", ":"))
+    return {
+        "scenario_id": f"scenario-{zlib.crc32(scenario_key.encode()):08x}",
+        "version": SCENARIO_VERSION,
+        "season": selected,
+        "basis_season": basis,
+        "n_sims": body.n_sims,
+        "baseline_immutable": True,
+        "paired_simulation_seed": seed,
+        "changes": scenario.changes,
+        "salary_validation": scenario.salary_validation,
+        "outcomes": outcomes,
+        "rosters": _finite_records(
+            scenario.players[scenario.players["TEAM"].isin(affected)][roster_columns]
+        ),
+        "methodology": (
+            "Before and after use the same simulation seed. Explicit player minutes are "
+            "locked, remaining rotation minutes are redistributed to 240, and games "
+            "missed become replacement-level minutes. Results are scenario deltas, not "
+            "causal estimates from historical transactions."
+        ),
+        "salary_method": (
+            "Salary validation is an advisory 125% plus $7.5M incoming screen using "
+            "cached contract salaries; it does not model apron, aggregation, timing, "
+            "trade-kicker, or exception rules."
+        ),
     }
 
 
@@ -1247,7 +1628,7 @@ def player_on_off(player_id: int, client: Client) -> dict:
 
 @app.get("/players/{player_id}/contract")
 def player_contract_detail(player_id: int, request: Request, client: Client) -> dict:
-    """Local-only current/future contract detail from the scraped salary table."""
+    """Local-only career and future contract detail from scraped salary tables."""
     _require_local(request)
     player = _find_player(client, player_id)
     contracts = client.player_contracts()
@@ -1262,10 +1643,18 @@ def player_contract_detail(player_id: int, request: Request, client: Client) -> 
         if pd.notna(row.get(selected))
     }
     guaranteed = row.get("GUARANTEED")
+    history: list[dict] = []
+    slug = row.get("BREF_SLUG")
+    if pd.notna(slug):
+        try:
+            history = _finite_records(client.player_salary_history(str(slug)))
+        except Exception:
+            logger.warning("career salary history unavailable", exc_info=True)
     return {
         "player": player["full_name"],
         "local_only": True,
         "salaries": salaries,
+        "history": history,
         "guaranteed": float(guaranteed) if pd.notna(guaranteed) else None,
     }
 

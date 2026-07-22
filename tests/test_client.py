@@ -77,3 +77,67 @@ def test_cached_play_by_play_prefers_coordinate_aware_version(tmp_path):
     pd.testing.assert_frame_equal(client.cached_play_by_play("001"), legacy)
     client.cache.put("pbp/v4/001", current)
     pd.testing.assert_frame_equal(client.cached_play_by_play("001"), current)
+
+
+def test_tracking_and_hustle_use_scoped_cache_keys(tmp_path, monkeypatch):
+    calls = []
+    expected = pd.DataFrame({"PLAYER_ID": [1], "DRIVES": [12.0]})
+
+    class Endpoint:
+        def get_data_frames(self):
+            return [expected]
+
+    def fake_tracking(**kwargs):
+        calls.append(("tracking", kwargs["player_or_team"], kwargs["pt_measure_type"]))
+        return Endpoint()
+
+    def fake_hustle(**kwargs):
+        calls.append(("hustle", kwargs["per_mode_time"]))
+        return Endpoint()
+
+    monkeypatch.setattr(
+        "nba_insights.ingest.client.leaguedashptstats.LeagueDashPtStats",
+        fake_tracking,
+    )
+    monkeypatch.setattr(
+        "nba_insights.ingest.client.leaguehustlestatsplayer.LeagueHustleStatsPlayer",
+        fake_hustle,
+    )
+    monkeypatch.setattr(
+        "nba_insights.ingest.client.leaguehustlestatsteam.LeagueHustleStatsTeam",
+        fake_hustle,
+    )
+    client = make_client(tmp_path)
+
+    pd.testing.assert_frame_equal(client.tracking_stats("Drives", "2025-26"), expected)
+    pd.testing.assert_frame_equal(client.tracking_stats("Drives", "2025-26"), expected)
+    pd.testing.assert_frame_equal(
+        client.tracking_stats("Drives", "2025-26", "Team"), expected
+    )
+    pd.testing.assert_frame_equal(client.hustle_stats("2025-26"), expected)
+    pd.testing.assert_frame_equal(client.hustle_stats("2025-26"), expected)
+    pd.testing.assert_frame_equal(client.hustle_stats("2025-26", "Team"), expected)
+    assert calls == [
+        ("tracking", "Player", "Drives"),
+        ("tracking", "Team", "Drives"),
+        ("hustle", "PerGame"),
+        ("hustle", "PerGame"),
+    ]
+
+
+def test_player_salary_history_fetches_once_then_reads_cache(tmp_path, monkeypatch):
+    calls = []
+    expected = pd.DataFrame(
+        {"SEASON": ["2024-25"], "TEAM": ["Denver Nuggets"], "SALARY": [51_415_938]}
+    )
+
+    def fake_fetch(slug):
+        calls.append(slug)
+        return expected
+
+    monkeypatch.setattr("nba_insights.ingest.client.fetch_career_salaries", fake_fetch)
+    client = make_client(tmp_path)
+    slug = "j/jokicni01.html"
+    pd.testing.assert_frame_equal(client.player_salary_history(slug), expected)
+    pd.testing.assert_frame_equal(client.player_salary_history(slug), expected)
+    assert calls == [slug]

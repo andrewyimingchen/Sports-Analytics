@@ -135,8 +135,11 @@ Open `http://127.0.0.1:8000/app/` on a phone or desktop and choose "Add to
 Home Screen". It includes League Pulse, deep player profiles (shot charts,
 hot zones, league/position context, splits, on/off, and local contracts),
 Explore with CSV export, two-to-four-player comparisons, Team Room, Game
-Center with full box scores, matchup outcome/simulation/player/lineup tools,
-optional structured AI Q&A, and methodology/model cards.
+Center with full box scores, shared-sample team matchup comparisons with
+ranked model drivers and JSON export, an ephemeral roster/injury/trade scenario
+lab with paired before/after simulations, outcome/simulation/player/lineup tools,
+official tracking/hustle tables with definitions and cache freshness, browser-local
+favorites and opt-in refresh alerts, optional structured AI Q&A, and methodology/model cards.
 
 Salary data stays local-only. AI Q&A requires `uv sync --extra ai` plus a
 server-side `ANTHROPIC_API_KEY`; prediction tools explain how to train missing
@@ -157,19 +160,25 @@ The same FastAPI service exposes the data as JSON:
 | `/players/{id}/shots` | attempts, zones, hex hot zones, shot diet, xeFG quality |
 | `/players/{id}/splits` | home/away, month, rest, and opponent splits |
 | `/players/{id}/on-off` | current-team on/off impact |
-| `/players/{id}/contract` | local-only current/future contract detail |
+| `/players/{id}/contract` | local-only career salary history and current/future contract detail |
 | `/compare?names=A&names=B` | side-by-side per-game stats (2–4 players) |
 | `/players/{id}/card` | self-contained HTML share card |
 | `/posters/compare?names=A&names=B` | 1:1 share poster of a comparison (`&format=png` for an image) |
 | `/posters/game?home=LAL&away=BOS` | 16:9 share poster of a game prediction (`&format=png`) |
 | `/teams` | tricodes of all teams this season |
 | `/teams/{team}/profile` | factors, roster, form, lineups, on/off, standings, local payroll |
+| `/teams/compare?home=LAL&away=BOS&season=2026-27` | same-sample team metrics, rotations, bench/clutch/head-to-head context, probability drivers, limitations, and share/export metadata |
+| `/tracking?category=drives&scope=player&min_games=10` | official drives/touches/passing/defense/speed/hustle rows with definitions, sample filters, schema audit, cache freshness, and share metadata |
+
+The real-feed category/schema audit is recorded in
+[`docs/TRACKING_AVAILABILITY.md`](docs/TRACKING_AVAILABILITY.md).
 | `/games/{game_id}/box-score?season=2025-26` | cached player box score grouped by team, with traditional endpoint fallback |
 | `/games/{game_id}/story?season=2025-26` | cached timeline, shots, lineups, win probability, turning points, clutch, and advanced team box |
 | `/predict/game?home=LAL&away=BOS&season=2026-27` | home-team win probability and forecast data basis |
 | `/predict/simulate?home=LAL&away=BOS&season=2026-27` | Monte Carlo score/margin/total distributions |
 | `/predict/season?season=2026-27` | East/West projected standings with playoff, title, and NBA Cup odds |
 | `/predict/season/roster-inputs?season=2026-27&team=LAL` | versioned projected minutes, roster changes, age/availability adjustments, and team forecast deltas |
+| `POST /predict/season/scenario` | validated ephemeral minutes, games-missed, roster, and trade-package changes with paired before/after records, seeds, trophy odds, causal-player deltas, and advisory salary checks |
 | `/predict/players?season=2026-27&team=LAL` | player minutes/box-stat ranges, trajectories, comparables, and field-normalized award outlook |
 | `/predict/player/{id}?opponent=BOS` | points projection with empirical 80% interval |
 | `/predict/lineup?team=LAL&player_ids=…` | five-man net and win estimate |
