@@ -64,6 +64,23 @@ For internal research and data diagnostics only:
 uv run streamlit run app/streamlit_app.py
 ```
 
+### iOS and Android app
+
+The native mobile client lives in [`mobile/`](mobile/). It is an Expo/React
+Native app with League Pulse, player profiles, team rooms, matchup forecasts,
+device-local favorites, offline response fallback, and secure API-key storage.
+Start the FastAPI backend and then Expo:
+
+```bash
+uv run uvicorn nba_insights.api:app --host 0.0.0.0 --port 8000
+cd mobile
+npm install
+npm start
+```
+
+See [`mobile/README.md`](mobile/README.md) for emulator, physical-device, EAS,
+and store-build instructions.
+
 ## Architecture
 
 ```

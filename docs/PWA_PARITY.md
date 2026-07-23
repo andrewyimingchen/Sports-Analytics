@@ -5,6 +5,9 @@ the migration inventory that established its initial feature baseline; it is
 not an ongoing two-client parity commitment. The clients share pure analysis
 functions, the cached `NBAClient`, and trained artifacts, while the PWA receives
 JSON rather than duplicating calculations in JavaScript.
+The native iOS/Android app in `mobile/` is a supported phone-first client, not
+a page-for-page parity target; it also consumes the shared JSON API rather than
+duplicating basketball calculations in TypeScript.
 
 | Streamlit surface | PWA equivalent |
 |---|---|

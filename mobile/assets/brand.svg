@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <rect width="1024" height="1024" rx="224" fill="#0A0C0F"/>
+  <circle cx="512" cy="470" r="292" fill="#FF5C35"/>
+  <path d="M235 406c165 14 329-46 458-170M261 622c173-50 349-38 519 37M512 178c-29 193-22 391 32 584M317 248c134 124 255 295 363 513" fill="none" stroke="#0A0C0F" stroke-width="32" stroke-linecap="round"/>
+  <rect x="252" y="747" width="520" height="112" rx="56" fill="#F2F0E9"/>
+  <text x="512" y="825" text-anchor="middle" font-family="Arial, sans-serif" font-size="58" font-weight="900" letter-spacing="5" fill="#0A0C0F">PL</text>
+</svg>
