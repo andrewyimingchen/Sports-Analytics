@@ -1,5 +1,12 @@
 # Architecture
 
+## Product boundary
+
+The FastAPI-served PWA is the official POSSESSION LAB product. Streamlit is an
+internal research and diagnostics console; it may expose experiments but does
+not carry a public feature-parity requirement. The decision and transition
+policy are recorded in [PRODUCT_SURFACES.md](PRODUCT_SURFACES.md).
+
 One rule holds everywhere: **the network is touched in exactly one place**
 (`ingest.NBAClient`), every fetch goes through the SQLite cache, and
 everything downstream of the cache is pure pandas — which is why the whole
@@ -34,9 +41,9 @@ flowchart TB
     ARTIFACTS[("data/models/*.joblib<br/>outcome · points · win_curve")]
 
     subgraph SERVE["serving"]
-        STREAMLIT["app/streamlit_app.py — Streamlit UI<br/>Profile · Compare · Predictions · Methodology<br/>(+ app/methodology.py)"]
-        API["api/app.py — FastAPI<br/>JSON endpoints + player cards"]
-        PWA["api/static/ — installable PWA<br/>served by the API"]
+        STREAMLIT["app/streamlit_app.py — internal console<br/>research · diagnostics · experiments"]
+        API["api/app.py — product backend<br/>JSON endpoints + player cards"]
+        PWA["api/static/ — official POSSESSION LAB PWA<br/>responsive · installable · offline shell"]
     end
 
     NBA --> CLIENT --> CACHE
@@ -64,7 +71,8 @@ flowchart TB
 | `store/` | `Cache.get_or_fetch` fronts every remote call. Per-endpoint TTLs (current-season data refreshes daily); payloads are parquet blobs (legacy JSON entries migrate on read); empty responses are trusted for only an hour; finished-season entries count as immutable only if fetched after the season ended; per-key single-flight locking under concurrency. |
 | `analysis/`, `ml/features.py`, `pbp/` | Pure functions: DataFrames in, DataFrames out; `KeyError` on missing players/columns. No I/O, so tests stay offline. |
 | `ml/train.py` | The evaluation protocol lives here: train on the three seasons before the current one, tune hyperparameters on the most recent training season (dev), score on the current season as a temporal holdout touched exactly once. The shipped artifacts are the ones whose numbers were printed, and `data/models/metrics.json` records them for the app to quote. |
-| `app/`, `api/` | Read through the cache and the saved artifacts only. The Streamlit app is the analyst-facing UI; the FastAPI app serves JSON plus the installable PWA. |
+| `app/` | Internal Streamlit research/diagnostics console. It can move faster than the public product and does not define release parity. |
+| `api/` | Product boundary: typed JSON contracts plus the official installable PWA. Reads through the cache and saved artifacts only. |
 
 ## Supporting pieces
 

@@ -1,6 +1,6 @@
 {
-  "name": "NBA Insights",
-  "short_name": "NBA Insights",
+  "name": "POSSESSION LAB",
+  "short_name": "POSSESSION LAB",
   "description": "NBA player intelligence, league exploration, scores, and matchup probabilities",
   "start_url": "/app/",
   "scope": "/",

@@ -71,11 +71,11 @@ def render_player_card(
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{escape(name)} — NBA Insights</title><style>{_CSS}</style></head>
+<title>{escape(name)} — POSSESSION LAB</title><style>{_CSS}</style></head>
 <body><div class="card">
 <h1>{escape(name)}</h1>
 <div class="season">{escape(season)} regular season</div>
 <div class="tiles">{tiles}</div>
 {pct_html}
-<div class="foot">NBA Insights · data: stats.nba.com</div>
+<div class="foot">POSSESSION LAB · data: stats.nba.com</div>
 </div></body></html>"""

@@ -1,8 +1,10 @@
-# Streamlit → PWA parity
+# PWA feature baseline and Streamlit transition
 
-The FastAPI PWA mirrors every user-visible Streamlit surface. The two clients
-share pure analysis functions, the cached `NBAClient`, and trained artifacts;
-the PWA receives JSON rather than duplicating calculations in JavaScript.
+The FastAPI PWA is the official POSSESSION LAB product. The table below records
+the migration inventory that established its initial feature baseline; it is
+not an ongoing two-client parity commitment. The clients share pure analysis
+functions, the cached `NBAClient`, and trained artifacts, while the PWA receives
+JSON rather than duplicating calculations in JavaScript.
 
 | Streamlit surface | PWA equivalent |
 |---|---|
@@ -24,5 +26,11 @@ the PWA receives JSON rather than duplicating calculations in JavaScript.
 
 The Draft implementation remains intentionally hidden in Streamlit at the
 owner's request, so it is not part of visible-feature parity. Salary data is
-for local personal use and is never returned to non-loopback callers. Missing
-optional AI credentials or trained model files produce explanatory states.
+private: direct-local callers are admitted, while remote callers require the
+deployment API key. Missing optional AI credentials or trained model files
+produce explanatory states.
+
+New public work targets the PWA first. Streamlit is maintained only for active
+internal research and diagnostic workflows; public PWA releases do not require
+a corresponding Streamlit implementation. See
+[PRODUCT_SURFACES.md](PRODUCT_SURFACES.md) for the full policy.

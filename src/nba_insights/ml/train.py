@@ -130,7 +130,7 @@ def build_player_frames(client: NBAClient, seasons: list[str]) -> pd.DataFrame:
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-    parser = argparse.ArgumentParser(description="Train NBA Insights models")
+    parser = argparse.ArgumentParser(description="Train POSSESSION LAB models")
     parser.add_argument("--train-seasons", type=int, default=3)
     args = parser.parse_args()
 

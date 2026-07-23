@@ -77,6 +77,14 @@ from nba_insights.analysis import (
     zone_efficiency,
 )
 from nba_insights.api.cards import render_player_card
+from nba_insights.api.security import (
+    can_access_private_data,
+    is_local_request,
+    protect_ai,
+    protect_simulation,
+    require_private_access,
+    require_simulation_access,
+)
 from nba_insights.config import (
     current_season,
     past_seasons,
@@ -114,7 +122,7 @@ from nba_insights.serve import fetch_headshot, league_with_ratings
 
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="NBA Insights API", version="0.1.0")
+app = FastAPI(title="POSSESSION LAB API", version="0.1.0")
 
 _STATIC = Path(__file__).parent / "static"
 app.mount("/app", StaticFiles(directory=_STATIC, html=True), name="mobile")
@@ -123,6 +131,26 @@ app.mount("/app", StaticFiles(directory=_STATIC, html=True), name="mobile")
 @app.get("/", include_in_schema=False)
 def root() -> RedirectResponse:
     return RedirectResponse("/app/")
+
+
+@app.get("/healthz", include_in_schema=False)
+def healthcheck() -> dict[str, str]:
+    """Cheap liveness probe with no cache, model, or upstream dependency."""
+    return {"status": "ok"}
+
+
+@app.get("/readyz", include_in_schema=False)
+def readiness() -> dict:
+    """Deployment readiness plus optional artifact availability."""
+    return {
+        "status": "ready",
+        "pwa_shell": (_STATIC / "index.html").exists(),
+        "optional_models": {
+            "outcome": OUTCOME_PATH.exists(),
+            "points": POINTS_PATH.exists(),
+            "lineup": WIN_CURVE_PATH.exists(),
+        },
+    }
 
 
 @lru_cache(maxsize=1)
@@ -297,22 +325,6 @@ def _find_player(client: NBAClient, player_id: int) -> dict:
     if not match:
         raise HTTPException(404, f"no player with id {player_id}")
     return match
-
-
-def _require_local(request: Request) -> None:
-    """Keep scraped salary data on the user's own machine.
-
-    The public API deliberately excludes contracts. TestClient is admitted so
-    the guard and payload can remain covered without weakening production.
-    """
-    host = request.client.host if request.client else ""
-    if host not in {"127.0.0.1", "::1", "localhost", "testclient"}:
-        raise HTTPException(403, "salary data is available only from the local machine")
-
-
-def _is_local(request: Request) -> bool:
-    host = request.client.host if request.client else ""
-    return host in {"127.0.0.1", "::1", "localhost", "testclient"}
 
 
 @app.get("/teams")
@@ -593,7 +605,7 @@ def team_profile(team: str, request: Request, client: Client) -> dict:
         "MIN" if "MIN" in league else "GP", ascending=False
     )
     contracts = None
-    if _is_local(request):
+    if can_access_private_data(request):
         try:
             contracts = client.player_contracts()
             roster = attach_salary(roster, contracts)
@@ -679,7 +691,8 @@ def team_profile(team: str, request: Request, client: Client) -> dict:
             book = team_contracts(contracts, team)
             payroll = team_payroll(contracts)
             finances = {
-                "local_only": True,
+                "local_only": is_local_request(request),
+                "access": "local" if is_local_request(request) else "api_key",
                 "seasons": salary_seasons(contracts),
                 "payroll": float(payroll.get(team, 0)),
                 "contracts": _finite_records(book),
@@ -877,10 +890,11 @@ def predict_game(
     }
 
 
-@app.get("/predict/simulate")
+@app.get("/predict/simulate", dependencies=[Depends(require_simulation_access)])
 def predict_simulation(
     home: str,
     away: str,
+    request: Request,
     client: Client,
     model: OutcomeModel,
     season: str | None = None,
@@ -889,6 +903,7 @@ def predict_simulation(
     n_sims: Annotated[int, Query(ge=1000, le=20_000)] = 10_000,
 ) -> dict:
     """Monte Carlo margin/total distribution plus calibrated model comparison."""
+    protect_simulation(request, cost=n_sims)
     selected, basis, mode = _prediction_context(season)
     day = pd.Timestamp.now("UTC").date().isoformat()
     snapshot = _snapshot_for_day(day, client)
@@ -1044,9 +1059,16 @@ class RosterScenarioBody(BaseModel):
     changes: list[RosterScenarioChange] = Field(min_length=1, max_length=30)
 
 
-@app.post("/predict/season/scenario")
-def predict_roster_scenario(body: RosterScenarioBody, client: Client) -> dict:
+@app.post(
+    "/predict/season/scenario",
+    dependencies=[Depends(require_simulation_access)],
+)
+def predict_roster_scenario(
+    body: RosterScenarioBody, request: Request, client: Client
+) -> dict:
     """Run an ephemeral roster/minutes/availability scenario against baseline."""
+    # A scenario computes both a baseline and a changed forecast.
+    protect_simulation(request, cost=body.n_sims * 2)
     selected, basis, _ = _prediction_context(body.season or prediction_seasons()[1])
     if selected == basis:
         raise HTTPException(422, "roster scenarios are available for the next season")
@@ -1233,13 +1255,15 @@ def predict_player_seasons(
     }
 
 
-@app.get("/predict/season")
+@app.get("/predict/season", dependencies=[Depends(require_simulation_access)])
 def predict_season(
     client: Client,
+    request: Request,
     season: str | None = None,
     n_sims: Annotated[int, Query(ge=1_000, le=20_000)] = 5_000,
 ) -> dict:
     """Conference tables and playoff, title, and NBA Cup forecast odds."""
+    protect_simulation(request, cost=n_sims)
     selected = season or prediction_seasons()[1]
     selected, basis, mode = _prediction_context(selected)
     day = pd.Timestamp.now("UTC").date().isoformat()
@@ -1626,10 +1650,12 @@ def player_on_off(player_id: int, client: Client) -> dict:
     }
 
 
-@app.get("/players/{player_id}/contract")
+@app.get(
+    "/players/{player_id}/contract",
+    dependencies=[Depends(require_private_access)],
+)
 def player_contract_detail(player_id: int, request: Request, client: Client) -> dict:
-    """Local-only career and future contract detail from scraped salary tables."""
-    _require_local(request)
+    """Private career and future contract detail from scraped salary tables."""
     player = _find_player(client, player_id)
     contracts = client.player_contracts()
     try:
@@ -1652,7 +1678,8 @@ def player_contract_detail(player_id: int, request: Request, client: Client) -> 
             logger.warning("career salary history unavailable", exc_info=True)
     return {
         "player": player["full_name"],
-        "local_only": True,
+        "local_only": is_local_request(request),
+        "access": "local" if is_local_request(request) else "api_key",
         "salaries": salaries,
         "history": history,
         "guaranteed": float(guaranteed) if pd.notna(guaranteed) else None,
@@ -1898,7 +1925,7 @@ class AskBody(BaseModel):
     question: str = Field(min_length=3, max_length=500)
 
 
-@app.post("/ask")
+@app.post("/ask", dependencies=[Depends(protect_ai)])
 def ask_league(body: AskBody, client: Client) -> dict:
     """Credential-safe natural-language Q&A over one structured league tool."""
     if not os.environ.get("ANTHROPIC_API_KEY"):
@@ -1964,7 +1991,7 @@ def ask_league(body: AskBody, client: Client) -> dict:
         raise HTTPException(503, "Anthropic credential was rejected") from error
     except Exception as error:
         logger.warning("AI Q&A failed", exc_info=True)
-        raise HTTPException(502, f"AI answer failed: {error}") from error
+        raise HTTPException(502, "AI answer failed") from error
     return {
         "answer": answer or "No answer was produced.",
         "model": model,
