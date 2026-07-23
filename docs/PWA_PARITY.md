@@ -16,13 +16,13 @@ duplicating basketball calculations in TypeScript.
 | Player shots: raw, zone-vs-league, hex hot zones, xeFG, shot diet | Three selectable SVG court modes plus quality tiles and range table |
 | Player on/off, splits, games, similar players | Player Lab impact, situation table, recent form, and comps |
 | Player/team salary and contracts | Local-request-only contract and payroll sections |
-| Explore filters, per-game/per-36, CSV | Explore page and browser-generated CSV |
+| Explore filters, per-game/per-36, CSV | Selectable player scatterplot with league-average guides, direct labels, exact-data disclosure, and browser-generated CSV |
 | Compare 2–4: career, seasons, percentiles, shot quality, poster | Four search slots and all comparison sections with PNG poster link |
 | Teams: identity, factors, roster, games, standings, lineups, on/off | Team Room consolidated profile |
 | Games: seasons, filters, full box score | Game Center; every row opens a summary and finals use cached team-grouped player rows with a traditional endpoint fallback |
 | Predictions: outcome, absences, simulator, points, starting five | Matchup Lab opens directly on the two-team game predictor, shared-sample comparison, simulator, player-points projection, and accessible five-slot lineup picker |
-| Full-season and roster forecasts | Season Outlook, reached from More, contains current/upcoming-season East/West record ranges, playoff/title/Cup odds, auditable roster/minutes deltas, and player projections |
-| Team-vs-team explanation | Shared-cutoff comparison of results, efficiency, four factors, shooting, rotations, bench, clutch, and head-to-head context with ranked local model contributions, caveats, share links, and JSON export |
+| Full-season and roster forecasts | Season Outlook, reached from More, contains East/West win-interval plots, playoff/title/Cup probability rankings, auditable exact data, roster/minutes deltas, and player projection intervals |
+| Team-vs-team explanation | Shared-cutoff rank dumbbells and a cumulative driver waterfall lead the exact results, efficiency, four-factor, shooting, rotation, bench, clutch, and head-to-head values; caveats, share links, and JSON export remain available |
 | Roster/injury/trade scenarios | Ephemeral Scenario Lab with duplicate/minute/roster validation, multi-player trade packages, advisory cached-salary checks, and paired before/after wins, seeds, playoff/title/Cup odds without changing the baseline |
 | Tracking, hustle, defense, personalization | Player/team Drives, Touches, Passing, Shot Defense, Speed/Distance, and Hustle views with explicit definitions, season/team/games filters, upstream schema and cache freshness, shareable URLs, browser-local favorites, and permission-gated local refresh notifications |
 | Methodology | Methodology page backed by recorded artifact metrics |
