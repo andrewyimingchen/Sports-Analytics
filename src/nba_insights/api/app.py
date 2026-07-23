@@ -14,6 +14,7 @@ import logging
 import os
 import zlib
 from functools import lru_cache
+from importlib.util import find_spec
 from pathlib import Path
 from typing import Annotated
 from urllib.parse import urlencode
@@ -340,6 +341,16 @@ def metadata() -> dict:
         "current_season": current_season(),
         "seasons": seasons_since(),
         "prediction_seasons": prediction_seasons(),
+        "capabilities": {
+            "ask_ai": bool(os.environ.get("ANTHROPIC_API_KEY"))
+            and find_spec("anthropic") is not None,
+            "private_salary": "local_requests_only",
+            "models": {
+                "outcome": OUTCOME_PATH.exists(),
+                "points": POINTS_PATH.exists(),
+                "lineup": WIN_CURVE_PATH.exists(),
+            },
+        },
     }
 
 

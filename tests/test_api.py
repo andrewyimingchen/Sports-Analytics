@@ -901,6 +901,36 @@ def test_mobile_app_shell_served(api):
     r = api.get("/app/")
     assert r.status_code == 200
     assert "POSSESSION LAB" in r.text
+    assert 'data-page="overview"' not in r.text
+    assert '<button class="nav-link active" data-page="pulse">' in r.text
+    assert '<section id="page-pulse" class="page active">' in r.text
+    assert ': "pulse";' in r.text
+    desktop_nav = r.text.split('<nav class="desktop-nav"', 1)[1].split("</nav>", 1)[0]
+    mobile_nav = r.text.split('<nav class="mobile-nav"', 1)[1].split("</nav>", 1)[0]
+    assert desktop_nav.count("data-page=") == 5
+    assert mobile_nav.count("data-page=") == 5
+    assert 'data-page="more"' in desktop_nav
+    assert 'id="page-more"' in r.text
+    assert 'id="page-outlook"' in r.text
+    matchup = r.text.split('id="page-matchup"', 1)[1].split(
+        'id="page-more"', 1
+    )[0]
+    assert 'id="season-forecast"' not in matchup
+    assert 'id="scenario-lab"' not in matchup
+    assert 'id="pulse-context"' in r.text
+    assert "pulseData.minimum_games" in r.text
+    assert 'data-player-id="' in r.text
+    assert "openTeamRoom" in r.text
+    assert "openMatchup" in r.text
+    assert 'id="more-ask"' in r.text
+    assert "Ask AI is not configured" in r.text
+    assert 'data-retry="pulse"' in r.text
+    assert 'data-search-example="Nikola Jokic"' in r.text
+    assert "fonts.googleapis.com" not in r.text
+    assert 'window.addEventListener("offline"' in r.text
+    assert 'aria-current", "page"' in r.text
+    assert 'heading.focus({preventScroll:true})' in r.text
+    assert 'role="table"' in r.text
     assert "Shot intelligence" in r.text
     assert "Ask the league" in r.text
     assert "Methodology" in r.text
@@ -936,19 +966,40 @@ def test_mobile_app_shell_served(api):
     assert "The player box score becomes available after the game is final" in r.text
     manifest = api.get("/app/manifest.json")
     assert manifest.status_code == 200
-    assert manifest.json()["name"] == "POSSESSION LAB"
+    manifest_body = manifest.json()
+    assert manifest_body["name"] == "POSSESSION LAB"
+    assert manifest_body["scope"] == "/app/"
+    assert {icon["sizes"] for icon in manifest_body["icons"]} == {
+        "192x192",
+        "512x512",
+    }
+    for asset in (
+        "icon-192.png",
+        "icon-512.png",
+        "maskable-512.png",
+        "apple-touch-icon.png",
+        "fonts/oswald-600.ttf",
+    ):
+        assert api.get(f"/app/{asset}").status_code == 200
     service_worker = api.get("/app/sw.js")
     assert service_worker.status_code == 200
     assert "fetch(e.request)" in service_worker.text
-    assert "nba-insights-shell-v17" in service_worker.text
+    assert "nba-insights-shell-v20" in service_worker.text
+    assert "nba-insights-public-data-v1" in service_worker.text
+    assert '!e.request.headers.has("Authorization")' in service_worker.text
+    assert '!e.request.headers.has("X-API-Key")' in service_worker.text
     assert api.get("/", follow_redirects=False).status_code in (302, 307)
 
 
 def test_app_metadata(api):
     response = api.get("/meta")
     assert response.status_code == 200
-    assert response.json()["current_season"] in response.json()["seasons"]
-    assert response.json()["prediction_seasons"] == prediction_seasons()
+    body = response.json()
+    assert body["current_season"] in body["seasons"]
+    assert body["prediction_seasons"] == prediction_seasons()
+    assert isinstance(body["capabilities"]["ask_ai"], bool)
+    assert body["capabilities"]["private_salary"] == "local_requests_only"
+    assert set(body["capabilities"]["models"]) == {"outcome", "points", "lineup"}
 
 
 def test_health_and_readiness_do_not_require_data_or_models(api):

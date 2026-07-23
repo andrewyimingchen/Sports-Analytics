@@ -177,7 +177,9 @@ callers need the deployment API key described below. AI Q&A requires
 explain how to train missing model artifacts. The service worker uses the
 network first for the app shell, with its cache reserved as an offline
 fallback, so browser installations pick up UI releases instead of remaining
-on an old shell.
+on an old shell. It also retains last-known copies of explicitly public
+metadata, League Pulse, and schedule responses; authenticated, salary,
+simulation, and AI responses are never stored by the service worker.
 
 ### Protecting remote deployments
 
