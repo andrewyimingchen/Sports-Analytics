@@ -900,70 +900,87 @@ def test_headshot_proxy(api, monkeypatch):
 def test_mobile_app_shell_served(api):
     r = api.get("/app/")
     assert r.status_code == 200
-    assert "POSSESSION LAB" in r.text
+    asset_responses = {
+        name: api.get(f"/app/{name}")
+        for name in ("styles.css", "core.js", "visualizations.js", "app.js")
+    }
+    assert all(response.status_code == 200 for response in asset_responses.values())
+    source = "\n".join([r.text, *(response.text for response in asset_responses.values())])
+    assert "POSSESSION LAB" in source
     assert 'data-page="overview"' not in r.text
     assert '<button class="nav-link active" data-page="pulse">' in r.text
     assert '<section id="page-pulse" class="page active">' in r.text
-    assert ': "pulse";' in r.text
+    assert '<link rel="stylesheet" href="styles.css">' in r.text
+    assert '<script type="module" src="app.js"></script>' in r.text
+    assert r.text.index('src="vendor/d3.min.js"') < r.text.index(
+        'src="vendor/plot.umd.min.js"'
+    ) < r.text.index('src="app.js"')
+    assert 'from "./core.js"' in source
+    assert 'from "./visualizations.js"' in source
+    assert ': "pulse";' in source
     desktop_nav = r.text.split('<nav class="desktop-nav"', 1)[1].split("</nav>", 1)[0]
     mobile_nav = r.text.split('<nav class="mobile-nav"', 1)[1].split("</nav>", 1)[0]
     assert desktop_nav.count("data-page=") == 5
     assert mobile_nav.count("data-page=") == 5
     assert 'data-page="more"' in desktop_nav
-    assert 'id="page-more"' in r.text
-    assert 'id="page-outlook"' in r.text
+    assert 'id="page-more"' in source
+    assert 'id="page-outlook"' in source
     matchup = r.text.split('id="page-matchup"', 1)[1].split(
         'id="page-more"', 1
     )[0]
     assert 'id="season-forecast"' not in matchup
     assert 'id="scenario-lab"' not in matchup
-    assert 'id="pulse-context"' in r.text
-    assert "pulseData.minimum_games" in r.text
-    assert 'data-player-id="' in r.text
-    assert "openTeamRoom" in r.text
-    assert "openMatchup" in r.text
-    assert 'id="more-ask"' in r.text
-    assert "Ask AI is not configured" in r.text
-    assert 'data-retry="pulse"' in r.text
-    assert 'data-search-example="Nikola Jokic"' in r.text
-    assert "fonts.googleapis.com" not in r.text
-    assert 'window.addEventListener("offline"' in r.text
-    assert 'aria-current", "page"' in r.text
-    assert 'heading.focus({preventScroll:true})' in r.text
-    assert 'role="table"' in r.text
-    assert "Shot intelligence" in r.text
-    assert "Ask the league" in r.text
-    assert "Methodology" in r.text
-    assert 'id="prediction-season"' in r.text
-    assert 'id="season-forecast"' in r.text
-    assert 'id="team-comparison-output"' in r.text
-    assert 'id="scenario-lab"' in r.text
-    assert 'id="page-tracking"' in r.text
-    assert "nba-insights-favorites-v1" in r.text
-    assert "Notification.requestPermission" in r.text
-    assert "BASELINE IS NEVER OVERWRITTEN" in r.text
-    assert "RANKED LOCAL CONTRIBUTIONS" in r.text
-    assert "Export JSON" in r.text
-    assert "At-a-glance skill profile" in r.text
-    assert "LEAGUE PERCENTILE · HIGHER IS BETTER" in r.text
-    assert "renderCompareProfile(names,result.percentiles)" in r.text
-    assert 'class="explore-player-link"' in r.text
-    assert 'showPage("players")' in r.text
-    assert "loadProfile(playerId, playerName)" in r.text
-    assert "position percentile octagon" in r.text
-    assert "renderPositionOctagon(positionEntries,name,insights.position_group)" in r.text
-    assert "Higher and farther from center is better" in r.text
-    assert "median · 50th percentile" in r.text
-    assert "grid-template-columns: repeat(3,minmax(0,1fr))" in r.text
-    assert "<h3>Exact percentiles</h3>" not in r.text
-    assert "East, West, playoffs and trophies" in r.text
-    assert 'class="wrap matchup-wrap"' in r.text
-    assert "grid-template-columns: repeat(2,minmax(0,1fr))" in r.text
-    assert ".forecast-conferences > section { min-width: 0; }" in r.text
-    assert "Model registry" in r.text
-    assert "Season forecast backtest" in r.text
-    assert 'id="lineup-slots"' in r.text
-    assert "The player box score becomes available after the game is final" in r.text
+    assert 'id="pulse-context"' in source
+    assert "pulseData.minimum_games" in source
+    assert 'data-player-id="' in source
+    assert "openTeamRoom" in source
+    assert "openMatchup" in source
+    assert 'id="more-ask"' in source
+    assert "Ask AI is not configured" in source
+    assert 'data-retry="pulse"' in source
+    assert 'data-search-example="Nikola Jokic"' in source
+    assert "fonts.googleapis.com" not in source
+    assert 'window.addEventListener("offline"' in source
+    assert 'aria-current", "page"' in source
+    assert 'heading.focus({preventScroll:true})' in source
+    assert 'role="table"' in source
+    assert "Shot intelligence" in source
+    assert "Ask the league" in source
+    assert "Methodology" in source
+    assert 'id="prediction-season"' in source
+    assert 'id="season-forecast"' in source
+    assert 'id="team-comparison-output"' in source
+    assert 'id="scenario-lab"' in source
+    assert 'id="page-tracking"' in source
+    assert "nba-insights-favorites-v1" in source
+    assert "Notification.requestPermission" in source
+    assert "BASELINE IS NEVER OVERWRITTEN" in source
+    assert "Export JSON" in source
+    assert "At-a-glance skill profile" in source
+    assert "LEAGUE PERCENTILE · HIGHER IS BETTER" in source
+    assert "renderCompareProfile(names,result.percentiles)" in source
+    assert 'class="explore-player-link"' in source
+    assert 'showPage("players")' in source
+    assert "loadProfile(playerId, playerName)" in source
+    assert "position percentile octagon" in source
+    assert "renderPositionOctagon(positionEntries,name,insights.position_group)" in source
+    assert "Higher and farther from center is better" in source
+    assert "median · 50th percentile" in source
+    assert "grid-template-columns: repeat(3,minmax(0,1fr))" in source
+    assert "<h3>Exact percentiles</h3>" not in source
+    assert "East, West, playoffs and trophies" in source
+    assert 'class="wrap matchup-wrap"' in source
+    assert "grid-template-columns: repeat(2,minmax(0,1fr))" in source
+    assert ".forecast-conferences > section { min-width: 0; }" in source
+    assert "Model registry" in source
+    assert "Season forecast backtest" in source
+    assert 'id="lineup-slots"' in source
+    assert "The player box score becomes available after the game is final" in source
+    assert "exploreScatterPlot" in source
+    assert "winIntervalPlot" in source
+    assert "matchupRankPlot" in source
+    assert "driverWaterfallPlot" in source
+    assert "View exact matchup values and ranks" in source
     manifest = api.get("/app/manifest.json")
     assert manifest.status_code == 200
     manifest_body = manifest.json()
@@ -979,12 +996,18 @@ def test_mobile_app_shell_served(api):
         "maskable-512.png",
         "apple-touch-icon.png",
         "fonts/oswald-600.ttf",
+        "styles.css",
+        "core.js",
+        "visualizations.js",
+        "app.js",
+        "vendor/d3.min.js",
+        "vendor/plot.umd.min.js",
     ):
         assert api.get(f"/app/{asset}").status_code == 200
     service_worker = api.get("/app/sw.js")
     assert service_worker.status_code == 200
     assert "fetch(e.request)" in service_worker.text
-    assert "nba-insights-shell-v20" in service_worker.text
+    assert "nba-insights-shell-v22" in service_worker.text
     assert "nba-insights-public-data-v1" in service_worker.text
     assert '!e.request.headers.has("Authorization")' in service_worker.text
     assert '!e.request.headers.has("X-API-Key")' in service_worker.text

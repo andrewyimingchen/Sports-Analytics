@@ -18,8 +18,8 @@ includes:
   onward); the header carries draft pedigree and current salary
 - **Compare players** — side-by-side stats, percentile bars, shot quality, and
   a downloadable share poster (the Predictions page has one per matchup too)
-- **Explore stats** — a sortable, filterable league-wide player table with
-  per-game/per-36 views and CSV export
+- **Explore stats** — a filterable player scatterplot with selectable metrics,
+  league-average quadrants, direct labels, exact-data disclosure, and CSV export
 - **Teams** — record/ratings/Elo tiles, season margin trend, roster with
   ratings and salaries (plus committed payroll), per-player on/off impact,
   last ten games, and conference standings
@@ -31,9 +31,10 @@ includes:
 - **Predictions** — game outcome probabilities, a 10,000-run Monte Carlo game
   simulator (margin/total distributions), player points projections with 80%
   intervals, and five-slot starting-lineup estimates
-- **Season outlook** — a 5,000-run Monte Carlo with full East/West tables,
-  projected records and pessimistic/median/optimistic bands, plus playoff,
-  top-6, #1-seed, conference finals, Finals, championship, and NBA Cup odds.
+- **Season outlook** — a 5,000-run Monte Carlo presented through East/West win
+  interval plots and probability rankings, with exact forecast tables available
+  on demand, plus playoff, top-6, #1-seed, conference finals, Finals,
+  championship, and NBA Cup odds.
   The upcoming season uses versioned contract rosters, projected 240-minute
   rotations, availability and age adjustments, and explainable team deltas.
 - **Methodology** — how every model is built, judged, and what was rejected
@@ -166,10 +167,19 @@ Home Screen". It includes League Pulse, deep player profiles (shot charts,
 hot zones, league/position context, splits, on/off, and local contracts),
 Explore with CSV export, two-to-four-player comparisons, Team Room, Game
 Center with full box scores, shared-sample team matchup comparisons with
-ranked model drivers and JSON export, an ephemeral roster/injury/trade scenario
-lab with paired before/after simulations, outcome/simulation/player/lineup tools,
-official tracking/hustle tables with definitions and cache freshness, browser-local
-favorites and opt-in refresh alerts, optional structured AI Q&A, and methodology/model cards.
+league-rank dumbbells, cumulative model-driver waterfalls, and JSON export, an
+ephemeral roster/injury/trade scenario lab with paired before/after simulations,
+outcome/simulation/player/lineup tools, official tracking/hustle tables with
+definitions and cache freshness, browser-local favorites and opt-in refresh
+alerts, optional structured AI Q&A, and methodology/model cards. Dense analytical
+views lead with responsive charts and answer-led captions; exact values remain
+available in collapsed, accessible data tables.
+
+The browser client is split into a small HTML shell, shared styles, application
+orchestration, reusable utilities, and visualization factories. D3 and
+Observable Plot are vendored under `/app/vendor/`, so charts work with the same
+offline app-shell behavior as the rest of the PWA and do not rely on a public
+CDN at runtime.
 
 Salary data stays private: direct-local callers can access it, while remote
 callers need the deployment API key described below. AI Q&A requires

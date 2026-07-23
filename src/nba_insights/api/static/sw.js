@@ -1,10 +1,16 @@
 // App shell is network-first so a deployed UI cannot stay pinned behind an
 // older service worker. The cache is only an offline fallback.
-const SHELL_CACHE = "nba-insights-shell-v20";
+const SHELL_CACHE = "nba-insights-shell-v22";
 const PUBLIC_DATA_CACHE = "nba-insights-public-data-v1";
 const SHELL = [
   "/app/",
   "/app/index.html",
+  "/app/styles.css",
+  "/app/core.js",
+  "/app/visualizations.js",
+  "/app/app.js",
+  "/app/vendor/d3.min.js",
+  "/app/vendor/plot.umd.min.js",
   "/app/manifest.json",
   "/app/icon.svg",
   "/app/icon-192.png",
