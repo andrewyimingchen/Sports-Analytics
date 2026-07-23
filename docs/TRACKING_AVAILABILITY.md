@@ -3,7 +3,7 @@
 Audited against the official stats.nba.com dashboards through the installed
 `nba_api` client on 2026-07-22, using the completed 2025-26 regular season and
 player scope. Every category was available; each response is cached through the
-same immutable-finished-season policy as the rest of NBA Insights.
+same immutable-finished-season policy as the rest of POSSESSION LAB.
 
 | Product category | Official measure / endpoint | Rows | Audited fields |
 |---|---|---:|---|
@@ -15,7 +15,7 @@ same immutable-finished-season policy as the rest of NBA Insights.
 | Hustle | `LeagueHustleStatsPlayer` | 581 | contests, deflections, charges, screen assists, loose balls, box-outs |
 
 Team scope was also verified: Drives and Hustle each returned all 30 teams.
-The team Hustle response omits team tricode and games played; NBA Insights
+The team Hustle response omits team tricode and games played; POSSESSION LAB
 joins the tricode from the same-season team-game cache and leaves the games
 sample explicitly unavailable, so the minimum-games filter is not falsely
 applied to that category.

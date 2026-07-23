@@ -1,4 +1,4 @@
-"""NBA Insights — player profiles, form trends, shot charts, comparisons.
+"""POSSESSION LAB — player profiles, form trends, shot charts, comparisons.
 
 Run with: uv run streamlit run app/streamlit_app.py
 """
@@ -128,7 +128,11 @@ def _diverging_color(value: float, span: float) -> str:
     )
     return "#" + "".join(f"{c:02x}" for c in channels)
 
-st.set_page_config(page_title="NBA Insights", page_icon="🏀", layout="wide")
+st.set_page_config(
+    page_title="POSSESSION LAB — Internal Analytics",
+    page_icon="🏀",
+    layout="wide",
+)
 
 
 def theme_palette() -> dict:
@@ -3241,8 +3245,9 @@ def main() -> None:
         st.switch_page(PAGES[goto])
 
     # brand lives in the sidebar; the page headline names the page, so the
-    # same "NBA Insights" wordmark no longer eats the top of all six pages
-    st.sidebar.title("🏀 NBA Insights")
+    # same "POSSESSION LAB" wordmark no longer eats the top of all six pages
+    st.sidebar.title("🏀 POSSESSION LAB")
+    st.sidebar.caption("INTERNAL ANALYTICS CONSOLE")
     st.sidebar.caption(
         "Data: stats.nba.com via nba_api. Responses are cached locally; "
         "current-season data refreshes daily."

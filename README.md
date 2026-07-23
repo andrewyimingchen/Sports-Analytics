@@ -1,6 +1,9 @@
-# NBA Insights 🏀
+# POSSESSION LAB 🏀
 
-A Streamlit app in nine pages:
+POSSESSION LAB is an installable progressive web app backed by FastAPI. Its
+public experience lives at `/app/`; the Streamlit surface is retained as an
+internal analytics console, not a second customer-facing product. The PWA
+includes:
 
 - **League pulse** — the landing page: per-game and net/clutch-rating leaders,
   Elo power rankings, best/worst net ratings, and the next slate with win
@@ -47,13 +50,19 @@ Requires [uv](https://docs.astral.sh/uv/) and Python ≥ 3.11.
 ```bash
 uv sync
 uv run python -m nba_insights.warm --top 20   # optional but recommended: prefetch
-uv run streamlit run app/streamlit_app.py
+uv run uvicorn nba_insights.api:app --port 8000
 ```
 
-Then open http://localhost:8501, search a player, and explore. The warm
+Then open http://127.0.0.1:8000/app/, search a player, and explore. The warm
 step prefetches the league dashboards and top players so the first page
 load is instant; skip it and the first views fetch live instead
 (rate-limited, so the landing page can take a while on a cold cache).
+
+For internal research and data diagnostics only:
+
+```bash
+uv run streamlit run app/streamlit_app.py
+```
 
 ## Architecture
 
@@ -65,7 +74,7 @@ src/nba_insights/
 ├── ml/          # features, Elo, outcome/points/lineup models, game simulator
 ├── pbp/         # play-by-play corpus: backfill, garbage time, stint lineups
 └── api/         # FastAPI JSON endpoints + PWA
-app/             # Streamlit UI (seven pages; ui.py holds the CSS motion layer)
+app/             # internal Streamlit research and diagnostics console
 tests/           # unit + AppTest smoke tests — no network required
 ```
 
@@ -73,6 +82,10 @@ The layers are strictly separated: **ingest** is the only code that touches the
 network, **store** decides freshness (and serves stale data if stats.nba.com is
 unreachable, so the app degrades gracefully offline), and **analysis** is pure
 functions over DataFrames — fully testable without a connection.
+
+The PWA is the official product surface; Streamlit has no public feature-parity
+obligation. See [`docs/PRODUCT_SURFACES.md`](docs/PRODUCT_SURFACES.md) for the
+development and retirement policy.
 
 ### Known upstream quirks handled
 
@@ -141,11 +154,34 @@ lab with paired before/after simulations, outcome/simulation/player/lineup tools
 official tracking/hustle tables with definitions and cache freshness, browser-local
 favorites and opt-in refresh alerts, optional structured AI Q&A, and methodology/model cards.
 
-Salary data stays local-only. AI Q&A requires `uv sync --extra ai` plus a
-server-side `ANTHROPIC_API_KEY`; prediction tools explain how to train missing
-model artifacts. The service worker uses the network first for the app shell,
-with its cache reserved as an offline fallback, so browser installations pick
-up UI releases instead of remaining on an old shell.
+Salary data stays private: direct-local callers can access it, while remote
+callers need the deployment API key described below. AI Q&A requires
+`uv sync --extra ai` plus a server-side `ANTHROPIC_API_KEY`; prediction tools
+explain how to train missing model artifacts. The service worker uses the
+network first for the app shell, with its cache reserved as an offline
+fallback, so browser installations pick up UI releases instead of remaining
+on an old shell.
+
+### Protecting remote deployments
+
+Direct localhost use needs no POSSESSION LAB API key. For remote deployments,
+`POST /ask` and salary/contract data require `POSSESSION_LAB_API_KEY` via an
+`X-API-Key` or Bearer header. Simulation routes have a weighted per-client
+budget (100,000 simulated games per 60 seconds by default); set
+`POSSESSION_LAB_REQUIRE_API_KEY=true` to authenticate those routes too.
+
+```bash
+export POSSESSION_LAB_API_KEY="replace-with-a-long-random-secret"
+export POSSESSION_LAB_SIMULATION_BUDGET=100000
+export POSSESSION_LAB_AI_REQUEST_BUDGET=5
+export POSSESSION_LAB_RATE_WINDOW_SECONDS=60
+```
+
+Forwarding headers are ignored unless the immediate proxy IP is listed in
+`POSSESSION_LAB_TRUSTED_PROXY_IPS`. If a browser-facing gateway protects the
+app, have it inject the API key server-side; never embed the secret in PWA
+JavaScript. The built-in budget is per process, so multi-worker deployments
+should additionally enforce a shared limit at the gateway.
 
 ## JSON API & share cards
 

@@ -100,10 +100,10 @@ def _page(title: str, klass: str, body: str) -> str:
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{escape(title)} — NBA Insights</title><style>{_POSTER_CSS}</style></head>
+<title>{escape(title)} — POSSESSION LAB</title><style>{_POSTER_CSS}</style></head>
 <body><div class="poster {klass}">
 {body}
-<div class="foot">NBA Insights · data: stats.nba.com · DPM: darko.app</div>
+<div class="foot">POSSESSION LAB · data: stats.nba.com · DPM: darko.app</div>
 </div></body></html>"""
 
 
@@ -125,7 +125,7 @@ def compare_poster_html(table: pd.DataFrame, season: str) -> str:
             for n, v in table.loc[stat].items()
         )
         rows.append(f'<tr><td class="label">{escape(_LABELS.get(stat, stat))}</td>{cells}</tr>')
-    body = f"""<div class="brand">NBA Insights · {escape(season)}</div>
+    body = f"""<div class="brand">POSSESSION LAB · {escape(season)}</div>
 <div class="names" style="grid-template-columns: repeat({len(names)}, 1fr)">{name_cells}</div>
 <table><tbody>{"".join(rows)}</tbody></table>"""
     return _page(" vs ".join(names), "square", body)
@@ -135,7 +135,7 @@ def prediction_poster_html(home: str, away: str, prob: float, season: str) -> st
     """16:9 game-prediction poster; *prob* is the home team's win chance."""
     home_c, away_c = _rgb(_SERIES[0]), _rgb(_SERIES[1])
     fav, fav_prob, fav_c = (home, prob, home_c) if prob >= 0.5 else (away, 1 - prob, away_c)
-    body = f"""<div class="brand">NBA Insights · game prediction · {escape(season)}</div>
+    body = f"""<div class="brand">POSSESSION LAB · game prediction · {escape(season)}</div>
 <div class="matchup"><span class="team" style="color:{home_c}">{escape(home)}</span>
 <span class="at">vs</span>
 <span class="team" style="color:{away_c}">{escape(away)}</span></div>
@@ -188,7 +188,7 @@ def compare_poster_png(table: pd.DataFrame, season: str) -> bytes:
     col_w = (side - 2 * pad - label_w) // len(names)
     col_x = [pad + label_w + col_w * i for i in range(len(names))]
 
-    draw.text((pad, pad), f"NBA INSIGHTS · {season}", font=_font(26), fill=_MUTED)
+    draw.text((pad, pad), f"POSSESSION LAB · {season}", font=_font(26), fill=_MUTED)
 
     name_size = {2: 44, 3: 36}.get(len(names), 30)
     name_font = _font(name_size, bold=True)
@@ -220,7 +220,7 @@ def compare_poster_png(table: pd.DataFrame, season: str) -> bytes:
 
     draw.text(
         (pad, side - pad + 30),
-        "NBA Insights · data: stats.nba.com · DPM: darko.app",
+        "POSSESSION LAB · data: stats.nba.com · DPM: darko.app",
         font=_font(22),
         fill=_MUTED,
     )
@@ -237,7 +237,7 @@ def prediction_poster_png(home: str, away: str, prob: float, season: str) -> byt
     home_c, away_c = _SERIES[0], _SERIES[1]
 
     draw.text(
-        (pad, pad), f"NBA INSIGHTS · GAME PREDICTION · {season}", font=_font(26), fill=_MUTED
+        (pad, pad), f"POSSESSION LAB · GAME PREDICTION · {season}", font=_font(26), fill=_MUTED
     )
 
     team_font = _font(84, bold=True)
@@ -270,7 +270,7 @@ def prediction_poster_png(home: str, away: str, prob: float, season: str) -> byt
 
     draw.text(
         (pad, h - pad + 30),
-        "NBA Insights · data: stats.nba.com",
+        "POSSESSION LAB · data: stats.nba.com",
         font=_font(22),
         fill=_MUTED,
     )

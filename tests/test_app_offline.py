@@ -112,7 +112,7 @@ def test_home_page_renders_offline(offline_app):
     assert not at.exception, [e.value for e in at.exception]
     assert not at.error, [e.value for e in at.error]
     titles = [t.value for t in at.title] + [t.value for t in at.sidebar.title]
-    assert "🏀 NBA Insights" in titles  # brand now lives in the sidebar
+    assert "🏀 POSSESSION LAB" in titles  # brand now lives in the sidebar
     assert any("League pulse" in t for t in titles)  # page headline names the page
     assert len(at.metric) >= 4  # leader tiles from the fixture league
 

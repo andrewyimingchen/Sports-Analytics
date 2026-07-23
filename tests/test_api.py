@@ -394,6 +394,7 @@ def test_player_splits_on_off_and_contract(api):
     contract = api.get("/players/1/contract")
     assert contract.status_code == 200
     assert contract.json()["local_only"] is True
+    assert contract.json()["access"] == "local"
     assert contract.json()["salaries"]["2025-26"] == 30_000_000
     assert contract.json()["history"][0]["SALARY"] == 24_000_000
 
@@ -514,6 +515,7 @@ def test_team_profile(api):
     assert body["on_off"][0]["NET_DIFF"] == 14
     assert body["standings"]
     assert body["finances"]["payroll"] == 30_000_000
+    assert body["finances"]["access"] == "local"
     assert api.get("/teams/ZZZ/profile").status_code == 404
 
 
@@ -898,7 +900,7 @@ def test_headshot_proxy(api, monkeypatch):
 def test_mobile_app_shell_served(api):
     r = api.get("/app/")
     assert r.status_code == 200
-    assert "NBA Insights" in r.text
+    assert "POSSESSION LAB" in r.text
     assert "Shot intelligence" in r.text
     assert "Ask the league" in r.text
     assert "Methodology" in r.text
@@ -932,11 +934,13 @@ def test_mobile_app_shell_served(api):
     assert "Season forecast backtest" in r.text
     assert 'id="lineup-slots"' in r.text
     assert "The player box score becomes available after the game is final" in r.text
-    assert api.get("/app/manifest.json").status_code == 200
+    manifest = api.get("/app/manifest.json")
+    assert manifest.status_code == 200
+    assert manifest.json()["name"] == "POSSESSION LAB"
     service_worker = api.get("/app/sw.js")
     assert service_worker.status_code == 200
     assert "fetch(e.request)" in service_worker.text
-    assert "nba-insights-shell-v16" in service_worker.text
+    assert "nba-insights-shell-v17" in service_worker.text
     assert api.get("/", follow_redirects=False).status_code in (302, 307)
 
 
@@ -945,6 +949,14 @@ def test_app_metadata(api):
     assert response.status_code == 200
     assert response.json()["current_season"] in response.json()["seasons"]
     assert response.json()["prediction_seasons"] == prediction_seasons()
+
+
+def test_health_and_readiness_do_not_require_data_or_models(api):
+    assert api.get("/healthz").json() == {"status": "ok"}
+    readiness = api.get("/readyz")
+    assert readiness.status_code == 200
+    assert readiness.json()["status"] == "ready"
+    assert readiness.json()["pwa_shell"] is True
 
 
 def test_compare_poster_endpoint(api):
