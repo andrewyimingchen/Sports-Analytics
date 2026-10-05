@@ -397,7 +397,7 @@ input:focus, select:focus { border-color: var(--orange); box-shadow: 0 0 0 3px r
 .compare-output { margin-top: 15px; min-height: 330px; background: var(--panel); border: 1px solid var(--line-soft); border-radius: var(--radius); padding: 25px; }
 .compare-head { display: grid; grid-template-columns: 120px repeat(2,1fr); gap: 10px; align-items: end;
   padding-bottom: 18px; border-bottom: 1px solid var(--line-soft); }
-.compare-head div:not(:first-child) { font: 600 clamp(24px,4vw,43px)/.95 var(--display); text-transform: uppercase; }
+.compare-head div:not(:first-child) { min-width: 0; overflow-wrap: anywhere; -webkit-hyphens: auto; hyphens: auto; font: 600 clamp(24px,4vw,43px)/.95 var(--display); text-transform: uppercase; }
 .compare-table-row { display: grid; grid-template-columns: 120px repeat(2,1fr); gap: 10px; align-items: center;
   min-height: 46px; border-bottom: 1px solid var(--line-soft); }
 .compare-table-row label { color: var(--muted); font: 9px var(--mono); }.compare-table-row span { font: 600 18px var(--display); }
@@ -554,10 +554,18 @@ footer { border-top: 1px solid var(--line-soft); padding: 34px 0 100px; }
   .team-row { gap: 8px; }.team-name { font-size: 47px; }.probability b { font-size: 88px; }
   .footer-inner { align-items: flex-start; flex-direction: column; }.ticker-track { animation-duration: 18s; }
   .leader-grid { grid-template-columns: 1fr; }.compare-picker { grid-template-columns: 1fr; }
-  .vs-small { display: none; }.compare-head, .compare-table-row { grid-template-columns: 74px repeat(2,1fr); }
+  .vs-small { display: none; }.compare-output { --compare-label: 74px; padding: 16px; }
+  .compare-head, .compare-table-row { grid-template-columns: 74px repeat(2,minmax(0,1fr)); }
+  .compare-head div:not(:first-child) { font-size: clamp(15px,4.6vw,24px); }
+  .compare-table-row span { font-size: 15px; }
   .team-identity { grid-template-columns: repeat(2,1fr); }.team-code { grid-column: 1/-1; }
-  .explore-controls, .tracking-controls, .game-filters { grid-template-columns: 1fr; }.game-row { min-width: 690px; }
-  .game-section { overflow-x: auto; }
+  .explore-controls, .tracking-controls, .game-filters { grid-template-columns: 1fr; }/* Phones stack each game instead of scrolling a 690px row sideways. */
+  .game-row { grid-template-columns: minmax(0,1fr) auto; gap: 4px 12px; }
+  .game-row > :nth-child(1) { grid-area: 2 / 1; }
+  .game-row > :nth-child(2) { grid-area: 1 / 1; }
+  .game-row > :nth-child(3) { grid-area: 1 / 2; text-align: right; color: var(--paper); }
+  .game-row > :nth-child(4) { grid-area: 2 / 2; text-align: right; }
+  .game-row > :nth-child(5) { grid-area: 3 / 1 / 4 / 3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .game-story-card { padding: 17px; }.game-story-row { grid-template-columns: 54px 74px 1fr; }
   .game-story-row span:last-child { display: none; }
   .rotation-grid { grid-template-columns: 1fr; }.team-comparison { padding: 17px; }

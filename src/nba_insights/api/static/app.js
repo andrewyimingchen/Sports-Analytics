@@ -584,7 +584,7 @@ $("compare-go").addEventListener("click", async () => {
       const valid = values.filter(Number.isFinite), best = valid.length ? (lowerBetter.has(stat) ? Math.min(...valid) : Math.max(...valid)) : null;
       return `<div class="compare-table-row"><label>${escapeHTML(stat.replaceAll("_"," "))}</label>${values.map(value => `<span class="${value === best ? "winner" : ""}">${Number.isFinite(value) ? fmt(value, stat === "GP" ? 0 : 1) : "—"}</span>`).join("")}</div>`;
     }).join("");
-    const grid=`120px repeat(${names.length},1fr)`;
+    const grid=`var(--compare-label,120px) repeat(${names.length},minmax(0,1fr))`;
     const careerStats=[...new Set(names.flatMap(name=>Object.keys(result.career?.[name]||{})))];
     const careerRows=careerStats.map(stat=>`<div class="compare-table-row" style="grid-template-columns:${grid}"><label>${escapeHTML(stat.replaceAll("_"," "))}</label>${names.map(name=>`<span>${result.career?.[name]?.[stat]==null?"—":fmt(result.career[name][stat],stat==="GP"?0:2)}</span>`).join("")}</div>`).join("");
     const pctStats=[...new Set(names.flatMap(name=>Object.keys(result.percentiles?.[name]||{})))];
