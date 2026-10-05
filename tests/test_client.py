@@ -44,6 +44,23 @@ def test_season_fetched_after_past_vs_current(tmp_path):
     assert cutoff == datetime(2024, 7, 1, tzinfo=UTC)
 
 
+def test_preseason_data_stays_live_while_prior_season_is_current(tmp_path, monkeypatch):
+    from datetime import date
+
+    from nba_insights import config
+
+    client = make_client(tmp_path)
+    monkeypatch.setattr(config, "_today", lambda: date(2026, 10, 5))
+    config.set_season_started_check(lambda season: False)
+    assert config.current_season() == "2025-26"
+    # the new season's preseason fetches must keep refreshing, not freeze
+    assert client._season_ttl("2026-27") is not None
+    assert client._season_fetched_after("2026-27") is None
+    # the finished season is immutable once fetched after its Finals
+    assert client._season_ttl("2025-26") is None
+    assert client._season_fetched_after("2025-26") == datetime(2026, 7, 1, tzinfo=UTC)
+
+
 def test_box_score_fetches_once_then_reads_cache(tmp_path, monkeypatch):
     calls = []
     expected = pd.DataFrame({"gameId": ["0022600001"], "points": [30]})

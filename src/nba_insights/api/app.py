@@ -91,6 +91,7 @@ from nba_insights.config import (
     past_seasons,
     prediction_seasons,
     seasons_since,
+    set_season_started_check,
 )
 from nba_insights.ingest import NBAClient
 from nba_insights.ml import (
@@ -156,7 +157,10 @@ def readiness() -> dict:
 
 @lru_cache(maxsize=1)
 def get_client() -> NBAClient:
-    return NBAClient()
+    client = NBAClient()
+    # Keep the prior season current until the new one has regular-season games.
+    set_season_started_check(client.season_has_started)
+    return client
 
 
 Client = Annotated[NBAClient, Depends(get_client)]

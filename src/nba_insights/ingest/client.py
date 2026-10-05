@@ -39,7 +39,7 @@ from nba_api.stats.endpoints import (
 )
 from nba_api.stats.static import players
 
-from nba_insights.config import CACHE_DB, current_season
+from nba_insights.config import CACHE_DB, calendar_season, current_season
 from nba_insights.ingest.darko import fetch_darko
 from nba_insights.ingest.salaries import fetch_career_salaries, fetch_contracts
 from nba_insights.store import Cache
@@ -262,6 +262,10 @@ class NBAClient:
         """League-wide team-game rows for a season (two rows per game)."""
         return self._game_finder("T", season or current_season())
 
+    def season_has_started(self, season: str) -> bool:
+        """Whether *season* has any regular-season games yet (preseason excluded)."""
+        return not self.team_games(season).empty
+
     def player_games(self, season: str | None = None) -> pd.DataFrame:
         """League-wide player-game rows for a season (~26k rows)."""
         return self._game_finder("P", season or current_season())
@@ -481,7 +485,7 @@ class NBAClient:
 
         Past years are immutable; the current season's year stays on the
         daily TTL while its combine results are still being published."""
-        past = int(year) < int(current_season()[:4])
+        past = int(year) < int(calendar_season()[:4])
         return self._cached(
             f"draft_combine/{year}",
             lambda: draftcombinestats.DraftCombineStats(
@@ -514,7 +518,9 @@ class NBAClient:
     # -- plumbing ---------------------------------------------------------------
 
     def _season_ttl(self, season: str) -> timedelta | None:
-        return CURRENT_SEASON_TTL if season == current_season() else None
+        # Calendar rule, not current_season(): a season fetched in preseason
+        # is still live even while the app keeps showing the prior season.
+        return CURRENT_SEASON_TTL if season >= calendar_season() else None
 
     def _season_fetched_after(self, season: str) -> datetime | None:
         """Earliest fetch time a past season's entry may have.
@@ -524,7 +530,7 @@ class NBAClient:
         snapshot and must be refetched once the season rolls over. July 1
         after the season's end year is safely past the Finals.
         """
-        if season == current_season():
+        if season >= calendar_season():
             return None
         end_year = int(season[:4]) + 1
         return datetime(end_year, 7, 1, tzinfo=UTC)

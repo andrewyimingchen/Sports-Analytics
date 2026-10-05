@@ -54,7 +54,12 @@ from nba_insights.analysis import (
     zone_efficiency,
 )
 from nba_insights.analysis.shots import ZONE_KEY
-from nba_insights.config import current_season, past_seasons, seasons_since
+from nba_insights.config import (
+    current_season,
+    past_seasons,
+    seasons_since,
+    set_season_started_check,
+)
 from nba_insights.ingest import NBAClient
 from nba_insights.ml import (
     GameOutcomeModel,
@@ -146,7 +151,10 @@ PAL = dict(_LIGHT)
 
 @st.cache_resource
 def get_client() -> NBAClient:
-    return NBAClient()
+    client = NBAClient()
+    # Keep the prior season current until the new one has regular-season games.
+    set_season_started_check(client.season_has_started)
+    return client
 
 
 # plain-language display names for stats.nba.com column codes — raw API
