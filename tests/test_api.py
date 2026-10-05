@@ -510,6 +510,9 @@ def test_team_profile(api):
     assert "form_net" in body["form"]
     assert body["scouting_take"]
     assert body["four_factors"]["off_efg_rank"] >= 1
+    league_teams = {row["team"] for row in body["league_form"]}
+    assert "T1" in league_teams and len(league_teams) > 1
+    assert all({"form_ortg", "form_drtg"} <= row.keys() for row in body["league_form"])
     assert body["recent_games"]
     assert body["lineups"][0]["MIN"] == 180
     assert body["on_off"][0]["NET_DIFF"] == 14
@@ -958,14 +961,29 @@ def test_mobile_app_shell_served(api):
     assert "Export JSON" in source
     assert "At-a-glance skill profile" in source
     assert "LEAGUE PERCENTILE · HIGHER IS BETTER" in source
-    assert "renderCompareProfile(names,result.percentiles)" in source
+    assert "mountCompareVisuals(names,result)" in source
+    assert "compareDumbbellPlot" in source
     assert 'class="explore-player-link"' in source
     assert 'showPage("players")' in source
     assert "loadProfile(playerId, playerName)" in source
-    assert "position percentile octagon" in source
-    assert "renderPositionOctagon(positionEntries,name,insights.position_group)" in source
-    assert "Higher and farther from center is better" in source
-    assert "median · 50th percentile" in source
+    # Radar/octagon shapes were replaced by common-scale percentile dot plots.
+    assert "octagon" not in source.lower()
+    assert "percentileDotPlot(positionPercentiles" in source
+    for builder in (
+        "careerTrendPlot",
+        "splitSmallMultiples",
+        "teamQuadrantPlot",
+        "fourFactorBulletPlot",
+        "onOffSwingPlot",
+        "leaderboardPlot",
+        "metricScatterPlot",
+        "advancedBoxDumbbellPlot",
+        "gameFlowPlot",
+        "calibrationPlot",
+        "journeyPlot",
+    ):
+        assert f"{builder}(" in source
+    assert '<table class="viz-table">' in source
     assert "grid-template-columns: repeat(3,minmax(0,1fr))" in source
     assert "<h3>Exact percentiles</h3>" not in source
     assert "East, West, playoffs and trophies" in source
@@ -1007,7 +1025,7 @@ def test_mobile_app_shell_served(api):
     service_worker = api.get("/app/sw.js")
     assert service_worker.status_code == 200
     assert "fetch(e.request)" in service_worker.text
-    assert "nba-insights-shell-v22" in service_worker.text
+    assert "nba-insights-shell-v23" in service_worker.text
     assert "nba-insights-public-data-v1" in service_worker.text
     assert '!e.request.headers.has("Authorization")' in service_worker.text
     assert '!e.request.headers.has("X-API-Key")' in service_worker.text
