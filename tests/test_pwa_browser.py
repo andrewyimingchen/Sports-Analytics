@@ -8,6 +8,7 @@ job (``uv sync --group browser`` + ``playwright install chromium``).
 
 from __future__ import annotations
 
+import importlib
 import socket
 import threading
 import time
@@ -17,18 +18,60 @@ import pytest
 playwright_sync = pytest.importorskip("playwright.sync_api")
 uvicorn = pytest.importorskip("uvicorn")
 
+import pandas as pd  # noqa: E402
+
 from nba_insights.api import app  # noqa: E402
-from nba_insights.api.app import get_client  # noqa: E402
-from test_api import FakeNBAClient  # noqa: E402
+from nba_insights.api.app import (  # noqa: E402
+    get_client,
+    get_outcome_model,
+    get_points_model,
+    get_win_curve,
+)
+from nba_insights.ml import GameOutcomeModel  # noqa: E402
+from nba_insights.ml.features import game_matchup_frame, team_form_features  # noqa: E402
+from test_api import FakeCurve, FakeNBAClient, FakePointsModel  # noqa: E402
+from test_ml import synthetic_team_games  # noqa: E402
+
+# The module, not the FastAPI object the package re-exports as `app`.
+api_module = importlib.import_module("nba_insights.api.app")
+
+# Same shape as test_api's season-forecast fixture; replaces the simulator.
+SEASON_TABLE = pd.DataFrame({
+    "TEAM": ["T1", "T2", "T3", "T4"],
+    "CONFERENCE": ["East", "East", "West", "West"],
+    "PROJECTED_SEED": [1.2, 2.1, 1.1, 2.4],
+    "PROJECTED_WINS": [55.0, 48.0, 58.0, 45.0],
+    "PROJECTED_LOSSES": [27.0, 34.0, 24.0, 37.0],
+    "PLAYOFF_PROB": [0.95, 0.8, 0.97, 0.7],
+    "CHAMP_PROB": [0.25, 0.1, 0.4, 0.05],
+    "CUP_PROB": [0.2, 0.1, 0.3, 0.1],
+    "CUP_GROUP": ["East A", "East A", "West A", "West A"],
+    "CUP_PROJECTED_GROUP_RANK": [1.2, 2.0, 1.1, 2.4],
+    "CUP_GROUP_WIN_PROB": [0.7, 0.3, 0.8, 0.2],
+    "CUP_WILD_CARD_PROB": [0.1, 0.2, 0.1, 0.1],
+    "CUP_KNOCKOUT_PROB": [0.8, 0.5, 0.9, 0.3],
+    "CUP_FINAL_PROB": [0.4, 0.2, 0.5, 0.1],
+})
 
 DESKTOP = {"width": 1280, "height": 900}
 PHONE = {"width": 390, "height": 844}
 
 # Every visible chart must name itself, say what to take away, expose an
-# accessible SVG label, and (when it has one) keep its data one action away.
+# accessible SVG label, keep its exact data one action away, and never tell
+# legend entries apart by colour alone (distinct dot shapes or direct labels).
 FIGURE_AUDIT = """() => [...document.querySelectorAll('figure.data-figure')]
   .filter((figure) => figure.offsetParent !== null)
-  .map((figure) => ({
+  .map((figure) => {
+    const legend = [...figure.querySelectorAll('[class*="-swatch"]:not([class*="-swatches"])')]
+      .map((swatch) => swatch.textContent.trim()).filter(Boolean);
+    const plots = [...figure.querySelectorAll('.plot-host svg[aria-label]')];
+    const shapes = new Set(plots.flatMap((svg) =>
+      [...svg.querySelectorAll('g[aria-label="dot"] path')].map((path) => path.getAttribute('d'))));
+    const text = plots.map((svg) => svg.textContent).join(' ');
+    return {
+    legend,
+    colourOnly: legend.length >= 2 && shapes.size < legend.length
+      && !legend.every((label) => text.includes(label)),
     title: figure.querySelector('.figure-heading h4')?.textContent.trim() || '',
     takeaway: figure.querySelector('.figure-heading p')?.textContent.trim() || '',
     svgs: figure.querySelectorAll('.plot-host svg[aria-label]').length,
@@ -39,7 +82,7 @@ FIGURE_AUDIT = """() => [...document.querySelectorAll('figure.data-figure')]
       'details.viz-data table, details.viz-data [role="table"]').length,
     summaries: figure.querySelectorAll('details.viz-data > summary').length,
     width: figure.getBoundingClientRect().width,
-  }))"""
+  }; })"""
 OVERFLOW = "document.documentElement.scrollWidth - window.innerWidth"
 
 
@@ -52,6 +95,14 @@ def _free_port() -> int:
 @pytest.fixture(scope="module")
 def base_url():
     app.dependency_overrides[get_client] = FakeNBAClient
+    matchups = game_matchup_frame(team_form_features(synthetic_team_games(60), window=5))
+    outcome = GameOutcomeModel().fit(matchups)
+    app.dependency_overrides[get_outcome_model] = lambda: outcome
+    app.dependency_overrides[get_points_model] = FakePointsModel
+    app.dependency_overrides[get_win_curve] = FakeCurve
+    patches = pytest.MonkeyPatch()
+    patches.setattr(api_module, "_season_forecast_table", lambda *args: SEASON_TABLE)
+    patches.setattr(api_module, "get_player_season_metrics", lambda: {"metrics": {"players": 241}})
     port = _free_port()
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
     thread = threading.Thread(target=server.run, daemon=True)
@@ -64,6 +115,7 @@ def base_url():
     yield f"http://127.0.0.1:{port}/app/"
     server.should_exit = True
     thread.join(timeout=10)
+    patches.undo()
     app.dependency_overrides.clear()
 
 
@@ -102,7 +154,8 @@ def _audit(page, minimum: int) -> list[dict]:
     for figure in figures:
         assert figure["title"] and figure["takeaway"], figure
         assert figure["svgs"] >= 1 and figure["unlabeled"] == 0, figure
-        assert figure["summaries"] == (1 if figure["tables"] else 0), figure
+        assert figure["tables"] >= 1 and figure["summaries"] == 1, figure
+        assert not figure["colourOnly"], figure
     assert page.evaluate(OVERFLOW) <= 0, "page scrolls horizontally"
     return figures
 
@@ -203,3 +256,76 @@ def test_shell_and_charts_load_offline_after_first_visit(browser, base_url):
     assert "POSSESSION LAB" in page.title()
     assert page.locator("#page-pulse").count() == 1
     context.close()
+
+
+def test_explore_chart(page, base_url):
+    _open(page, base_url, "explore")
+    titles = {figure["title"] for figure in _audit(page, 1)}
+    assert any(" by " in title for title in titles)
+
+
+def test_season_outlook_charts(page, base_url):
+    _open(page, base_url, "outlook")
+    titles = {figure["title"] for figure in _audit(page, 4)}
+    assert {"East projected wins", "Playoff probability", "Championship probability"} <= titles
+
+
+def test_matchup_charts(page, base_url):
+    _open(page, base_url, "matchup")
+    page.wait_for_selector("#home option[value='T2']", state="attached")
+    page.select_option("#away", "T1")
+    page.select_option("#home", "T2")
+    page.click("#go")
+    titles = {figure["title"] for figure in _audit(page, 2)}
+    assert {"Same-sample league ranks", "Why the prediction moved"} <= titles
+
+
+def test_tapping_a_point_shows_its_tooltip_on_touch_phones(browser, base_url):
+    context = browser.new_context(viewport=PHONE, has_touch=True, is_mobile=True)
+    page = context.new_page()
+    _open(page, base_url, "players")
+    page.fill("#search", "Alice")
+    page.click("#results button")
+    chart = "#profile-pct-chart .plot-host svg[aria-label]"
+    page.wait_for_selector(chart)
+    dot = page.locator(f'{chart} g[aria-label="dot"] circle').first
+    dot.scroll_into_view_if_needed()
+    tip = page.locator(f'{chart} g[aria-label="tip"]')
+    assert "percentile" not in (tip.text_content() or "")  # nothing shown before the tap
+    box = dot.bounding_box()
+    page.touchscreen.tap(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+    page.wait_for_function(
+        "(sel) => document.querySelector(sel)?.textContent.includes('percentile')",
+        arg=f'{chart} g[aria-label="tip"]',
+    )
+    assert _tip_contrast(page, f'{chart} g[aria-label="tip"]') >= 4.5
+    context.close()
+
+
+def _tip_contrast(page, selector: str) -> float:
+    """WCAG contrast between a Plot tip's text and the box drawn behind it."""
+    return page.evaluate(
+        """(sel) => {
+          const tip = document.querySelector(sel);
+          const rgb = (value) => {
+            const probe = document.createElement('div');
+            probe.style.color = value;
+            document.body.append(probe);
+            const parts = getComputedStyle(probe).color.match(/[\\d.]+/g).slice(0, 3).map(Number);
+            probe.remove();
+            return parts;
+          };
+          const luminance = (color) => {
+            const [r, g, b] = color.map((channel) => {
+              const c = channel / 255;
+              return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+            });
+            return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+          };
+          const box = rgb(getComputedStyle(tip.querySelector('path')).fill);
+          const text = rgb(getComputedStyle(tip.querySelector('text')).fill);
+          const [hi, lo] = [luminance(box), luminance(text)].sort((a, b) => b - a);
+          return (hi + 0.05) / (lo + 0.05);
+        }""",
+        selector,
+    )

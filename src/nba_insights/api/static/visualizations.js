@@ -140,7 +140,7 @@ export function winIntervalPlot(rows, conference) {
     marginBottom: 42,
     style: { background: "transparent", color: PAPER, fontSize: "10px" },
     ariaLabel: `${conference} projected wins interval plot`,
-    ariaDescription: "Each horizontal line is the 10th-to-90th percentile win range. The orange dot is the median projection.",
+    ariaDescription: "Each horizontal line is the 10th-to-90th percentile win range. The dot is the median projection.",
     x: { label: "Projected wins · P10 — median — P90", grid: true, nice: true },
     y: { label: null, domain: data.map((row) => row.TEAM) },
     marks: [
@@ -239,7 +239,7 @@ export function matchupRankPlot(metrics, away, home) {
     marks: [
       Plot.link(data, { x1: "awayRank", x2: "homeRank", y1: "label", y2: "label", stroke: MUTED, strokeWidth: 3 }),
       Plot.dot(data, { x: "awayRank", y: "label", fill: BLUE, r: 6 }),
-      Plot.dot(data, { x: "homeRank", y: "label", fill: ORANGE, r: 6 }),
+      Plot.dot(data, { x: "homeRank", y: "label", fill: ORANGE, symbol: "square", r: 6 }),
       Plot.tip(data.flatMap((row) => [
         { team: away, rank: row.awayRank, label: row.label },
         { team: home, rank: row.homeRank, label: row.label },
@@ -272,14 +272,15 @@ export function driverWaterfallPlot(drivers, away, home) {
     marginBottom: 46,
     style: { background: "transparent", color: PAPER, fontSize: "10px" },
     ariaLabel: "Cumulative matchup model driver waterfall",
-    ariaDescription: `Orange steps move the prediction toward ${home}; blue steps move it toward ${away}.`,
+    ariaDescription: `Steps to the right move the prediction toward ${home}; steps to the left move it toward ${away}.`,
     x: { label: "Cumulative log-odds contribution", grid: true },
     y: { label: null, domain: data.map((row) => row.label) },
-    color: { domain: [away, home], range: [BLUE, ORANGE], legend: true },
+    color: { domain: [away, home], range: [BLUE, ORANGE] },
+    symbol: { domain: [away, home], range: ["circle", "square"], legend: true },
     marks: [
       Plot.ruleX([0], { stroke: PAPER, strokeOpacity: 0.55 }),
       Plot.barX(data, { x1: "start", x2: "end", y: "label", fill: "direction", inset: 5 }),
-      Plot.dot(data, { x: "end", y: "label", fill: "direction", r: 4 }),
+      Plot.dot(data, { x: "end", y: "label", fill: "direction", symbol: "direction", r: 5 }),
       Plot.tip(data, Plot.pointer({
         x: "end",
         y: "label",
@@ -295,6 +296,8 @@ export function driverWaterfallPlot(drivers, away, home) {
 // Colour follows entity order (pick order), never rank.
 export const SERIES = ["#e8572d", "#3d8fe8", "#1baf7a", "#c84f9b"];
 const GRID = "#2a3039";
+// Shape is the second identity channel, so entities never depend on colour alone.
+export const SHAPES = ["circle", "square", "triangle", "diamond"];
 const HOME = SERIES[0];
 const AWAY = SERIES[1];
 const darkStyle = (width, size = 10) => ({
@@ -416,11 +419,12 @@ export function compareDumbbellPlot(names, percentiles, metrics) {
     ariaDescription: "Each row places every player on the same 0 to 100 league-percentile scale. The grey bar spans the gap between the lowest and highest player.",
     x: { label: "League percentile · better →", domain: [0, 100], ticks: [0, 25, 50, 75, 100], grid: true },
     y: { label: null, domain: rows.map((row) => row.label), tickFormat: clip(width, 20, 13) },
-    color: { domain: names, range: SERIES.slice(0, names.length), legend: true },
+    color: { domain: names, range: SERIES.slice(0, names.length) },
+    symbol: { domain: names, range: SHAPES.slice(0, names.length), legend: true },
     marks: [
       Plot.ruleX([50], { stroke: MUTED, strokeWidth: 1.5 }),
       Plot.ruleY(rows, { y: "label", x1: "low", x2: "high", stroke: MUTED, strokeOpacity: 0.55, strokeWidth: 4 }),
-      Plot.dot(dots, { x: "value", y: "label", fill: "name", r: 6, stroke: "#15191f", strokeWidth: 2 }),
+      Plot.dot(dots, { x: "value", y: "label", fill: "name", symbol: "name", r: 6, stroke: "#15191f", strokeWidth: 1.5 }),
       Plot.tip(dots, Plot.pointer({
         x: "value", y: "label",
         title: (row) => `${row.name}\n${row.label}: ${Math.round(row.value)}th percentile`,
@@ -442,7 +446,7 @@ export function compareCareerPlot(names, careerSeasons, key = "PTS", label = "Po
     width,
     height: width < 520 ? 260 : 300,
     marginTop: 16,
-    marginRight: width < 520 ? 24 : 36,
+    marginRight: width < 520 ? 64 : 84,
     marginBottom: 40,
     marginLeft: 40,
     style: darkStyle(width),
@@ -450,11 +454,16 @@ export function compareCareerPlot(names, careerSeasons, key = "PTS", label = "Po
     ariaDescription: "One line per player across their career seasons on a shared per-game axis.",
     x: { label: "Season", tickFormat: seasonTick, ticks: width < 520 ? 4 : 8 },
     y: { label, grid: true, zero: true, nice: true },
-    color: { domain: names, range: SERIES.slice(0, names.length), legend: true },
+    color: { domain: names, range: SERIES.slice(0, names.length) },
+    symbol: { domain: names, range: SHAPES.slice(0, names.length), legend: true },
     marks: [
       Plot.ruleY([0], { stroke: GRID }),
       Plot.lineY(data, { x: "year", y: "value", stroke: "name", strokeWidth: 2 }),
-      Plot.dot(data, { x: "year", y: "value", fill: "name", r: 3, stroke: "#15191f", strokeWidth: 1.5 }),
+      Plot.dot(data, { x: "year", y: "value", fill: "name", symbol: "name", r: 3.5, stroke: "#15191f", strokeWidth: 1 }),
+      Plot.text(data, Plot.selectLast({
+        x: "year", y: "value", z: "name", text: (row) => row.name.split(" ").at(-1),
+        dx: 7, textAnchor: "start", fill: PAPER, fontSize: 9,
+      })),
       Plot.tip(data, Plot.pointer({
         x: "year", y: "value",
         title: (row) => `${row.name} · ${row.season}\n${row.value.toFixed(1)} ${label.toLowerCase()}`,
@@ -603,9 +612,10 @@ export function onOffSwingPlot(rows) {
     style: darkStyle(width),
     ariaLabel: "On/off net rating swing by player",
     ariaDescription: "Bars to the right mean the team's net rating is better with the player on the floor; bars to the left mean worse.",
-    x: { label: "On/off net rating swing (points per 100)", grid: true, nice: true },
+    x: { label: "← team better without · on/off net swing · team better with →", grid: true, nice: true },
     y: { label: null, domain: data.map((row) => row.PLAYER_NAME), tickFormat: clip(width) },
-    color: { domain: ["Team better with player", "Team better without player"], range: [LIME, RED], legend: true },
+    // Colour repeats the sign that position and the signed labels already show.
+    color: { domain: ["Team better with player", "Team better without player"], range: [LIME, RED] },
     marks: [
       Plot.barX(data, { y: "PLAYER_NAME", x: "swing", fill: "sign", insetTop: 5, insetBottom: 5, rx: 2 }),
       Plot.ruleX([0], { stroke: PAPER, strokeOpacity: 0.55 }),
@@ -718,10 +728,11 @@ export function advancedBoxDumbbellPlot(advanced, away, home) {
     ariaDescription: "Each row connects the two teams on the same percentage scale. Turnover rate is better when lower.",
     x: { label: "Percent", grid: true, nice: true, zero: true },
     y: { label: null, domain: rows.map((row) => row.label) },
-    color: { domain: [away, home], range: [AWAY, HOME], legend: true },
+    color: { domain: [away, home], range: [AWAY, HOME] },
+    symbol: { domain: [away, home], range: ["circle", "square"], legend: true },
     marks: [
       Plot.link(rows, { y1: "label", y2: "label", x1: "awayValue", x2: "homeValue", stroke: MUTED, strokeWidth: 3 }),
-      Plot.dot(dots, { x: "value", y: "label", fill: "team", r: 6.5, stroke: "#15191f", strokeWidth: 2 }),
+      Plot.dot(dots, { x: "value", y: "label", fill: "team", symbol: "team", r: 6.5, stroke: "#15191f", strokeWidth: 1.5 }),
       Plot.tip(dots, Plot.pointer({ x: "value", y: "label", title: (row) => `${row.team} · ${row.label}: ${row.value.toFixed(1)}%` })),
     ],
   });

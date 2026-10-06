@@ -575,7 +575,9 @@ footer { border-top: 1px solid var(--line-soft); padding: 34px 0 100px; }
 .figure-heading h4 { margin: 0; color: var(--paper); font: 600 18px var(--display); letter-spacing: -.01em; }
 .figure-heading p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.55; }
 .plot-host { width: 100%; min-width: 0; overflow: hidden; }
-.plot-host svg { display: block; width: 100%; max-width: 100%; height: auto; overflow: visible; }
+.plot-host svg { display: block; width: 100%; max-width: 100%; height: auto; overflow: visible;
+  /* Plot paints tooltip boxes with this; its injected white default left light tip text unreadable. */
+  --plot-background: #0d1115; }
 /* Plot legend swatches keep their intrinsic size. */
 .plot-host [class*="-swatch"] > svg { display: inline; width: 15px; height: 15px; }
 .data-figure figcaption { margin-top: 12px; color: var(--muted-2); font: 9px/1.65 var(--mono); }
@@ -589,6 +591,7 @@ footer { border-top: 1px solid var(--line-soft); padding: 34px 0 100px; }
 .viz-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .viz-legend i { width: 9px; height: 9px; border-radius: 50%; background: var(--orange); }
 .viz-legend i.away { background: #7ab8ff; }
+.viz-legend i.home { border-radius: 2px; }
 .viz-table { width: 100%; border-collapse: collapse; font: 10px var(--mono); }
 .viz-table caption { padding-bottom: 8px; color: var(--muted-2); text-align: left; font-size: 9px; }
 .viz-table th, .viz-table td { padding: 7px 8px; border-bottom: 1px solid var(--line-soft); text-align: right; font-variant-numeric: tabular-nums; }
