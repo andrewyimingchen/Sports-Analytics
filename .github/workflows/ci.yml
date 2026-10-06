@@ -7,16 +7,36 @@ on:
 
 jobs:
   check:
+    name: check (Python ${{ matrix.python }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # pyproject declares requires-python >= 3.11
+        python: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
       - name: Install dependencies
-        run: uv sync --frozen
+        run: uv sync --frozen --python ${{ matrix.python }}
+      - name: Format
+        run: uv run --frozen ruff format --check .
       - name: Lint
-        run: uv run ruff check .
-      - name: Test
-        run: uv run pytest -q
+        run: uv run --frozen ruff check .
+      - name: Type check
+        run: uv run --frozen mypy
+      - name: Test with coverage
+        run: uv run --frozen pytest -q --cov --cov-report=term --cov-report=xml
+      - name: Coverage summary
+        if: always() && matrix.python == '3.12'
+        run: |
+          {
+            echo "### Coverage (Python ${{ matrix.python }})"
+            echo
+            echo '```'
+            uv run --frozen coverage report --skip-covered | tail -25
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   frontend:
     runs-on: ubuntu-latest
