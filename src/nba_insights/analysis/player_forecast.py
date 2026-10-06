@@ -130,7 +130,7 @@ def evaluate_player_season_holdout(projected: pd.DataFrame, actual: pd.DataFrame
     left["_KEY"] = left["PLAYER_NAME"].map(normalize_name)
     right["_KEY"] = right["PLAYER_NAME"].map(normalize_name)
     joined = left.merge(right, on="_KEY", suffixes=("", "_ACTUAL"))
-    metrics = {"players": int(len(joined))}
+    metrics: dict[str, float] = {"players": int(len(joined))}
     for stat in COUNTING_STATS:
         error = joined[f"PROJECTED_{stat}"] - pd.to_numeric(joined[f"{stat}_ACTUAL"])
         metrics[f"{stat.lower()}_mae"] = round(float(error.abs().mean()), 3)

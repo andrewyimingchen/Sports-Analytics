@@ -241,7 +241,7 @@ def prediction_poster_png(home: str, away: str, prob: float, season: str) -> byt
     )
 
     team_font = _font(84, bold=True)
-    x = pad
+    x: float = pad
     draw.text((x, 220), home, font=team_font, fill=home_c, anchor="ls")
     x += draw.textlength(home, font=team_font) + 34
     draw.text((x, 220), "vs", font=_font(36), fill=_MUTED, anchor="ls")

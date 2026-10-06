@@ -153,7 +153,7 @@ def season_forecast(
     cup_final_count = np.zeros(len(teams), dtype=int)
     wins_samples = np.zeros((n_sims, len(teams)), dtype=np.int16)
     for simulation in range(n_sims):
-        strength = _sigmoid(_logit(base_strength) + rng.normal(0.0, uncertainty))
+        strength = np.asarray(_sigmoid(_logit(base_strength) + rng.normal(0.0, uncertainty)))
         wins = rng.binomial(82, strength)
         wins_samples[simulation] = wins
         wins_total += wins

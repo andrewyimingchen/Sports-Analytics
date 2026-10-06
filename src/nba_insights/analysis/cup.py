@@ -21,6 +21,11 @@ CUP_2026_GROUPS = {
 }
 
 
+def _pair(first: int, second: int) -> tuple[int, int]:
+    """Order-independent key for a head-to-head result."""
+    return (first, second) if first <= second else (second, first)
+
+
 def _probability(strength_a: float, strength_b: float, home: bool = False) -> float:
     a = np.clip(strength_a, 0.03, 0.97)
     b = np.clip(strength_b, 0.03, 0.97)
@@ -60,7 +65,7 @@ def _rank_group(
         tied = [team for team in members if wins[team] == win_total]
         h2h_wins = {
             team: sum(
-                head_to_head.get(tuple(sorted((team, opponent)))) == team
+                head_to_head.get(_pair(team, opponent)) == team
                 for opponent in tied
                 if opponent != team
             )
@@ -100,7 +105,7 @@ def simulate_cup_once(
         wins = {team: 0 for team in members}
         differential = {team: 0 for team in members}
         points = {team: 0 for team in members}
-        head_to_head = {}
+        head_to_head: dict[tuple[int, int], int] = {}
         for team_a, team_b in combinations(members, 2):
             winner, score_a, score_b = _play_game(team_a, team_b, strength, rng)
             wins[winner] += 1
@@ -108,7 +113,7 @@ def simulate_cup_once(
             differential[team_b] += score_b - score_a
             points[team_a] += score_a
             points[team_b] += score_b
-            head_to_head[tuple(sorted((team_a, team_b)))] = winner
+            head_to_head[_pair(team_a, team_b)] = winner
         ranked = _rank_group(members, wins, differential, points, head_to_head, strength, rng)
         group_ranks[name] = ranked
         records.update({team: (wins[team], differential[team], points[team]) for team in members})

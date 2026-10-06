@@ -2010,7 +2010,11 @@ def ask_league(body: AskBody, client: Client) -> dict:
         final = None
         for message in runner:
             final = message
-        answer = "".join(block.text for block in final.content if block.type == "text")
+        if final is None:
+            raise RuntimeError("tool runner produced no message")
+        answer = "".join(
+            getattr(block, "text", "") for block in final.content if block.type == "text"
+        )
     except anthropic.AuthenticationError as error:
         raise HTTPException(503, "Anthropic credential was rejected") from error
     except Exception as error:
