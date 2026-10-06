@@ -9,7 +9,10 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.svg">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles/base.css">
+<link rel="stylesheet" href="styles/pages.css">
+<link rel="stylesheet" href="styles/responsive.css">
+<link rel="stylesheet" href="styles/viz.css">
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -79,7 +82,7 @@
   <section id="page-pulse" class="page active">
     <div class="wrap data-shell">
       <div class="app-head"><div><div class="eyebrow">League leaders and team form</div><h1 class="section-title">League pulse.</h1></div><div class="app-meta">Qualified leaders<br>Season-to-date form</div></div>
-      <div class="data-toolbar"><div><span>The clearest signals from player production and team efficiency.</span><div class="data-context" id="pulse-context"><span>Loading qualification and cutoff…</span></div></div><div class="select-wrap"><select id="pulse-season"><option>Loading season…</option></select></div></div>
+      <div class="data-toolbar"><div><span>The clearest signals from player production and team efficiency.</span><div class="data-context" id="pulse-context"><span>Loading qualification and cutoff…</span></div></div><div class="select-wrap"><select id="pulse-season" aria-label="Season"><option>Loading season…</option></select></div></div>
       <div id="pulse-content"><div class="panel empty-state"><div class="loading">LOADING LEAGUE PULSE…</div></div></div>
     </div>
   </section>
@@ -134,7 +137,7 @@
     <div class="wrap data-shell">
       <div class="app-head"><div><div class="eyebrow">Choose a team</div><h1 class="section-title">Team stats.</h1></div><div class="app-meta">Form + efficiency<br>Rotation production</div></div>
       <div class="team-control">
-        <div class="team-selector"><h3>Choose a team</h3><div class="select-wrap"><select id="team-pick"><option>Loading teams…</option></select></div></div>
+        <div class="team-selector"><h3>Choose a team</h3><div class="select-wrap"><select id="team-pick" aria-label="Team"><option>Loading teams…</option></select></div></div>
         <div class="team-identity" id="team-identity"><div class="team-code">—</div><div class="team-metric"><b>—</b><span>Win rate</span></div><div class="team-metric"><b>—</b><span>Net rating</span></div><div class="team-metric"><b>—</b><span>Off rating</span></div><div class="team-metric"><b>—</b><span>Def rating</span></div></div>
       </div>
       <div class="roster-panel" id="roster-panel"><div class="empty-state" style="min-height:330px"><div class="loading">CHOOSE A TEAM TO OPEN THE ROOM…</div></div></div>
@@ -247,7 +250,7 @@
   <section id="page-games" class="page">
     <div class="wrap data-shell">
       <div class="app-head"><div><div class="eyebrow">Scores and schedule</div><h1 class="section-title">Game center.</h1></div><div class="app-meta">Finals + upcoming<br>Top performers</div></div>
-      <div class="game-filters"><div class="select-wrap"><select id="games-team"><option value="">All teams</option></select></div><div class="select-wrap"><select id="games-season"><option>Loading seasons…</option></select></div></div>
+      <div class="game-filters"><div class="select-wrap"><select id="games-team" aria-label="Filter by team"><option value="">All teams</option></select></div><div class="select-wrap"><select id="games-season" aria-label="Season"><option>Loading seasons…</option></select></div></div>
       <div id="games-output"><div class="panel empty-state"><div class="loading">LOADING GAME CENTER…</div></div></div>
       <div id="box-score-output"></div>
     </div>

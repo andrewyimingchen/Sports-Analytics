@@ -1521,6 +1521,20 @@ def search_players(q: Annotated[str, Query(min_length=3)], client: Client) -> li
     ]
 
 
+# Declared after /players/search so "search" is never parsed as an ID.
+@app.get("/players/{player_id}")
+def player_lookup(player_id: int, client: Client) -> dict:
+    """One player's identity, for deep links that carry only an ID."""
+    player = client.find_player(player_id)
+    if player is None:
+        raise HTTPException(404, f"unknown player {player_id}")
+    return {
+        "id": player["id"],
+        "full_name": player["full_name"],
+        "is_active": player["is_active"],
+    }
+
+
 @app.get("/players/{player_id}/career")
 def player_career(player_id: int, client: Client) -> list[dict]:
     """Per-game career averages, one record per season."""

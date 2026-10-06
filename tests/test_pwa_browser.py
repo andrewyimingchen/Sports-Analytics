@@ -240,6 +240,16 @@ def test_chart_libraries_are_served_locally(page, base_url):
     page.wait_for_function("Boolean(window.Plot && window.d3)")
     external = [url for url in requests if not url.startswith(base_url.rsplit("/app/", 1)[0])]
     assert not external, external
+    # web fonts resolve from the stylesheets' own location and all load
+    page.evaluate("document.fonts.ready.then(() => true)")
+    fonts = [url for url in requests if url.endswith(".ttf")]
+    assert fonts, "no web fonts were requested"
+    assert all("/app/fonts/" in url for url in fonts), fonts
+    statuses = page.evaluate(
+        "[...document.fonts].map((face) => `${face.family} ${face.weight} ${face.status}`)"
+    )
+    assert any(status.endswith("loaded") for status in statuses), statuses
+    assert not [status for status in statuses if status.endswith("error")], statuses
 
 
 def test_shell_and_charts_load_offline_after_first_visit(browser, base_url):
@@ -329,3 +339,129 @@ def _tip_contrast(page, selector: str) -> float:
         }""",
         selector,
     )
+
+
+@pytest.mark.parametrize("nav", [".desktop-nav", ".mobile-nav"])
+def test_primary_navigation_updates_page_url_and_current_item(browser, base_url, nav):
+    viewport = DESKTOP if nav == ".desktop-nav" else PHONE
+    context = browser.new_context(viewport=viewport)
+    page = context.new_page()
+    page.goto(base_url)
+    for target in ("players", "games", "matchup", "more", "pulse"):
+        page.click(f'{nav} [data-page="{target}"]')
+        assert page.locator(f"#page-{target}").get_attribute("class").split().count("active") == 1
+        assert page.locator(f'{nav} [data-page="{target}"]').get_attribute("aria-current") == "page"
+        assert page.evaluate("location.hash") == ("" if target == "pulse" else f"#{target}")
+        assert page.locator(".page.active").count() == 1
+    # secondary pages open from the More hub and keep More current
+    page.click(f'{nav} [data-page="more"]')
+    page.click('#page-more [data-page="outlook"]')
+    assert page.evaluate("location.hash") == "#outlook"
+    assert page.locator(f'{nav} [data-page="more"]').get_attribute("aria-current") == "page"
+    context.close()
+
+
+def test_player_deep_link_opens_profile_and_stays_shareable(page, base_url):
+    page.goto(f"{base_url}#players/1")
+    page.wait_for_selector("#profile .profile-identity h2")
+    assert page.text_content("#profile .profile-identity h2") == "Alice Hooper"
+    assert page.locator("#page-players").get_attribute("class").split().count("active") == 1
+    assert page.evaluate("location.hash") == "#players/1"
+    # a link pasted into the open tab routes without a reload
+    page.evaluate("location.hash = '#players/999'")
+    page.wait_for_selector("#profile >> text=Player not found")
+    # opening a profile from search rewrites the URL to that profile
+    page.fill("#search", "Alice")
+    page.click("#results button")
+    page.wait_for_function("location.hash === '#players/1'")
+
+
+def test_unknown_hash_falls_back_to_league_pulse(page, base_url):
+    page.goto(f"{base_url}#not-a-page/7")
+    assert page.locator("#page-pulse").get_attribute("class").split().count("active") == 1
+
+
+def test_forecast_tables_expose_every_team_in_order(page, base_url):
+    _open(page, base_url, "outlook")
+    _audit(page, 4)
+    east = page.locator("#outlook-east-chart details.viz-data")
+    east.locator("summary").click()
+    rows = east.locator('[role="row"]:not(.header)')
+    assert rows.count() == 2  # T1 and T2 play in the East
+    assert "T1" in rows.first.text_content()
+    title = page.locator("#outlook-title-chart details.viz-data")
+    title.locator("summary").click()
+    teams = title.locator("tbody th").all_text_contents()
+    assert teams == ["T3", "T1", "T2", "T4"]  # sorted by title probability
+
+
+def _flow_pulse(page, base_url):
+    _open(page, base_url, "pulse")
+    page.wait_for_selector("#pulse-content .leader-card")
+
+
+def _flow_profile(page, base_url):
+    _open(page, base_url, "players")
+    page.fill("#search", "Alice")
+    page.click("#results button")
+    page.wait_for_selector("#split-viz figure")
+
+
+def _flow_compare(page, base_url):
+    _open(page, base_url, "compare")
+    _pick(page, "compare-a", "Alice")
+    _pick(page, "compare-b", "Bob")
+    page.click("#compare-go")
+    page.wait_for_selector("#compare-skill-chart figure")
+
+
+def _flow_team(page, base_url):
+    _open(page, base_url, "teams")
+    page.wait_for_selector("#team-pick option[value='T1']", state="attached")
+    page.select_option("#team-pick", "T1")
+    page.wait_for_selector("#team-factor-chart figure")
+
+
+def _flow_game(page, base_url):
+    _open(page, base_url, "games")
+    page.click(".game-row[data-game-id='001']")
+    page.wait_for_selector("#game-flow-chart figure")
+
+
+def _flow_matchup(page, base_url):
+    _open(page, base_url, "matchup")
+    page.wait_for_selector("#home option[value='T2']", state="attached")
+    page.select_option("#away", "T1")
+    page.select_option("#home", "T2")
+    page.click("#go")
+    page.wait_for_selector("#matchup-rank-chart figure")
+
+
+def _flow_outlook(page, base_url):
+    _open(page, base_url, "outlook")
+    page.wait_for_selector("#outlook-title-chart figure")
+
+
+PRIMARY_FLOWS = {
+    "pulse": _flow_pulse,
+    "profile": _flow_profile,
+    "compare": _flow_compare,
+    "team": _flow_team,
+    "game": _flow_game,
+    "matchup": _flow_matchup,
+    "outlook": _flow_outlook,
+}
+
+
+@pytest.mark.parametrize("flow", PRIMARY_FLOWS)
+def test_primary_flows_have_no_serious_accessibility_violations(page, base_url, flow):
+    axe_sync = pytest.importorskip("axe_playwright_python.sync_playwright")
+    PRIMARY_FLOWS[flow](page, base_url)
+    violations = axe_sync.Axe().run(page).response["violations"]
+    # Moderate issues (heading levels) are tracked separately; these block.
+    blocking = [
+        f'{v["id"]} ({v["impact"]}): {[node["target"] for node in v["nodes"][:3]]}'
+        for v in violations
+        if v["impact"] in ("serious", "critical")
+    ]
+    assert not blocking, blocking

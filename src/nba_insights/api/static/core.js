@@ -25,12 +25,15 @@ export const api = async (path, options = {}) => {
   return response.json();
 };
 
+// null and "" are missing values, not zero (Number(null) === 0).
+const present = (value) => value !== null && value !== "" && Number.isFinite(Number(value));
+
 export const fmt = (value, digits = 1) => (
-  Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : "—"
+  present(value) ? Number(value).toFixed(digits) : "—"
 );
 
 export const money = (value) => (
-  Number.isFinite(Number(value)) ? `$${(Number(value) / 1e6).toFixed(1)}M` : "—"
+  present(value) ? `$${(Number(value) / 1e6).toFixed(1)}M` : "—"
 );
 
 export const deepValue = (result) => (
