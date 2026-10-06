@@ -50,6 +50,14 @@ export function mountChart(target, {
   plotHost.className = "plot-host";
   const rendered = plotFactory(chartWidth(target));
   rendered.classList?.add("possession-plot");
+  // Each chart is one labelled image (its takeaway and data table carry the
+  // detail). Plot labels inner <g> marks, which ARIA forbids without a role,
+  // so hide those groups from assistive tech; the labels remain for styling.
+  const charts = rendered.matches?.("svg[aria-label]") ? [rendered] : [...rendered.querySelectorAll("svg[aria-label]")];
+  for (const svg of charts) {
+    svg.setAttribute("role", "img");
+    svg.querySelectorAll("g[aria-label]").forEach((group) => group.setAttribute("aria-hidden", "true"));
+  }
   plotHost.append(rendered);
   figure.append(heading, plotHost);
 
@@ -65,6 +73,10 @@ export function mountChart(target, {
     summary.textContent = dataLabel;
     const table = document.createElement("div");
     table.className = "viz-data-scroll";
+    // wide tables scroll sideways on phones, so the region must take focus
+    table.tabIndex = 0;
+    table.setAttribute("role", "region");
+    table.setAttribute("aria-label", dataLabel);
     table.innerHTML = tableHTML;
     details.append(summary, table);
     figure.append(details);
@@ -307,13 +319,13 @@ const darkStyle = (width, size = 10) => ({
 });
 const signed = (value, digits = 1) => `${value >= 0 ? "+" : ""}${value.toFixed(digits)}`;
 // Narrow charts truncate long category labels; tooltips keep the full text.
-const clip = (width, wide = 24, narrow = 14) => (value) => {
+export const clip = (width, wide = 24, narrow = 14) => (value) => {
   const limit = width < 520 ? narrow : wide;
   const text = String(value);
   return text.length > limit ? `${text.slice(0, limit - 1)}…` : text;
 };
 const seasonStart = (seasonId) => Number.parseInt(String(seasonId).slice(0, 4), 10);
-const seasonTick = (year) => `${String(year).slice(2)}-${String((year + 1) % 100).padStart(2, "0")}`;
+export const seasonTick = (year) => `${String(year).slice(2)}-${String((year + 1) % 100).padStart(2, "0")}`;
 
 export function careerTrendPlot(seasons) {
   const stats = [["PTS", "Points"], ["REB", "Rebounds"], ["AST", "Assists"]];

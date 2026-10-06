@@ -24,6 +24,7 @@ ai = ["anthropic>=0.69"]
 
 [dependency-groups]
 browser = [
+    "axe-playwright-python>=0.1.8",
     "playwright>=1.48",
 ]
 dev = [

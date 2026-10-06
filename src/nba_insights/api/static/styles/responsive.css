@@ -1,0 +1,78 @@
+/* Breakpoints and reduced motion for the page layouts (load after pages.css). */
+@media (max-width: 900px) {
+  .topbar { height: 65px; padding: 0 20px; }.desktop-nav, .live-status { display: none; }.brand { min-width: 0; }
+  .wrap { width: min(100% - 32px, 680px); }.hero { grid-template-columns: 1fr; padding: 55px 0 70px; }
+  .hero h1 { font-size: clamp(62px,18vw,108px); }.hero-desk { transform: none; }
+  .section-head, .app-head { align-items: flex-start; flex-direction: column; }.app-meta { text-align: left; }
+  .cap-card, .cap-card.large, .cap-card.wide { grid-column: span 6; }.cap-visual { opacity: .4; }
+  .principles { grid-template-columns: repeat(2,1fr); }.workspace, .match-grid { grid-template-columns: 1fr; }
+  .profile { min-height: 420px; }.match-form { order: 0; }.court-panel { min-height: 480px; }
+  .stat-grid { grid-template-columns: repeat(3,1fr); }.stat:nth-child(3) { border-right: 0; }
+  .stat:nth-child(-n+3) { border-bottom: 1px solid var(--line-soft); }.profile-lower { grid-template-columns: 1fr; }
+  body { padding-bottom: calc(67px + env(safe-area-inset-bottom)); }
+  .leader-grid { grid-template-columns: repeat(2,1fr); }.team-form-list { grid-template-columns: 1fr; }
+  .compare-picker { grid-template-columns: repeat(2,1fr); }.compare-run { grid-column: 1/-1; }
+  .team-control { grid-template-columns: 1fr; }.team-identity { grid-template-columns: repeat(4,1fr); }
+  .team-code { grid-column: 1/-1; }.roster-panel { overflow-x: auto; }.roster-head, .roster-row { min-width: 720px; }
+  .insight-stack { grid-template-columns: 1fr; }.explore-controls, .tracking-controls { grid-template-columns: repeat(2,1fr); }.explore-run { grid-column: 1/-1; }
+  .game-story-grid { grid-template-columns: 1fr; }.game-story-card.wide { grid-column: auto; }
+  .comparison-grid { grid-template-columns: 1fr; }.team-comparison { margin-top: -72px; }
+  .scenario-controls { grid-template-columns: repeat(2,1fr); }.scenario-controls .explore-run { grid-column: 1/-1; }
+  .forecast-conferences { grid-template-columns: 1fr; }
+  .more-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .comp-list { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .mobile-nav { display: flex; position: fixed; z-index: 40; left: 12px; right: 12px;
+    bottom: calc(10px + env(safe-area-inset-bottom)); height: 58px; padding: 5px; border: 1px solid var(--line);
+    background: rgba(21,25,31,.93); backdrop-filter: blur(18px); border-radius: 16px; box-shadow: 0 15px 35px rgba(0,0,0,.45);
+    overflow: hidden; }
+  .mobile-nav::-webkit-scrollbar { display: none; }
+  .mobile-nav button { flex: 1 1 0; min-width: 0; border: 0; border-radius: 11px; background: transparent; color: var(--muted);
+    font: 500 9px var(--mono); text-transform: uppercase; cursor: pointer; }
+  .mobile-nav button span { display: block; font-size: 15px; margin-bottom: 2px; }
+  .mobile-nav button.active { color: var(--night); background: var(--lime); }
+}
+@media (max-width: 580px) {
+  .hero { min-height: auto; }.hero h1 { font-size: clamp(55px,19vw,84px); }.hero-copy { font-size: 13px; }
+  .hero-desk { margin-inline: -5px; }.spotlight { padding: 18px; }.score-ring { width: 72px; height: 72px; }
+  .desk-stats { grid-template-columns: repeat(3,1fr); }.desk-stat { padding: 13px 10px; }
+  .feature-section { padding: 70px 0; }.cap-card, .cap-card.large, .cap-card.wide { grid-column: 1/-1; min-height: 240px; }
+  .principles { grid-template-columns: 1fr; }.app-head { padding-top: 36px; }.app-head .section-title { font-size: 46px; }
+  .app-meta { font-size: 11px; }.analytics-note, .data-context { font-size: 11px; }
+  .panel-kicker, .subhead span, .form-board-head span, .field label, .control label { font-size: 10px; }
+  .profile-hero { grid-template-columns: 130px 1fr; min-height: 200px; }.player-photo { height: 180px; }
+  .profile-identity { padding: 20px 14px 20px 0; }.profile-identity h2 { font-size: 37px; }
+  .profile-body { padding: 17px; }.stat { padding: 13px 9px; }.stat b { font-size: 23px; }
+  .profile-lower { gap: 20px; }.match-grid { padding-bottom: 50px; }.court-panel { min-height: 430px; }
+  .profile-controls, .shot-layout { grid-template-columns: 1fr; }.context-grid { grid-template-columns: repeat(2,1fr); }
+  .factor-grid { grid-template-columns: repeat(2,1fr); }.standings-grid { grid-template-columns: 1fr; }
+  .prediction-tools, .method-grid, .forecast-conferences { grid-template-columns: 1fr; }
+  .ask-grid { grid-template-columns: 1fr; }
+  .prediction-empty, .prediction-result { min-height: 430px; padding: 24px 17px; }
+  .team-row { gap: 8px; }.team-name { font-size: 47px; }.probability b { font-size: 88px; }
+  .footer-inner { align-items: flex-start; flex-direction: column; }.ticker-track { animation-duration: 18s; }
+  .leader-grid { grid-template-columns: 1fr; }.compare-picker { grid-template-columns: 1fr; }
+  .vs-small { display: none; }.compare-output { --compare-label: 74px; padding: 16px; }
+  .compare-head, .compare-table-row { grid-template-columns: 74px repeat(2,minmax(0,1fr)); }
+  .compare-head div:not(:first-child) { font-size: clamp(15px,4.6vw,24px); }
+  .compare-table-row span { font-size: 15px; }
+  .team-identity { grid-template-columns: repeat(2,1fr); }.team-code { grid-column: 1/-1; }
+  .explore-controls, .tracking-controls, .game-filters { grid-template-columns: 1fr; }/* Phones stack each game instead of scrolling a 690px row sideways. */
+  .game-row { grid-template-columns: minmax(0,1fr) auto; gap: 4px 12px; }
+  .game-row > :nth-child(1) { grid-area: 2 / 1; }
+  .game-row > :nth-child(2) { grid-area: 1 / 1; }
+  .game-row > :nth-child(3) { grid-area: 1 / 2; text-align: right; color: var(--paper); }
+  .game-row > :nth-child(4) { grid-area: 2 / 2; text-align: right; }
+  .game-row > :nth-child(5) { grid-area: 3 / 1 / 4 / 3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .game-story-card { padding: 17px; }.game-story-row { grid-template-columns: 54px 74px 1fr; }
+  .game-story-row span:last-child { display: none; }
+  .rotation-grid { grid-template-columns: 1fr; }.team-comparison { padding: 17px; }
+  .scenario-controls, .scenario-outcomes { grid-template-columns: 1fr; }
+  .comp-list { grid-template-columns: 1fr; }
+  .more-grid, .outlook-controls { grid-template-columns: 1fr; }
+  .data-toolbar { align-items: stretch; flex-direction: column; }
+  .data-toolbar .select-wrap { width: 100%; }
+  .forecast-row { min-width: 0; grid-template-columns: 36px 42px minmax(92px,1fr) 62px 62px;
+    font-size: 10px; }
+  .forecast-row > :nth-child(4), .forecast-row > :nth-child(7) { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; } }

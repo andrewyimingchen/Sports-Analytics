@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
@@ -333,6 +335,13 @@ def test_search(api):
     r = api.get("/players/search", params={"q": "alice"})
     assert r.status_code == 200
     assert r.json() == [{"id": 1, "full_name": "Alice Hooper", "is_active": True}]
+
+
+def test_player_lookup_for_deep_links(api):
+    assert api.get("/players/1").json() == ALICE
+    assert api.get("/players/999").status_code == 404
+    # the literal search route still wins over the ID route
+    assert api.get("/players/search", params={"q": "bob"}).json() == [BOB]
 
 
 def test_search_query_too_short(api):
@@ -900,12 +909,32 @@ def test_headshot_proxy(api, monkeypatch):
     assert api.get("/players/2/headshot").status_code == 404
 
 
+STATIC_DIR = Path(__file__).parents[1] / "src" / "nba_insights" / "api" / "static"
+# Every first-party module, discovered from disk so new pages are covered.
+PWA_MODULES = tuple(
+    sorted(
+        path.relative_to(STATIC_DIR).as_posix()
+        for path in STATIC_DIR.rglob("*.js")
+        if "vendor" not in path.parts and path.name != "sw.js"
+    )
+)
+PWA_STYLES = tuple(
+    sorted(path.relative_to(STATIC_DIR).as_posix() for path in STATIC_DIR.rglob("*.css"))
+)
+
+
+def test_service_worker_precaches_every_module(api):
+    worker = api.get("/app/sw.js").text
+    missing = [name for name in (*PWA_MODULES, *PWA_STYLES) if f'"/app/{name}"' not in worker]
+    assert not missing, f"not precached for offline use: {missing}"
+
+
 def test_mobile_app_shell_served(api):
     r = api.get("/app/")
     assert r.status_code == 200
     asset_responses = {
         name: api.get(f"/app/{name}")
-        for name in ("styles.css", "core.js", "visualizations.js", "app.js")
+        for name in (*PWA_STYLES, *PWA_MODULES)
     }
     assert all(response.status_code == 200 for response in asset_responses.values())
     source = "\n".join([r.text, *(response.text for response in asset_responses.values())])
@@ -913,14 +942,19 @@ def test_mobile_app_shell_served(api):
     assert 'data-page="overview"' not in r.text
     assert '<button class="nav-link active" data-page="pulse">' in r.text
     assert '<section id="page-pulse" class="page active">' in r.text
-    assert '<link rel="stylesheet" href="styles.css">' in r.text
+    linked = [line for line in r.text.splitlines() if 'rel="stylesheet"' in line]
+    # cascade order matters: breakpoints override page rules, viz comes last
+    assert [line.split('href="')[1].split('"')[0] for line in linked] == [
+        "styles/base.css", "styles/pages.css", "styles/responsive.css", "styles/viz.css"
+    ]
     assert '<script type="module" src="app.js"></script>' in r.text
     assert r.text.index('src="vendor/d3.min.js"') < r.text.index(
         'src="vendor/plot.umd.min.js"'
     ) < r.text.index('src="app.js"')
     assert 'from "./core.js"' in source
-    assert 'from "./visualizations.js"' in source
-    assert ': "pulse";' in source
+    assert 'from "../visualizations.js"' in source
+    # unknown hashes falling back to League pulse is a browser behaviour test:
+    # test_pwa_browser.py::test_unknown_hash_falls_back_to_league_pulse
     desktop_nav = r.text.split('<nav class="desktop-nav"', 1)[1].split("</nav>", 1)[0]
     mobile_nav = r.text.split('<nav class="mobile-nav"', 1)[1].split("</nav>", 1)[0]
     assert desktop_nav.count("data-page=") == 5
@@ -1014,10 +1048,9 @@ def test_mobile_app_shell_served(api):
         "maskable-512.png",
         "apple-touch-icon.png",
         "fonts/oswald-600.ttf",
-        "styles.css",
+        *PWA_STYLES,
         "core.js",
-        "visualizations.js",
-        "app.js",
+        *PWA_MODULES,
         "vendor/d3.min.js",
         "vendor/plot.umd.min.js",
     ):
@@ -1025,7 +1058,7 @@ def test_mobile_app_shell_served(api):
     service_worker = api.get("/app/sw.js")
     assert service_worker.status_code == 200
     assert "fetch(e.request)" in service_worker.text
-    assert "nba-insights-shell-v23" in service_worker.text
+    assert "nba-insights-shell-v24" in service_worker.text
     assert "nba-insights-public-data-v1" in service_worker.text
     assert '!e.request.headers.has("Authorization")' in service_worker.text
     assert '!e.request.headers.has("X-API-Key")' in service_worker.text
