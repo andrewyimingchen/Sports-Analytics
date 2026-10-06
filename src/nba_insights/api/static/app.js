@@ -1,11 +1,26 @@
 import { $, api, deepValue, escapeHTML, fmt, money } from "./core.js";
 import {
+  advancedBoxDumbbellPlot,
+  calibrationPlot,
+  careerTrendPlot,
+  compareCareerPlot,
+  compareDumbbellPlot,
   driverWaterfallPlot,
   exploreScatterPlot,
+  fourFactorBulletPlot,
+  gameFlowPlot,
+  journeyPlot,
+  leaderboardPlot,
   matchupRankPlot,
+  metricLabel,
+  metricScatterPlot,
   mountChart,
+  onOffSwingPlot,
+  percentileDotPlot,
   playerIntervalPlot,
   probabilityPlot,
+  splitSmallMultiples,
+  teamQuadrantPlot,
   winIntervalPlot,
 } from "./visualizations.js";
 function updateConnectionStatus(){
@@ -97,7 +112,7 @@ async function loadProfile(id, name) {
       ["GP", fmt(latest.GP, 0)], ["FG%", latest.FG_PCT == null ? "—" : fmt(latest.FG_PCT * 100) + "%"],
       ["3P%", latest.FG3_PCT == null ? "—" : fmt(latest.FG3_PCT * 100) + "%"]
     ];
-    const pctEntries = percentileData ? Object.entries(percentileData.percentiles).slice(0, 8) : [];
+    const pctEntries = percentileData ? Object.entries(percentileData.percentiles).filter(([,value]) => Number.isFinite(Number(value))) : [];
     const initials = name.split(/\s+/).map(part => part[0]).join("").slice(0,2);
     profile.innerHTML = `
       <div class="profile-hero">
@@ -107,12 +122,8 @@ async function loadProfile(id, name) {
       <div class="profile-body">
         <div class="stat-grid">${stats.map(([label,value]) => `<div class="stat"><b>${value}</b><span>${label}${["PTS","AST","REB"].includes(label) ? " / game" : ""}</span></div>`).join("")}</div>
         <div class="profile-lower">
-          <div><div class="subhead"><h3>League standing</h3><span>${percentileData ? escapeHTML(percentileData.season) : "NOT AVAILABLE"}</span></div>
-            ${pctEntries.length ? pctEntries.map(([key,value]) => `<div class="pct-row"><label title="${escapeHTML(key)}">${escapeHTML(key)}</label><div class="track"><div class="fill" style="width:${Math.max(0,Math.min(100,Number(value)))}%"></div></div><b>${Math.round(value)}</b></div>`).join("") : '<p class="search-hint">Current-season percentiles are available for active players with a qualifying sample.</p>'}
-          </div>
-          <div><div class="subhead"><h3>Career trail</h3><span>PTS · AST · REB</span></div><div class="career-list">
-            ${seasons.slice().reverse().map((season,index) => `<div class="career-row ${index === 0 ? "current" : ""}"><b>${escapeHTML(season.SEASON_ID)}</b><span>${fmt(season.PTS)}</span><span>${fmt(season.AST)}</span><span>${fmt(season.REB)}</span></div>`).join("")}
-          </div></div>
+          <div id="profile-trend-chart"></div>
+          <div id="profile-pct-chart">${pctEntries.length ? "" : '<div class="subhead"><h3>League standing</h3><span>NOT AVAILABLE</span></div><p class="search-hint">Current-season percentiles are available for active players with a qualifying sample.</p>'}</div>
         </div>
         <div class="insight-stack">
           <div><div class="subhead"><h3>Recent form</h3><span>LAST ${recentGames.length} GAMES</span></div>
@@ -128,11 +139,36 @@ async function loadProfile(id, name) {
         </div>
         <div id="profile-deep" class="deep-stack"><div class="loading">LOADING DEEP ANALYTICS…</div></div>
       </div>`;
+    const careerSeasons = new Set(seasons.map(season => season.SEASON_ID)).size;
+    mountChart($("profile-trend-chart"),{
+      title:"Career arc",
+      takeaway:careerSeasons > 1 ? `${name}'s per-game production across ${careerSeasons} seasons; the latest values are labelled at the right edge.` : `${name} has one season on record, so there is no trend yet.`,
+      description:`Per-game averages by season · ${careerSeasons} season${careerSeasons===1?"":"s"} on record.`,
+      plotFactory:careerTrendPlot(seasons),
+      tableHTML:dataTable(`${name} career per-game averages`,["Season","GP","PTS","REB","AST"],seasons.slice().reverse().map(season=>[season.SEASON_ID,fmt(season.GP,0),fmt(season.PTS),fmt(season.REB),fmt(season.AST)])),
+      dataLabel:"View every season",
+    });
+    if(pctEntries.length){
+      const top=pctEntries.reduce((best,entry)=>Number(entry[1])>Number(best[1])?entry:best);
+      mountChart($("profile-pct-chart"),{
+        title:"League standing",
+        takeaway:`Strongest relative skill: ${metricLabel(top[0])} at the ${Math.round(top[1])}th percentile. Dots right of the median rule beat most of the league.`,
+        description:`${percentileData.season} · percentile rank among qualified players · higher is better for every row.`,
+        plotFactory:percentileDotPlot(Object.fromEntries(pctEntries),"league"),
+        tableHTML:dataTable(`${name} league percentiles`,["Metric","Percentile"],pctEntries.map(([key,value])=>[metricLabel(key),`${Math.round(value)}th`])),
+        dataLabel:"View exact percentiles",
+      });
+    }
     const refreshDeep = () => loadProfileDeep(id, name, $("profile-season").value, $("profile-season-type").value);
     $("profile-season").addEventListener("change", refreshDeep);
     $("profile-season-type").addEventListener("change", refreshDeep);
     await refreshDeep();
   } catch (error) { profile.innerHTML = `<div class="empty-state"><div><h3>Profile unavailable</h3><p class="error">${escapeHTML(error.message)}</p></div></div>`; }
+}
+
+// Exact values behind every chart, as a real table for screen readers.
+function dataTable(caption, headers, rows) {
+  return `<table class="viz-table"><caption>${escapeHTML(caption)}</caption><thead><tr>${headers.map(header => `<th scope="col">${escapeHTML(header)}</th>`).join("")}</tr></thead><tbody>${rows.map(row => `<tr>${row.map((cell,index) => index === 0 ? `<th scope="row">${escapeHTML(cell)}</th>` : `<td>${escapeHTML(cell)}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
 }
 
 function percentileRows(entries) {
@@ -170,29 +206,21 @@ function splitRows(rows) {
   return header + rows.map(row => `<div class="split-row"><b>${escapeHTML(row.Split)}</b>${columns.map(column => `<span>${row[column] == null ? "—" : column === "FG_PCT" ? fmt(Number(row[column])*100)+"%" : fmt(row[column],column === "GP" ? 0 : 1)}</span>`).join("")}</div>`).join("");
 }
 
-function positionOctagonEntries(percentiles) {
-  const preferred = ["PTS","AST","REB","STL","BLK","FG_PCT","NET_RATING","DPM"];
-  const available = Object.entries(percentiles || {}).filter(([,value]) => Number.isFinite(Number(value)));
-  const selected = preferred.filter(stat => Number.isFinite(Number(percentiles?.[stat])));
-  available.forEach(([stat]) => { if (selected.length < 8 && !selected.includes(stat)) selected.push(stat); });
-  return selected.slice(0,8).map(stat => [stat,Number(percentiles[stat])]);
-}
-
-function renderPositionOctagon(entries, playerName, positionGroup) {
-  if (entries.length !== 8) return '<p class="analytics-note">The octagon requires eight qualifying position metrics; exact available percentiles are shown below.</p>';
-  const group = positionGroup || "position";
-  const labels={PTS:"Scoring",AST:"Creation",REB:"Rebounding",STL:"Steals",BLK:"Blocks",
-    FG_PCT:"FG efficiency",NET_RATING:"Net rating",DPM:"DPM",FG3_PCT:"3PT efficiency",FT_PCT:"FT efficiency"};
-  const width=640,height=500,cx=320,cy=235,radius=165,labelRadius=207;
-  const point=(index,value,r=radius)=>{const angle=-Math.PI/2+index*Math.PI/4;
-    return [cx+Math.cos(angle)*r*value/100,cy+Math.sin(angle)*r*value/100];};
-  const polygon=value=>entries.map((_,index)=>point(index,value).map(number=>number.toFixed(1)).join(",")).join(" ");
-  const grid=[25,50,75,100].map(level=>`<polygon points="${polygon(level)}" fill="none" stroke="#303741" stroke-width="1"/><text x="${cx+5}" y="${(cy-radius*level/100+4).toFixed(1)}" fill="#6f7681" font-size="10">${level}</text>`).join("");
-  const axes=entries.map(([stat],index)=>{const [x,y]=point(index,100),[lx,ly]=point(index,100,labelRadius),anchor=lx<cx-12?"end":lx>cx+12?"start":"middle";
-    return `<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="#303741"/><text x="${lx.toFixed(1)}" y="${(ly+5).toFixed(1)}" text-anchor="${anchor}" fill="#979da8" font-size="13">${escapeHTML(labels[stat]||stat.replaceAll("_"," "))}</text>`;}).join("");
-  const shape=entries.map(([,value],index)=>point(index,value).map(number=>number.toFixed(1)).join(",")).join(" ");
-  const dots=entries.map(([stat,value],index)=>{const [x,y]=point(index,value);return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="5" fill="#ff5c35"><title>${escapeHTML(labels[stat]||stat)}: ${Math.round(value)}th percentile among ${escapeHTML(group)}s</title></circle>`;}).join("");
-  return `<div class="position-octagon"><div class="position-octagon-scroll"><svg class="position-octagon-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeHTML(playerName)} position percentile octagon"><title>${escapeHTML(playerName)} compared with inferred ${escapeHTML(group)} peers</title>${grid}${axes}<polygon points="${polygon(50)}" fill="none" stroke="#f2f0e9" stroke-opacity=".7" stroke-width="2" stroke-dasharray="7 6"/><polygon points="${shape}" fill="#ff5c35" fill-opacity=".13" stroke="#ff5c35" stroke-width="4" stroke-linejoin="round"/>${dots}</svg></div><div class="position-octagon-legend"><span><i></i>${escapeHTML(playerName)}</span><span><i class="median"></i>${escapeHTML(group)} median · 50th percentile</span></div><p class="analytics-note">Shape is percentile rank against inferred ${escapeHTML(group)} peers. Higher and farther from center is better.</p></div>`;
+const splitLabels = {home_away:"Home / away",month:"Month",rest:"Rest",opponent:"Opponent"};
+const splitMetrics = [["PTS","Points"],["REB","Rebounds"],["AST","Assists"],["FG_PCT","FG%",true],["FG3M","Threes made"],["PLUS_MINUS","Plus-minus"]];
+function mountSplits(splits, mode, season) {
+  const rows = splits?.splits?.[mode] || [];
+  const target = $("split-viz");
+  if (!rows.length) { target.innerHTML = '<p class="analytics-note">No games in this split for the selected season.</p>'; return; }
+  const sample = rows.reduce((sum,row) => sum + (Number(row.GP) || 0), 0);
+  mountChart(target,{
+    title:`Splits by ${splitLabels[mode].toLowerCase()}`,
+    takeaway:"Each panel uses its own scale, so compare splits within a panel, not across panels.",
+    description:`${season} · per-game averages · ${sample} games across ${rows.length} splits. Small splits are noisy; check games played in the table.`,
+    plotFactory:splitSmallMultiples(rows,splitMetrics),
+    tableHTML:`<div class="split-table">${splitRows(rows)}</div>`,
+    dataLabel:"View exact split table",
+  });
 }
 
 async function loadProfileDeep(id, name, season, seasonType) {
@@ -208,9 +236,8 @@ async function loadProfileDeep(id, name, season, seasonType) {
   ]);
   const insights = deepValue(insightsResult), shots = deepValue(shotsResult), splits = deepValue(splitsResult);
   const onOff = deepValue(onOffResult)?.on_off, contract = deepValue(contractResult);
-  const ratings = insights?.ratings || {}, positionEntries = positionOctagonEntries(insights?.position_percentiles);
+  const ratings = insights?.ratings || {}, positionPercentiles = Object.fromEntries(Object.entries(insights?.position_percentiles || {}).filter(([,value]) => Number.isFinite(Number(value))));
   const quality = shots?.quality || {}, breakdown = shots?.breakdown || [];
-  // Exact position-percentile bars intentionally stay hidden; octagon dots retain values.
   target.innerHTML = `
     <section class="deep-panel"><div class="subhead"><h3>Scouting context</h3><span>${escapeHTML(insights?.season || season)} · ${escapeHTML(insights?.position_group || "League")}</span></div>
       ${insights?.scouting_take ? `<div class="scouting-card">${escapeHTML(insights.scouting_take)}</div>` : '<p class="analytics-note">Scouting context is unavailable for this sample.</p>'}
@@ -219,7 +246,7 @@ async function loadProfileDeep(id, name, season, seasonType) {
         <div class="context-tile"><b>${ratings.CLUTCH_NET_RATING == null ? "—" : `${Number(ratings.CLUTCH_NET_RATING)>=0?"+":""}${fmt(ratings.CLUTCH_NET_RATING)}`}</b><span>Clutch net</span></div>
         <div class="context-tile"><b>${ratings.DPM == null ? "—" : `${Number(ratings.DPM)>=0?"+":""}${fmt(ratings.DPM)}`}</b><span>DARKO DPM</span></div>
         <div class="context-tile"><b>${escapeHTML(insights?.draft || "Undrafted")}</b><span>Draft pedigree</span></div>
-      </div>${positionEntries.length ? `<div class="subhead" style="margin-top:20px"><h3>Position percentiles</h3><span>Inferred ${escapeHTML(insights.position_group)}</span></div>${renderPositionOctagon(positionEntries,name,insights.position_group)}` : ""}
+      </div>${Object.keys(positionPercentiles).length ? '<div id="position-pct-chart" style="margin-top:20px"></div>' : ""}
     </section>
     <section class="deep-panel"><div class="subhead"><h3>On / off impact</h3><span>${escapeHTML(onOff ? "CURRENT TEAM" : "UNAVAILABLE")}</span></div>
       ${onOff ? `<div class="context-grid"><div class="context-tile"><b>${fmt(onOff.NET_ON)}</b><span>Team net · on</span></div><div class="context-tile"><b>${fmt(onOff.NET_OFF)}</b><span>Team net · off</span></div><div class="context-tile"><b>${Number(onOff.NET_DIFF)>=0?"+":""}${fmt(onOff.NET_DIFF)}</b><span>On/off swing</span></div><div class="context-tile"><b>${fmt(onOff.MIN_ON,0)}</b><span>Minutes on</span></div></div>` : '<p class="analytics-note">On/off data is available for active players with a current team row.</p>'}
@@ -232,13 +259,27 @@ async function loadProfileDeep(id, name, season, seasonType) {
       <p class="analytics-note">Hot-zone size is shot volume; color is accuracy versus the league expectation for those locations.</p>
     </section>
     <section class="deep-panel"><div class="subhead"><h3>Situational splits</h3><span>${escapeHTML(season)}</span></div>
-      <div class="profile-controls"><label>Split by<select id="split-mode"><option value="home_away">Home / away</option><option value="month">Month</option><option value="rest">Rest</option><option value="opponent">Opponent</option></select></label></div><div id="split-viz" class="split-table">${splitRows(splits?.splits?.home_away || [])}</div>
+      <div class="profile-controls"><label>Split by<select id="split-mode"><option value="home_away">Home / away</option><option value="month">Month</option><option value="rest">Rest</option><option value="opponent">Opponent</option></select></label></div><div id="split-viz"></div>
     </section>
     <section class="deep-panel"><div class="subhead"><h3>Contract & salary</h3><span>LOCAL-ONLY DATA</span></div>
       ${contract ? `<div class="context-grid"><div class="context-tile"><b>${money(Object.values(contract.salaries)[0])}</b><span>Current salary</span></div><div class="context-tile"><b>${money(Object.values(contract.salaries).reduce((sum,value)=>sum+Number(value),0))}</b><span>Committed total</span></div><div class="context-tile"><b>${money(contract.guaranteed)}</b><span>Guaranteed</span></div></div><div style="margin-top:13px">${Object.entries(contract.salaries).map(([year,value]) => `<div class="contract-row"><b>${escapeHTML(year)}</b><span>${money(value)}</span><span></span><span></span></div>`).join("")}</div><p class="analytics-note">Scraped weekly for personal use and served only to the local machine.</p>` : '<p class="analytics-note">No listed contract, or this request is not coming from the local machine.</p>'}
     </section>`;
   $("shot-mode")?.addEventListener("change", event => { $("shot-viz").innerHTML = shotCourt(shots,event.target.value); });
-  $("split-mode")?.addEventListener("change", event => { $("split-viz").innerHTML = splitRows(splits?.splits?.[event.target.value] || []); });
+  mountSplits(splits,"home_away",season);
+  $("split-mode")?.addEventListener("change", event => mountSplits(splits,event.target.value,season));
+  if (Object.keys(positionPercentiles).length) {
+    const group = insights.position_group || "position";
+    const entries = Object.entries(positionPercentiles);
+    const above = entries.filter(([,value]) => Number(value) >= 50).length;
+    mountChart($("position-pct-chart"),{
+      title:`Versus ${group} peers`,
+      takeaway:`${above} of ${entries.length} measures sit at or above the ${group.toLowerCase()} median (the vertical rule).`,
+      description:`${insights.season || season} · percentile rank against inferred ${group} peers · higher is better on every row.`,
+      plotFactory:percentileDotPlot(positionPercentiles,group.toLowerCase()),
+      tableHTML:dataTable(`${name} position percentiles`,["Metric","Percentile"],entries.map(([key,value])=>[metricLabel(key),`${Math.round(value)}th`])),
+      dataLabel:"View exact position percentiles",
+    });
+  }
 }
 
 let pulseLoaded = false;
@@ -422,7 +463,32 @@ async function loadTracking(){
     const template=`36px minmax(160px,1.3fr) 55px repeat(${metrics.length},minmax(76px,1fr))`;
     const header=`<div class="tracking-row header" role="row" style="grid-template-columns:${template}"><span role="columnheader">Save</span><span role="columnheader">${scope==="player"?'Player':'Team'}</span><span role="columnheader">GP</span>${metrics.map(metric=>`<span role="columnheader" title="${escapeHTML(result.definitions[metric])}">${escapeHTML(metric.replaceAll('_',' '))}</span>`).join('')}</div>`;
     const rows=result.records.map(row=>{const item=identity(row),key=`${scope}:${item.id}`,saved=favorites.includes(key),games=row.GP??row.G??'—';return `<div class="tracking-row" role="row" style="grid-template-columns:${template}"><span role="cell"><button class="favorite-toggle ${saved?'saved':''}" data-favorite="${escapeHTML(key)}" aria-pressed="${saved}" aria-label="${saved?'Remove':'Save'} ${escapeHTML(item.name)} favorite">★</button></span><b role="cell">${escapeHTML(item.name)}<small style="display:block;color:var(--muted-2)">${escapeHTML(item.team)}</small></b><span role="cell">${escapeHTML(games)}</span>${metrics.map(metric=>`<span role="cell">${row[metric]==null?'—':pct.has(metric)?`${fmt(Number(row[metric])*100,1)}%`:fmt(row[metric],2)}</span>`).join('')}</div>`;}).join('');
-    output.innerHTML=`<div class="tracking-table" role="table" aria-label="${escapeHTML(result.label)}">${header}${rows}</div>`;
+    const numeric=metrics.filter(metric=>result.records.some(row=>Number.isFinite(Number(row[metric])))),metricOptions=selected=>numeric.map(metric=>`<option value="${escapeHTML(metric)}" ${metric===selected?"selected":""}>${escapeHTML(metric.replaceAll('_',' '))}</option>`).join('');
+    const controls=numeric.length?`<div class="viz-control-row"><div class="control"><label for="tracking-metric">Rank by</label><div class="select-wrap"><select id="tracking-metric">${metricOptions(numeric[0])}</select></div></div>${numeric.length>1?`<div class="control"><label for="tracking-versus">Compare against</label><div class="select-wrap"><select id="tracking-versus">${metricOptions(numeric[1])}</select></div></div>`:''}</div><div class="viz-grid"><div id="tracking-leader-chart"></div><div id="tracking-scatter-chart"></div></div>`:'';
+    output.innerHTML=`<div class="visual-output">${controls}<div class="tracking-table" role="table" aria-label="${escapeHTML(result.label)}">${header}${rows}</div></div>`;
+    if(numeric.length){
+      const nameKey=scope==="player"?"PLAYER_NAME":"TEAM_NAME",noun=scope==="player"?"players":"teams";
+      const renderTrackingCharts=()=>{
+        const key=$("tracking-metric").value,versus=$("tracking-versus")?.value,label=key.replaceAll('_',' ');
+        const leader=[...result.records].filter(row=>Number.isFinite(Number(row[key]))).sort((a,b)=>Number(b[key])-Number(a[key]))[0];
+        mountChart($("tracking-leader-chart"),{
+          title:`${label} leaders`,
+          takeaway:`${leader?.[nameKey]??"—"} leads the filtered ${noun}. ${result.definitions?.[key]||""}`,
+          description:`${result.season} · ${result.minimum_games}+ games · top 15 of ${result.count} ${noun} shown${pct.has(key)?" · percentage":""}.`,
+          plotFactory:leaderboardPlot(result.records,{key,label,nameKey,percent:pct.has(key)}),
+        });
+        if(versus&&versus!==key)mountChart($("tracking-scatter-chart"),{
+          title:`${label} vs ${versus.replaceAll('_',' ')}`,
+          takeaway:`Upper-right ${noun} are above the sample average on both measures; the labelled points lead on ${label}.`,
+          description:`${result.count} ${noun} · grey lines mark the filtered-sample average.`,
+          plotFactory:metricScatterPlot(result.records,{xKey:versus,yKey:key,xLabel:versus.replaceAll('_',' '),yLabel:label,nameKey,xPercent:pct.has(versus),yPercent:pct.has(key)}),
+        });
+        else $("tracking-scatter-chart").innerHTML=numeric.length<2?'':'<div class="data-figure"><div class="figure-heading"><h4>Choose a second measure</h4><p>Pick a different "Compare against" metric to see how the two relate.</p></div></div>';
+      };
+      $("tracking-metric").addEventListener("change",renderTrackingCharts);
+      $("tracking-versus")?.addEventListener("change",renderTrackingCharts);
+      renderTrackingCharts();
+    }
     const filterQuery=new URLSearchParams({tracking_category:result.category,tracking_scope:result.scope,tracking_season:result.season,tracking_team:$("tracking-team").value,tracking_min_games:$("tracking-min-games").value||"0",tracking_query:$("tracking-query").value.trim()});history.replaceState(null,"",`${location.pathname}?${filterQuery}#tracking`);
     const seen=localStorage.getItem(TRACKING_SEEN_KEY),alerts=localStorage.getItem(ALERTS_KEY)==="enabled";if(alerts&&"Notification" in window&&seen&&source.fetched_at&&seen!==source.fetched_at&&favorites.length&&Notification.permission==="granted")new Notification("NBA tracking data refreshed",{body:`${result.label} has new cached data for your saved players and teams.`});if(source.fetched_at)localStorage.setItem(TRACKING_SEEN_KEY,source.fetched_at);
   }catch(error){output.innerHTML=`<div class="panel empty-state"><div><h3>Tracking feed unavailable</h3><p class="error">${escapeHTML(error.message)}</p><button class="btn" data-retry="tracking">Retry tracking data</button></div></div>`;}
@@ -465,17 +531,6 @@ document.addEventListener("click",event=>{
   if(retry.dataset.retry==="outlook"){forecastLoadedFor=null;loadSeasonForecast(true);}
 });
 
-function gameFlowSVG(story) {
-  const points=story.timeline||[];
-  if(!points.length)return '<p class="analytics-note">Timeline data is unavailable.</p>';
-  const width=700,height=260,pad=34,maxElapsed=Math.max(...points.map(point=>Number(point.ELAPSED)||0),1);
-  const x=point=>pad+(Number(point.ELAPSED)||0)/maxElapsed*(width-pad*2);
-  const y=point=>height-pad-(Number(point.HOME_WIN_PROB)||0)*(height-pad*2);
-  const path=points.map((point,index)=>`${index?'L':'M'} ${x(point).toFixed(1)} ${y(point).toFixed(1)}`).join(' ');
-  const quarters=[1,2,3].map(q=>{const qx=pad+q*720/maxElapsed*(width-pad*2);return qx<width-pad?`<line x1="${qx}" y1="${pad}" x2="${qx}" y2="${height-pad}" stroke="#2a3039" stroke-dasharray="3 5"/>`:'';}).join('');
-  return `<svg class="game-flow-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Home win probability by game time"><line x1="${pad}" y1="${height/2}" x2="${width-pad}" y2="${height/2}" stroke="#343c46"/>${quarters}<text x="6" y="${pad+4}" fill="#979da8" font-size="10">100%</text><text x="12" y="${height/2+4}" fill="#979da8" font-size="10">50%</text><text x="18" y="${height-pad+4}" fill="#979da8" font-size="10">0%</text><path d="${path}" fill="none" stroke="#ff5c35" stroke-width="4" stroke-linejoin="round"/><circle cx="${x(points.at(-1))}" cy="${y(points.at(-1))}" r="6" fill="#c7ff4a"/></svg>`;
-}
-
 function shotChartSVG(story) {
   const shots=(story.shots||[]).filter(shot=>shot.XLEGACY!=null&&shot.YLEGACY!=null);
   if(!story.shot_locations_available||!shots.length)return '';
@@ -492,7 +547,35 @@ function renderGameStory(story) {
   const shotSummary=(story.shot_summary||[]).map(row=>`<div class="zone-row"><b>${escapeHTML(row.TEAM||'—')} · ${escapeHTML(row.SHOT_TYPE||'Unknown shot')}</b><span>${escapeHTML(row.FGM)}</span><span>${escapeHTML(row.FGA)}</span><span>${fmt(Number(row.FG_PCT)*100,1)}%</span></div>`).join('');
   const feed=(story.feed||[]).map(row=>`<div class="game-story-row"><span>Q${escapeHTML(row.PERIOD)} ${escapeHTML(row.CLOCK)}</span><b>${escapeHTML(row.PLAYER||row.TEAM||'Game')}</b><span>${escapeHTML(row.EVENT)}</span><span>${escapeHTML(row.SCORE||'')}</span></div>`).join('');
   const chart=shotChartSVG(story);
-  return `<div class="game-story-grid"><section class="panel game-story-card wide"><div class="subhead"><h3>Game flow</h3><span>HOME WIN PROBABILITY</span></div>${gameFlowSVG(story)}<p class="analytics-note">${escapeHTML(story.win_probability_method)}</p></section><section class="panel game-story-card"><div class="subhead"><h3>Turning points</h3><span>LARGEST PROBABILITY SWINGS</span></div><div class="game-story-list">${turns||'<p class="analytics-note">No score changes were cached.</p>'}</div></section><section class="panel game-story-card"><div class="subhead"><h3>Game context</h3><span>RUNS · CLUTCH</span></div><div class="context-grid"><div class="context-tile"><b>${escapeHTML(story.biggest_runs?.[story.away]??'—')}</b><span>${escapeHTML(story.away)} biggest run</span></div><div class="context-tile"><b>${escapeHTML(story.biggest_runs?.[story.home]??'—')}</b><span>${escapeHTML(story.home)} biggest run</span></div><div class="context-tile"><b>${escapeHTML(story.lead_changes)}</b><span>Lead changes</span></div><div class="context-tile"><b>${escapeHTML(story.clutch_points?.[story.away]??0)}–${escapeHTML(story.clutch_points?.[story.home]??0)}</b><span>Clutch pts · away–home</span></div></div></section><section class="panel game-story-card"><div class="subhead"><h3>Shot profile</h3><span>${chart?'LOCATION CACHE':'SUMMARY ONLY'}</span></div>${chart||'<p class="analytics-note">Shot coordinates are not present in this older cache. Shot-type totals remain available below.</p>'}<div style="margin-top:14px">${shotSummary||'<p class="analytics-note">Shot events are unavailable.</p>'}</div></section><section class="panel game-story-card"><div class="subhead"><h3>Top lineups</h3><span>ON-COURT STINTS</span></div>${lineups||'<p class="analytics-note">Rotation data is not cached for this game, so lineup stints cannot be reconstructed.</p>'}</section><section class="panel game-story-card wide"><div class="subhead"><h3>Advanced team box</h3><span>EFFICIENCY · POSSESSION CONTEXT</span></div><div class="split-table"><div class="advanced-row header"><span>Team</span><span>PTS</span><span>eFG%</span><span>TS%</span><span>TOV%</span><span>FT rate</span><span>AST/TO</span><span>OREB</span><span>REB</span></div>${advanced}</div></section><section class="panel game-story-card wide"><div class="subhead"><h3>Latest events</h3><span>PLAY-BY-PLAY FEED</span></div><div class="game-story-list">${feed||'<p class="analytics-note">Detailed events are unavailable.</p>'}</div></section></div>`;
+  story.advancedTable=`<div class="split-table"><div class="advanced-row header"><span>Team</span><span>PTS</span><span>eFG%</span><span>TS%</span><span>TOV%</span><span>FT rate</span><span>AST/TO</span><span>OREB</span><span>REB</span></div>${advanced}</div>`;
+  return `<div class="game-story-grid"><div class="viz-grid game-story-viz"><div id="game-flow-chart"></div><div id="game-advanced-chart"></div></div><section class="panel game-story-card"><div class="subhead"><h3>Turning points</h3><span>LARGEST PROBABILITY SWINGS</span></div><div class="game-story-list">${turns||'<p class="analytics-note">No score changes were cached.</p>'}</div></section><section class="panel game-story-card"><div class="subhead"><h3>Game context</h3><span>RUNS · CLUTCH</span></div><div class="context-grid"><div class="context-tile"><b>${escapeHTML(story.biggest_runs?.[story.away]??'—')}</b><span>${escapeHTML(story.away)} biggest run</span></div><div class="context-tile"><b>${escapeHTML(story.biggest_runs?.[story.home]??'—')}</b><span>${escapeHTML(story.home)} biggest run</span></div><div class="context-tile"><b>${escapeHTML(story.lead_changes)}</b><span>Lead changes</span></div><div class="context-tile"><b>${escapeHTML(story.clutch_points?.[story.away]??0)}–${escapeHTML(story.clutch_points?.[story.home]??0)}</b><span>Clutch pts · away–home</span></div></div></section><section class="panel game-story-card"><div class="subhead"><h3>Shot profile</h3><span>${chart?'LOCATION CACHE':'SUMMARY ONLY'}</span></div>${chart||'<p class="analytics-note">Shot coordinates are not present in this older cache. Shot-type totals remain available below.</p>'}<div style="margin-top:14px">${shotSummary||'<p class="analytics-note">Shot events are unavailable.</p>'}</div></section><section class="panel game-story-card"><div class="subhead"><h3>Top lineups</h3><span>ON-COURT STINTS</span></div>${lineups||'<p class="analytics-note">Rotation data is not cached for this game, so lineup stints cannot be reconstructed.</p>'}</section><section class="panel game-story-card wide"><div class="subhead"><h3>Latest events</h3><span>PLAY-BY-PLAY FEED</span></div><div class="game-story-list">${feed||'<p class="analytics-note">Detailed events are unavailable.</p>'}</div></section></div>`;
+}
+
+function mountGameStory(story){
+  const timeline=story.timeline||[],away=story.away,home=story.home;
+  if(timeline.length){
+    const last=timeline.at(-1),swing=(story.turning_points||[]).reduce((top,point)=>!top||Number(point.SWING)>Number(top.SWING)?point:top,null);
+    mountChart($("game-flow-chart"),{
+      title:"Game flow",
+      takeaway:`${home} win probability finished at ${fmt(Number(last.HOME_WIN_PROB)*100,0)}%${swing?`; the biggest swing came in Q${swing.PERIOD} at ${swing.CLOCK}`:""}. ${story.lead_changes??0} lead changes.`,
+      description:story.win_probability_method||"Home win probability after each scoring play.",
+      plotFactory:gameFlowPlot(timeline,away,home),
+      tableHTML:dataTable("Scoring timeline",["Time","Score","Home win"],timeline.map(point=>[`Q${point.PERIOD??"—"} ${point.CLOCK??""}`,`${away} ${point.AWAY_SCORE??"—"}–${point.HOME_SCORE??"—"} ${home}`,`${fmt(Number(point.HOME_WIN_PROB)*100,0)}%`])),
+      dataLabel:"View every scoring update",
+    });
+  }else $("game-flow-chart").innerHTML='<div class="data-figure"><div class="figure-heading"><h4>Game flow</h4><p>Timeline data is unavailable.</p></div></div>';
+  const rows=story.advanced||[],awayRow=rows.find(row=>row.TEAM===away),homeRow=rows.find(row=>row.TEAM===home);
+  if(awayRow&&homeRow){
+    const efgGap=(Number(homeRow.EFG_PCT)-Number(awayRow.EFG_PCT))*100;
+    mountChart($("game-advanced-chart"),{
+      title:"How the game was won",
+      takeaway:`${efgGap>=0?home:away} shot better by ${fmt(Math.abs(efgGap),1)} eFG points. The longer the connector, the bigger that edge.`,
+      description:"Team efficiency from this game's box score. Lower turnover rate is better; the other rows are better when higher.",
+      plotFactory:advancedBoxDumbbellPlot(rows,away,home),
+      tableHTML:story.advancedTable,
+      dataLabel:"View full advanced box",
+    });
+  }else $("game-advanced-chart").innerHTML=`<div class="data-figure"><div class="figure-heading"><h4>Advanced team box</h4><p>Advanced team rows are unavailable for this game.</p></div>${story.advancedTable||""}</div>`;
 }
 
 $("games-output").addEventListener("click",async event=>{
@@ -512,6 +595,7 @@ $("games-output").addEventListener("click",async event=>{
   }else{box=`<section class="panel panel-pad" style="margin-top:12px"><h3>Player box score unavailable</h3><p class="error">${escapeHTML(boxResult.reason.message)}</p><p class="analytics-note">The score and game summary above remain available. NBA box-score data may not yet be cached or the upstream endpoint may be temporarily unavailable.</p></section>`;}
   const story=storyResult.status==="fulfilled"?renderGameStory(storyResult.value):`<section class="panel panel-pad" style="margin-top:12px"><h3>Game story unavailable</h3><p class="error">${escapeHTML(storyResult.reason.message)}</p><p class="analytics-note">Timeline analysis requires cached play-by-play data.</p></section>`;
   output.innerHTML=summary+story+box;
+  if(storyResult.status==="fulfilled"&&storyResult.value.available)mountGameStory(storyResult.value);
 });
 
 const comparePicks = {a:null,b:null,c:null,d:null};
@@ -543,30 +627,41 @@ const compareProfileMetrics = [
   ["STL","Steals"], ["BLK","Rim protection"], ["FG_PCT","FG efficiency"],
   ["DPM","Overall impact"]
 ];
-const compareProfileColors = ["#ff5c35", "#7ab8ff", "#c7ff4a", "#c58cff"];
-function renderCompareProfile(names, percentiles) {
+function compareProfileMetricsFor(names, percentiles) {
   const eligible = names.filter(name => compareProfileMetrics.filter(([stat]) =>
     Number.isFinite(Number(percentiles?.[name]?.[stat]))).length >= 3);
-  if (eligible.length < 2) return `<section class="compare-visual"><div class="subhead"><h3>At-a-glance profile</h3><span>CURRENT SEASON</span></div><p class="analytics-note">The normalized visual needs at least two active players with a qualifying current-season sample. Exact career and season values remain below.</p></section>`;
-  const metrics = compareProfileMetrics.filter(([stat]) => eligible.every(name =>
+  const metrics = compareProfileMetrics.filter(([stat]) => eligible.length >= 2 && eligible.every(name =>
     Number.isFinite(Number(percentiles[name][stat]))));
-  if (metrics.length < 3) return "";
-  const width=640,height=470,cx=320,cy=224,radius=158,labelRadius=195;
-  const point=(index,value,r=radius)=>{const angle=-Math.PI/2+index*2*Math.PI/metrics.length;
-    return [cx+Math.cos(angle)*r*value/100,cy+Math.sin(angle)*r*value/100];};
-  const points=value=>metrics.map((_,index)=>point(index,value).map(number=>number.toFixed(1)).join(",")).join(" ");
-  const leaders=Object.fromEntries(eligible.map(name=>[name,0]));
-  metrics.forEach(([stat])=>{const best=Math.max(...eligible.map(name=>Number(percentiles[name][stat])));
-    eligible.forEach(name=>{if(Number(percentiles[name][stat])===best)leaders[name]++;});});
-  const grid=[25,50,75,100].map(level=>`<polygon points="${points(level)}" fill="none" stroke="#303741" stroke-width="1"/><text x="${cx+4}" y="${(cy-radius*level/100+4).toFixed(1)}" fill="#6f7681" font-size="9">${level}</text>`).join("");
-  const axes=metrics.map(([stat,label],index)=>{const [x,y]=point(index,100),[lx,ly]=point(index,100,labelRadius),anchor=lx<cx-12?"end":lx>cx+12?"start":"middle";
-    return `<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="#303741"/><text x="${lx.toFixed(1)}" y="${(ly+4).toFixed(1)}" text-anchor="${anchor}" fill="#979da8" font-size="11">${escapeHTML(label)}</text>`;}).join("");
-  const profiles=eligible.map((name,index)=>{const color=compareProfileColors[index],values=metrics.map(([stat])=>Number(percentiles[name][stat])),shape=values.map((value,metric)=>point(metric,value).map(number=>number.toFixed(1)).join(",")).join(" ");
-    return `<g><polygon points="${shape}" fill="${color}" fill-opacity=".07" stroke="${color}" stroke-width="3" stroke-linejoin="round"/>${values.map((value,metric)=>{const [x,y]=point(metric,value);return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4" fill="${color}"><title>${escapeHTML(name)} · ${escapeHTML(metrics[metric][1])}: ${Math.round(value)}th percentile</title></circle>`;}).join("")}</g>`;}).join("");
-  const legend=eligible.map((name,index)=>{const average=metrics.reduce((sum,[stat])=>sum+Number(percentiles[name][stat]),0)/metrics.length;
-    return `<div class="compare-profile-key"><i style="background:${compareProfileColors[index]}"></i><b>${escapeHTML(name)}</b><span>${Math.round(average)} avg<br>${leaders[name]} lead${leaders[name]===1?"":"s"}</span></div>`;}).join("");
-  const excluded=names.filter(name=>!eligible.includes(name));
-  return `<section class="compare-visual"><div class="subhead"><div><div class="panel-kicker">Normalized on one honest scale</div><h3>At-a-glance skill profile</h3></div><span>LEAGUE PERCENTILE · HIGHER IS BETTER</span></div><svg class="compare-profile-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="League percentile profile comparison for ${eligible.map(escapeHTML).join(", ")}"><title>Current-season league percentile comparison</title>${grid}${axes}${profiles}</svg><div class="compare-profile-legend">${legend}</div><p class="analytics-note">Shape shows current-season league percentile, not raw totals or position-adjusted value. Exact numbers are below.${excluded.length?` No qualifying percentile shape for ${excluded.map(escapeHTML).join(", ")}.`:""}</p></section>`;
+  return { eligible, metrics: metrics.length >= 3 ? metrics : [] };
+}
+function mountCompareVisuals(names, result) {
+  const { eligible, metrics } = compareProfileMetricsFor(names, result.percentiles);
+  if (metrics.length) {
+    const leads = Object.fromEntries(eligible.map(name => [name, 0]));
+    metrics.forEach(([stat]) => {
+      const best = Math.max(...eligible.map(name => Number(result.percentiles[name][stat])));
+      eligible.forEach(name => { if (Number(result.percentiles[name][stat]) === best) leads[name]++; });
+    });
+    const leader = eligible.reduce((best, name) => leads[name] > leads[best] ? name : best);
+    const excluded = names.filter(name => !eligible.includes(name));
+    mountChart($("compare-skill-chart"),{
+      title:"At-a-glance skill profile",
+      takeaway:`${leader} leads ${leads[leader]} of ${metrics.length} skills. Long grey bars mark the biggest gaps between players.`,
+      description:`LEAGUE PERCENTILE · HIGHER IS BETTER · ${result.season} qualified players.${excluded.length ? ` No qualifying percentile sample for ${excluded.join(", ")}.` : ""}`,
+      plotFactory:compareDumbbellPlot(eligible,result.percentiles,metrics),
+      tableHTML:dataTable("League percentiles by player",["Skill",...eligible],metrics.map(([stat,label]) => [label,...eligible.map(name => `${Math.round(result.percentiles[name][stat])}th`)])),
+      dataLabel:"View exact percentiles",
+    });
+  } else {
+    $("compare-skill-chart").innerHTML = '<div class="data-figure"><div class="figure-heading"><h4>At-a-glance skill profile</h4><p>The percentile view needs at least two active players with a qualifying current-season sample. Exact career and season values remain below.</p></div></div>';
+  }
+  const withCareer = names.filter(name => (result.career_seasons?.[name] || []).length);
+  if (withCareer.length >= 2) mountChart($("compare-career-chart"),{
+    title:"Scoring careers",
+    takeaway:"Lines show how each scoring arc rose, peaked, or held; hover any season for the exact value.",
+    description:"Points per game by season start year · one line per player.",
+    plotFactory:compareCareerPlot(withCareer,result.career_seasons),
+  });
 }
 $("compare-go").addEventListener("click", async () => {
   const names = Object.values(comparePicks).filter(Boolean);
@@ -593,7 +688,8 @@ $("compare-go").addEventListener("click", async () => {
     const seasonRows=[...new Set(names.flatMap(name=>(result.career_seasons?.[name]||[]).map(row=>row.SEASON_ID)))].sort().reverse().map(season=>`<div class="compare-table-row" style="grid-template-columns:${grid}"><label>${escapeHTML(season)}</label>${names.map(name=>{const row=(result.career_seasons?.[name]||[]).find(item=>item.SEASON_ID===season);return `<span>${row?fmt(row.PTS):"—"}</span>`;}).join("")}</div>`).join("");
     const currentRows=body?body.replaceAll('class="compare-table-row"',`class="compare-table-row" style="grid-template-columns:${grid}"`):'<p class="analytics-note">Current-season stats require every selected player to be active.</p>';
     const posterLink=result.poster_png?`<a class="btn btn-primary" style="margin-top:24px" href="${escapeHTML(result.poster_png)}" target="_blank" rel="noopener">Download comparison poster ↗</a>`:"";
-    $("compare-output").innerHTML = `<div class="compare-head" style="grid-template-columns:${grid}"><div class="panel-kicker">${escapeHTML(result.season)}</div>${names.map(name=>`<div>${escapeHTML(name)}</div>`).join("")}</div>${renderCompareProfile(names,result.percentiles)}<div class="subhead" style="margin-top:22px"><h3>Current season</h3><span>PER GAME</span></div>${currentRows}<div class="subhead" style="margin-top:28px"><h3>Career averages</h3><span>VOLUME-WEIGHTED</span></div>${careerRows}<div class="subhead" style="margin-top:28px"><h3>Season by season</h3><span>POINTS PER GAME</span></div>${seasonRows}<div class="subhead" style="margin-top:28px"><h3>League percentiles</h3><span>CURRENT SEASON</span></div>${pctRows||'<p class="analytics-note">Requires every player active this season.</p>'}<div class="subhead" style="margin-top:28px"><h3>Shot quality</h3><span>EXPECTED VS ACTUAL</span></div>${qualityRows}${posterLink}`;
+    $("compare-output").innerHTML = `<div class="compare-head" style="grid-template-columns:${grid}"><div class="panel-kicker">${escapeHTML(result.season)}</div>${names.map(name=>`<div>${escapeHTML(name)}</div>`).join("")}</div><div class="viz-grid compare-viz-grid"><div id="compare-skill-chart"></div><div id="compare-career-chart"></div></div><div class="subhead" style="margin-top:22px"><h3>Current season</h3><span>PER GAME</span></div>${currentRows}<div class="subhead" style="margin-top:28px"><h3>Career averages</h3><span>VOLUME-WEIGHTED</span></div>${careerRows}<div class="subhead" style="margin-top:28px"><h3>Season by season</h3><span>POINTS PER GAME</span></div>${seasonRows}<div class="subhead" style="margin-top:28px"><h3>League percentiles</h3><span>CURRENT SEASON</span></div>${pctRows||'<p class="analytics-note">Requires every player active this season.</p>'}<div class="subhead" style="margin-top:28px"><h3>Shot quality</h3><span>EXPECTED VS ACTUAL</span></div>${qualityRows}${posterLink}`;
+    mountCompareVisuals(names,result);
   } catch (error) { $("compare-output").innerHTML = `<div class="empty-state" style="min-height:280px"><div><h3>Comparison unavailable</h3><p class="error">${escapeHTML(error.message)}</p></div></div>`; }
 });
 
@@ -632,9 +728,53 @@ $("team-pick").addEventListener("change", async event => {
       return `<div><div class="subhead"><h3>${conference}</h3><span>STANDINGS</span></div>${conferenceRows.map(row => `<div class="team-data-row" style="grid-template-columns:30px 1fr 45px 45px 60px 55px"><span>${escapeHTML(row.PlayoffRank)}</span><b>${escapeHTML(row.TeamCity)} ${escapeHTML(row.TeamName)}</b><span>${escapeHTML(row.WINS)}W</span><span>${escapeHTML(row.LOSSES)}L</span><span>${escapeHTML(row.L10)}</span><span>${escapeHTML(row.strCurrentStreak)}</span></div>`).join("")}</div>`;
     }).join("");
     const finances = result.finances ? `<section class="team-section"><div class="subhead"><h3>Payroll & contract book</h3><span>LOCAL-ONLY · ${money(result.finances.payroll)}</span></div><div class="split-table"><div class="split-row header"><span>Player</span>${result.finances.seasons.map(year=>`<span>${escapeHTML(year)}</span>`).join("")}</div>${result.finances.contracts.map(player=>`<div class="split-row"><b>${escapeHTML(player.PLAYER_NAME)}</b>${result.finances.seasons.map(year=>`<span>${money(player[year])}</span>`).join("")}</div>`).join("")}</div><p class="analytics-note">Current and future commitments from the weekly local salary cache.</p></section>` : "";
-    $("roster-panel").innerHTML = `<div class="team-sections">${result.scouting_take?`<div class="scouting-card">${escapeHTML(result.scouting_take)}</div>`:""}<section><div class="subhead"><h3>Roster</h3><span>${result.record.wins}-${result.record.losses} · ${escapeHTML(result.season)}</span></div><div role="table" aria-label="${escapeHTML(team)} roster statistics">${head}${rows}</div></section><section class="team-section"><div class="subhead"><h3>Four factors</h3><span>VALUE · LEAGUE RANK</span></div><div class="factor-grid">${factors}</div></section><section class="team-section"><div class="subhead"><h3>Recent games</h3><span>LAST 10</span></div>${recent||'<p class="analytics-note">Recent games unavailable.</p>'}</section><section class="team-section"><div class="subhead"><h3>Five-man lineups</h3><span>MOST USED</span></div>${lineups||'<p class="analytics-note">Lineup data unavailable.</p>'}</section><section class="team-section"><div class="subhead"><h3>On / off impact</h3><span>100+ MINUTES</span></div>${impact||'<p class="analytics-note">On/off data unavailable.</p>'}</section>${finances}<section class="team-section"><div class="subhead"><h3>Conference standings</h3><span>SEASON TO DATE</span></div><div class="standings-grid">${standings}</div></section></div>`;
+    $("roster-panel").innerHTML = `<div class="team-sections">${result.scouting_take?`<div class="scouting-card">${escapeHTML(result.scouting_take)}</div>`:""}<div class="viz-grid"><div id="team-quadrant-chart"></div><div id="team-factor-chart"></div></div><section><div class="subhead"><h3>Roster</h3><span>${result.record.wins}-${result.record.losses} · ${escapeHTML(result.season)}</span></div><div role="table" aria-label="${escapeHTML(team)} roster statistics">${head}${rows}</div></section><section class="team-section"><div class="subhead"><h3>Recent games</h3><span>LAST 10</span></div>${recent||'<p class="analytics-note">Recent games unavailable.</p>'}</section><section class="team-section"><div class="subhead"><h3>Five-man lineups</h3><span>MOST USED</span></div>${lineups||'<p class="analytics-note">Lineup data unavailable.</p>'}</section><section class="team-section"><div class="subhead"><h3>On / off impact</h3><span>100+ MINUTES</span></div>${impact?'<div id="team-onoff-chart"></div>':'<p class="analytics-note">On/off data unavailable.</p>'}</section>${finances}<section class="team-section"><div class="subhead"><h3>Conference standings</h3><span>SEASON TO DATE</span></div><div class="standings-grid">${standings}</div></section></div>`;
+    mountTeamVisuals(team,result,factors,impact);
   } catch (error) { $("roster-panel").innerHTML = `<div class="empty-state" style="min-height:330px"><div><h3>Team unavailable</h3><p class="error">${escapeHTML(error.message)}</p><button class="btn" data-retry="team">Retry team</button></div></div>`; }
 });
+function mountTeamVisuals(team, result, factorTiles, impactRows) {
+  const league = result.league_form || [];
+  const me = league.find(row => row.team === team);
+  if (me && league.length > 2) {
+    const ortgRank = 1 + league.filter(row => Number(row.form_ortg) > Number(me.form_ortg)).length;
+    const drtgRank = 1 + league.filter(row => Number(row.form_drtg) < Number(me.form_drtg)).length;
+    mountChart($("team-quadrant-chart"),{
+      title:"Where they win",
+      takeaway:`${team} ranks #${ortgRank} in offense and #${drtgRank} in defense of ${league.length} teams; up and to the right is better on both ends.`,
+      description:`${result.season} · season-to-date form ratings, points per 100 possessions. Grey lines mark league averages.`,
+      plotFactory:teamQuadrantPlot(league,team),
+      tableHTML:dataTable("League offensive and defensive ratings",["Team","ORTG","DRTG","NET"],[...league].sort((a,b)=>Number(b.form_net)-Number(a.form_net)).map(row=>[row.team,fmt(row.form_ortg),fmt(row.form_drtg),row.form_net==null?"—":`${Number(row.form_net)>=0?"+":""}${fmt(row.form_net)}`])),
+      dataLabel:"View all team ratings",
+    });
+  } else {
+    $("team-quadrant-chart").innerHTML = "";
+  }
+  if (factorTiles) {
+    const ranks = Object.keys(result.factor_labels || {}).map(key => [key, Number(result.four_factors?.[`${key}_rank`])]).filter(([,rank]) => Number.isFinite(rank));
+    const best = ranks.reduce((top, entry) => entry[1] < top[1] ? entry : top, ranks[0]);
+    const worst = ranks.reduce((low, entry) => entry[1] > low[1] ? entry : low, ranks[0]);
+    mountChart($("team-factor-chart"),{
+      title:"Four factors",
+      takeaway:`Best: ${result.factor_labels[best[0]]} (${best[0].startsWith("off")?"offense":"defense"}, #${best[1]}). Weakest: ${result.factor_labels[worst[0]]} (${worst[0].startsWith("off")?"offense":"defense"}, #${worst[1]}).`,
+      description:"League rank, 1 is best. Turnover and free-throw rates are ranked in the direction that helps the team. The white tick marks the league median.",
+      plotFactory:fourFactorBulletPlot(result.four_factors,result.factor_labels,Math.max(league.length,...ranks.map(([,rank])=>rank))),
+      tableHTML:`<div class="factor-grid">${factorTiles}</div>`,
+      dataLabel:"View exact factor values",
+    });
+  } else {
+    $("team-factor-chart").innerHTML = '<div class="data-figure"><div class="figure-heading"><h4>Four factors</h4><p>Four-factor data is unavailable for this team.</p></div></div>';
+  }
+  if (impactRows && $("team-onoff-chart")) {
+    mountChart($("team-onoff-chart"),{
+      title:"Who moves the needle",
+      takeaway:"Net rating swing between minutes with each player on and off the floor. It reflects lineups and opponents as well as the player.",
+      description:`${result.season} · players with 100+ minutes on the floor · points per 100 possessions.`,
+      plotFactory:onOffSwingPlot(result.on_off||[]),
+      tableHTML:impactRows,
+      dataLabel:"View exact on/off splits",
+    });
+  }
+}
 $("roster-panel").addEventListener("click",event=>{
   const player=event.target.closest("[data-player-id]");
   if(player)openPlayerProfile(Number(player.dataset.playerId),player.dataset.playerName);
@@ -870,10 +1010,10 @@ $("lineup-slots").addEventListener("change",event=>{if(event.target.matches(".li
 $("lineup-go").addEventListener("click",async()=>{const ids=lineupSelects().map(select=>select.value).filter(Boolean),output=$("lineup-output");if(ids.length!==5||new Set(ids).size!==5){output.innerHTML='<p class="error">Choose five different players, one in each slot.</p>';return;}output.innerHTML='<div class="loading" style="margin-top:18px">ESTIMATING FIVE-MAN UNIT…</div>';try{const query=ids.map(id=>`player_ids=${encodeURIComponent(id)}`).join("&");const result=await api(`/predict/lineup?team=${encodeURIComponent($("lineup-team").value)}&${query}`);output.innerHTML=`<div class="result-card"><strong>${Number(result.estimated_net_rating)>=0?"+":""}${fmt(result.estimated_net_rating)} NET</strong><p>${result.players.map(escapeHTML).join(" · ")}</p><p class="analytics-note">${fmt(Number(result.win_probability_vs_average)*100,0)}% win probability vs average · ${fmt(result.minutes_together,0)} minutes together · ${escapeHTML(result.source.replaceAll("_"," "))}</p></div>`;}catch(error){output.innerHTML=`<p class="error">${escapeHTML(error.message)}</p>`;}});
 
 let methodologyLoaded=false;
-async function loadMethodology(){if(methodologyLoaded)return;try{const result=await api("/methodology"),metrics=result.metrics||{};const journeyMax=Math.max(...result.journey.map(row=>row.accuracy));$("methodology-output").innerHTML=`<div class="method-grid"><article class="panel method-card"><h3>Evaluation protocol</h3><p>${escapeHTML(result.evaluation.protocol)}</p><p>${escapeHTML(result.evaluation.leakage)}</p><p><b>Decision metrics:</b> ${result.evaluation.decision_metrics.map(escapeHTML).join(" · ")}</p></article><article class="panel method-card"><h3>Artifact record</h3><div class="context-grid" style="grid-template-columns:1fr 1fr"><div class="context-tile"><b>${metrics.outcome?fmt(Number(metrics.outcome.accuracy)*100,1)+"%":"—"}</b><span>Outcome accuracy</span></div><div class="context-tile"><b>${metrics.outcome?fmt(metrics.outcome.log_loss,3):"—"}</b><span>Outcome log loss</span></div><div class="context-tile"><b>${metrics.points?fmt(metrics.points.mae,2):"—"}</b><span>Points MAE</span></div><div class="context-tile"><b>${metrics.points?fmt(Number(metrics.points.interval_coverage)*100,1)+"%":"—"}</b><span>80% interval coverage</span></div></div></article><article class="panel method-card"><h3>Modeling journey</h3>${result.journey.map(row=>`<div class="pct-row"><label>${escapeHTML(row.stage)}</label><div class="track"><div class="fill" style="width:${row.accuracy/journeyMax*100}%"></div></div><b>${fmt(row.accuracy,1)}%</b></div>`).join("")}</article><article class="panel method-card"><h3>Models served</h3>${Object.entries(result.models).map(([name,text])=>`<h4>${escapeHTML(name)}</h4><p>${escapeHTML(text)}</p>`).join("")}</article><article class="panel method-card" style="grid-column:1/-1"><h3>What did not win</h3><p>${result.rejected.map(escapeHTML).join(" · ")}</p><p>Rejected ideas remain documented so the reported gains retain context.</p></article></div>`;methodologyLoaded=true;}catch(error){$("methodology-output").innerHTML=`<div class="panel empty-state"><p class="error">${escapeHTML(error.message)}</p></div>`;}}
+async function loadMethodology(){if(methodologyLoaded)return;try{const result=await api("/methodology"),metrics=result.metrics||{};$("methodology-output").innerHTML=`<div class="method-grid"><article class="panel method-card"><h3>Evaluation protocol</h3><p>${escapeHTML(result.evaluation.protocol)}</p><p>${escapeHTML(result.evaluation.leakage)}</p><p><b>Decision metrics:</b> ${result.evaluation.decision_metrics.map(escapeHTML).join(" · ")}</p></article><article class="panel method-card"><h3>Artifact record</h3><div class="context-grid" style="grid-template-columns:1fr 1fr"><div class="context-tile"><b>${metrics.outcome?fmt(Number(metrics.outcome.accuracy)*100,1)+"%":"—"}</b><span>Outcome accuracy</span></div><div class="context-tile"><b>${metrics.outcome?fmt(metrics.outcome.log_loss,3):"—"}</b><span>Outcome log loss</span></div><div class="context-tile"><b>${metrics.points?fmt(metrics.points.mae,2):"—"}</b><span>Points MAE</span></div><div class="context-tile"><b>${metrics.points?fmt(Number(metrics.points.interval_coverage)*100,1)+"%":"—"}</b><span>80% interval coverage</span></div></div></article><div id="method-journey-chart" class="method-chart"></div><article class="panel method-card"><h3>Models served</h3>${Object.entries(result.models).map(([name,text])=>`<h4>${escapeHTML(name)}</h4><p>${escapeHTML(text)}</p>`).join("")}</article><article class="panel method-card" style="grid-column:1/-1"><h3>What did not win</h3><p>${result.rejected.map(escapeHTML).join(" · ")}</p><p>Rejected ideas remain documented so the reported gains retain context.</p></article></div>`;const first=result.journey[0],last=result.journey.at(-1);mountChart($("method-journey-chart"),{title:"Modeling journey",takeaway:first&&last?`Holdout accuracy moved from ${fmt(first.accuracy,1)}% (${first.stage}) to ${fmt(last.accuracy,1)}% (${last.stage}); the best stage is highlighted.`:"Holdout accuracy by modeling stage.",description:"Outcome-model holdout accuracy in the order each stage was tried. The axis is zoomed to the observed range, so small gaps look larger than they are.",plotFactory:journeyPlot(result.journey),tableHTML:dataTable("Modeling journey",["Stage","Accuracy"],result.journey.map(row=>[row.stage,`${fmt(row.accuracy,1)}%`])),dataLabel:"View exact accuracy by stage"});methodologyLoaded=true;}catch(error){$("methodology-output").innerHTML=`<div class="panel empty-state"><p class="error">${escapeHTML(error.message)}</p></div>`;}}
 
 const loadMethodologyBase=loadMethodology;
-loadMethodology=async()=>{await loadMethodologyBase();if($("model-registry-card"))return;try{const result=await api("/methodology/registry"),models=result.models||{},backtest=result.season_backtest?.metrics||{},components=result.season_backtest?.component_validation||{},grid=$("methodology-output").querySelector(".method-grid");if(!grid)return;const cutoff=value=>value&&typeof value==="object"?Object.entries(value).map(([season,date])=>`${season}: ${date}`).join(" · "):(value||"—");const registry=`<article class="panel method-card" id="model-registry-card" style="grid-column:1/-1"><h3>Model registry</h3><div class="forecast-conferences">${Object.entries(models).map(([name,model])=>`<div class="result-card"><div class="panel-kicker">${escapeHTML(model.version)}</div><h4>${escapeHTML(name.replaceAll("_"," "))}</h4><p><b>${escapeHTML(model.kind)}</b><br>${escapeHTML(model.status)}</p><p class="analytics-note">Data cutoff: ${escapeHTML(cutoff(model.data_cutoff))}${model.roster_overlay?`<br>Roster overlay: ${escapeHTML(model.roster_overlay.status)}`:''}</p></div>`).join("")}</div></article>`;const record=backtest.record||{},playoffs=backtest.playoffs||{},champ=backtest.championship||{},cup=backtest.nba_cup||{};const validation=`<article class="panel method-card" style="grid-column:1/-1"><h3>Season forecast backtest</h3>${backtest.team_seasons?`<p>${escapeHTML(backtest.season_count)} seasons · ${escapeHTML(backtest.team_seasons)} team-seasons. Lower error is better.</p><div class="context-grid"><div class="context-tile"><b>${fmt(record.mae,2)}</b><span>Record MAE vs ${fmt(record.baseline_mae,2)} baseline</span></div><div class="context-tile"><b>${fmt(playoffs.brier,3)}</b><span>Playoff Brier vs ${fmt(playoffs.baseline_brier,3)}</span></div><div class="context-tile"><b>${fmt(champ.brier,3)}</b><span>Title Brier vs ${fmt(champ.baseline_brier,3)}</span></div><div class="context-tile"><b>${fmt(cup.brier,3)}</b><span>Cup Brier vs ${fmt(cup.baseline_brier,3)}</span></div></div><div style="margin-top:18px">${(playoffs.calibration||[]).map(row=>`<div class="pct-row"><label>${fmt(Number(row.lower)*100,0)}–${fmt(Number(row.upper)*100,0)}% (${row.count})</label><div class="track"><div class="fill" style="width:${Number(row.observed_rate)*100}%"></div></div><b>${fmt(Number(row.mean_probability)*100,0)}% / ${fmt(Number(row.observed_rate)*100,0)}%</b></div>`).join("")}</div><p class="analytics-note">Calibration rows show mean forecast / observed rate. Record and playoff forecasts currently edge their simple baselines; title and Cup results do not yet beat uniform baselines.${components.roster_overlay?` Roster overlay: ${escapeHTML(components.roster_overlay.status)} — ${escapeHTML(components.roster_overlay.reason)}`:''}</p>`:'<p class="analytics-note">Backtest artifact missing. Run uv run python -m nba_insights.ml.backtest.</p>'}</article>`;grid.insertAdjacentHTML("beforeend",registry+validation);}catch(error){console.warn("model registry unavailable",error);}};
+loadMethodology=async()=>{await loadMethodologyBase();if($("model-registry-card"))return;try{const result=await api("/methodology/registry"),models=result.models||{},backtest=result.season_backtest?.metrics||{},components=result.season_backtest?.component_validation||{},grid=$("methodology-output").querySelector(".method-grid");if(!grid)return;const cutoff=value=>value&&typeof value==="object"?Object.entries(value).map(([season,date])=>`${season}: ${date}`).join(" · "):(value||"—");const registry=`<article class="panel method-card" id="model-registry-card" style="grid-column:1/-1"><h3>Model registry</h3><div class="forecast-conferences">${Object.entries(models).map(([name,model])=>`<div class="result-card"><div class="panel-kicker">${escapeHTML(model.version)}</div><h4>${escapeHTML(name.replaceAll("_"," "))}</h4><p><b>${escapeHTML(model.kind)}</b><br>${escapeHTML(model.status)}</p><p class="analytics-note">Data cutoff: ${escapeHTML(cutoff(model.data_cutoff))}${model.roster_overlay?`<br>Roster overlay: ${escapeHTML(model.roster_overlay.status)}`:''}</p></div>`).join("")}</div></article>`;const record=backtest.record||{},playoffs=backtest.playoffs||{},champ=backtest.championship||{},cup=backtest.nba_cup||{};const validation=`<article class="panel method-card" style="grid-column:1/-1"><h3>Season forecast backtest</h3>${backtest.team_seasons?`<p>${escapeHTML(backtest.season_count)} seasons · ${escapeHTML(backtest.team_seasons)} team-seasons. Lower error is better.</p><div class="context-grid"><div class="context-tile"><b>${fmt(record.mae,2)}</b><span>Record MAE vs ${fmt(record.baseline_mae,2)} baseline</span></div><div class="context-tile"><b>${fmt(playoffs.brier,3)}</b><span>Playoff Brier vs ${fmt(playoffs.baseline_brier,3)}</span></div><div class="context-tile"><b>${fmt(champ.brier,3)}</b><span>Title Brier vs ${fmt(champ.baseline_brier,3)}</span></div><div class="context-tile"><b>${fmt(cup.brier,3)}</b><span>Cup Brier vs ${fmt(cup.baseline_brier,3)}</span></div></div><div id="method-calibration-chart" style="margin-top:18px"></div><p class="analytics-note">Calibration rows show mean forecast / observed rate. Record and playoff forecasts currently edge their simple baselines; title and Cup results do not yet beat uniform baselines.${components.roster_overlay?` Roster overlay: ${escapeHTML(components.roster_overlay.status)} — ${escapeHTML(components.roster_overlay.reason)}`:''}</p>`:'<p class="analytics-note">Backtest artifact missing. Run uv run python -m nba_insights.ml.backtest.</p>'}</article>`;grid.insertAdjacentHTML("beforeend",registry+validation);const calibration=playoffs.calibration||[];if(calibration.length&&$("method-calibration-chart")){const worst=calibration.reduce((top,row)=>Math.abs(Number(row.observed_rate)-Number(row.mean_probability))>Math.abs(Number(top.observed_rate)-Number(top.mean_probability))?row:top);mountChart($("method-calibration-chart"),{title:"Playoff calibration",takeaway:`Dots near the diagonal mean the stated probabilities came true about as often as promised. The largest miss is the ${fmt(Math.max(0,Number(worst.lower))*100,0)}–${fmt(Number(worst.upper)*100,0)}% bin (forecast ${fmt(Number(worst.mean_probability)*100,0)}%, observed ${fmt(Number(worst.observed_rate)*100,0)}%).`,description:`${backtest.season_count} backtest seasons · dot area is team-seasons per bin. Sparse bins are noisy.`,plotFactory:calibrationPlot(calibration),tableHTML:dataTable("Playoff calibration bins",["Forecast bin","Team-seasons","Mean forecast","Observed"],calibration.map(row=>[`${fmt(Number(row.lower)*100,0)}–${fmt(Number(row.upper)*100,0)}%`,String(row.count),`${fmt(Number(row.mean_probability)*100,0)}%`,`${fmt(Number(row.observed_rate)*100,0)}%`])),dataLabel:"View exact calibration bins"});}}catch(error){console.warn("model registry unavailable",error);}};
 
 $("ask-go").addEventListener("click",async()=>{const question=$("ask-question").value.trim(),output=$("ask-output");if(question.length<3){output.innerHTML='<div class="answer error">Enter a basketball question.</div>';return;}output.innerHTML='<div class="empty-state" style="min-height:330px"><div class="loading">QUERYING THE LEAGUE TABLE…</div></div>';try{const response=await fetch("/ask",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({question})});if(!response.ok){let message=response.statusText;try{message=(await response.json()).detail||message;}catch{}throw new Error(message);}const result=await response.json();output.innerHTML=`<div class="answer">${escapeHTML(result.answer)}<p class="analytics-note">${escapeHTML(result.season)} · ${escapeHTML(result.model)} · verify anything important</p></div>`;}catch(error){output.innerHTML=`<div class="answer"><h3>AI answer unavailable</h3><p class="error">${escapeHTML(error.message)}</p></div>`;}});
 
