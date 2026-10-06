@@ -37,9 +37,6 @@ jobs:
 
   mobile:
     runs-on: ubuntu-latest
-    # Reported, not blocking: Expo's CLI/Metro advisories have no non-breaking
-    # fix yet (Sports-Analytics-1xp.7.1 tracks triage). Remove once resolved.
-    continue-on-error: true
     defaults:
       run:
         working-directory: mobile
@@ -48,7 +45,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Audit mobile dependencies
+      # Reported, not blocking: Expo's CLI/Metro advisories have no
+      # non-breaking fix yet (Sports-Analytics-1xp.7.1). Findings raise a
+      # warning annotation; make this step fail once triage is done.
+      - name: Audit mobile dependencies (non-blocking)
         run: |
-          npm audit --audit-level=high | tee audit.txt
+          if npm audit --audit-level=high > audit.txt; then
+            echo "No high-severity mobile advisories."
+          else
+            echo "::warning title=Mobile npm audit::$(grep -E 'vulnerabilit' audit.txt | tail -1) - see Sports-Analytics-1xp.7.1"
+          fi
           { echo "### Mobile npm audit"; echo '```'; tail -20 audit.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
