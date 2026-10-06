@@ -18,6 +18,18 @@ jobs:
       - name: Test
         run: uv run pytest -q
 
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Install dependencies
+        run: uv sync --frozen --group browser
+      - name: Install Chromium
+        run: uv run playwright install --with-deps chromium
+      - name: Browser tests (charts, keyboard, phone layout, offline)
+        run: uv run pytest -q tests/test_pwa_browser.py
+
   container:
     runs-on: ubuntu-latest
     steps:

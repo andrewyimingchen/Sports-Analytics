@@ -227,6 +227,8 @@ input:focus, select:focus { border-color: var(--orange); box-shadow: 0 0 0 3px r
 .split-row.header { color: var(--muted-2); text-transform: uppercase; }
 .analytics-note { color: var(--muted-2); font-size: 10px; line-height: 1.6; margin-top: 9px; }
 .team-sections { display: grid; gap: 25px; padding: 22px; }
+/* Grid items default to min-width:auto; let wide box-score tables scroll inside instead. */
+.team-sections > * { min-width: 0; }
 .team-section { border-top: 1px solid var(--line-soft); padding-top: 22px; }
 .factor-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 9px; }
 .team-data-row { display: grid; grid-template-columns: minmax(170px,1.5fr) repeat(5,minmax(60px,.6fr));
