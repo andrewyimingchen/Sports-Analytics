@@ -719,6 +719,18 @@ def team_profile(team: str, request: Request, client: Client) -> dict:
         column for column in ("GAME_DATE", "MATCHUP", "WL", "PTS", "PLUS_MINUS")
         if column in recent
     ]
+    # League-wide efficiency lets the Team Room place this team on the
+    # offense/defense quadrant without a second request.
+    league_form_columns = [
+        column for column in ("form_ortg", "form_drtg", "form_net") if column in snapshot
+    ]
+    league_form = (
+        _finite_records(
+            snapshot[league_form_columns].rename_axis("team").reset_index()
+        )
+        if {"form_ortg", "form_drtg"} <= set(league_form_columns)
+        else []
+    )
     return {
         "team": team,
         "season": current_season(),
@@ -728,6 +740,7 @@ def team_profile(team: str, request: Request, client: Client) -> dict:
         "roster": _finite_records(roster[roster_columns].head(18)),
         "four_factors": factors,
         "factor_labels": FACTOR_LABELS,
+        "league_form": league_form,
         "recent_games": _finite_records(recent[recent_columns].iloc[::-1]),
         "standings": standings,
         "lineups": lineups,
