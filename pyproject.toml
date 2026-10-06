@@ -23,6 +23,9 @@ dependencies = [
 ai = ["anthropic>=0.69"]
 
 [dependency-groups]
+browser = [
+    "playwright>=1.48",
+]
 dev = [
     "httpx>=0.28.1",
     "pytest>=8.0",

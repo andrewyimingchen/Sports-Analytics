@@ -218,7 +218,7 @@ function mountSplits(splits, mode, season) {
     takeaway:"Each panel uses its own scale, so compare splits within a panel, not across panels.",
     description:`${season} · per-game averages · ${sample} games across ${rows.length} splits. Small splits are noisy; check games played in the table.`,
     plotFactory:splitSmallMultiples(rows,splitMetrics),
-    tableHTML:`<div class="split-table">${splitRows(rows)}</div>`,
+    tableHTML:dataTable(`Splits by ${splitLabels[mode].toLowerCase()}`,["Split","GP","MIN","PTS","REB","AST","3PM","FG%","+/-"],rows.map(row=>[row.Split,fmt(row.GP,0),fmt(row.MIN),fmt(row.PTS),fmt(row.REB),fmt(row.AST),fmt(row.FG3M),row.FG_PCT==null?"—":`${fmt(Number(row.FG_PCT)*100)}%`,row.PLUS_MINUS==null?"—":`${Number(row.PLUS_MINUS)>=0?"+":""}${fmt(row.PLUS_MINUS)}`])),
     dataLabel:"View exact split table",
   });
 }
@@ -468,20 +468,25 @@ async function loadTracking(){
     output.innerHTML=`<div class="visual-output">${controls}<div class="tracking-table" role="table" aria-label="${escapeHTML(result.label)}">${header}${rows}</div></div>`;
     if(numeric.length){
       const nameKey=scope==="player"?"PLAYER_NAME":"TEAM_NAME",noun=scope==="player"?"players":"teams";
+      const trackingValue=(metric,value)=>value==null?"—":pct.has(metric)?`${fmt(Number(value)*100,1)}%`:fmt(value,2);
       const renderTrackingCharts=()=>{
         const key=$("tracking-metric").value,versus=$("tracking-versus")?.value,label=key.replaceAll('_',' ');
-        const leader=[...result.records].filter(row=>Number.isFinite(Number(row[key]))).sort((a,b)=>Number(b[key])-Number(a[key]))[0];
+        const ranked=[...result.records].filter(row=>Number.isFinite(Number(row[key]))).sort((a,b)=>Number(b[key])-Number(a[key])),leader=ranked[0];
         mountChart($("tracking-leader-chart"),{
           title:`${label} leaders`,
           takeaway:`${leader?.[nameKey]??"—"} leads the filtered ${noun}. ${result.definitions?.[key]||""}`,
           description:`${result.season} · ${result.minimum_games}+ games · top 15 of ${result.count} ${noun} shown${pct.has(key)?" · percentage":""}.`,
           plotFactory:leaderboardPlot(result.records,{key,label,nameKey,percent:pct.has(key)}),
+          tableHTML:dataTable(`${label} by ${scope}`,[scope==="player"?"Player":"Team","Team",label],ranked.map(row=>[row[nameKey],row.TEAM_ABBREVIATION||"—",trackingValue(key,row[key])])),
+          dataLabel:`View all ${ranked.length} ranked ${noun}`,
         });
         if(versus&&versus!==key)mountChart($("tracking-scatter-chart"),{
           title:`${label} vs ${versus.replaceAll('_',' ')}`,
           takeaway:`Upper-right ${noun} are above the sample average on both measures; the labelled points lead on ${label}.`,
           description:`${result.count} ${noun} · grey lines mark the filtered-sample average.`,
           plotFactory:metricScatterPlot(result.records,{xKey:versus,yKey:key,xLabel:versus.replaceAll('_',' '),yLabel:label,nameKey,xPercent:pct.has(versus),yPercent:pct.has(key)}),
+          tableHTML:dataTable(`${label} and ${versus.replaceAll('_',' ')} by ${scope}`,[scope==="player"?"Player":"Team",label,versus.replaceAll('_',' ')],ranked.filter(row=>Number.isFinite(Number(row[versus]))).map(row=>[row[nameKey],trackingValue(key,row[key]),trackingValue(versus,row[versus])])),
+          dataLabel:"View both measures for every row",
         });
         else $("tracking-scatter-chart").innerHTML=numeric.length<2?'':'<div class="data-figure"><div class="figure-heading"><h4>Choose a second measure</h4><p>Pick a different "Compare against" metric to see how the two relate.</p></div></div>';
       };
@@ -572,7 +577,7 @@ function mountGameStory(story){
       takeaway:`${efgGap>=0?home:away} shot better by ${fmt(Math.abs(efgGap),1)} eFG points. The longer the connector, the bigger that edge.`,
       description:"Team efficiency from this game's box score. Lower turnover rate is better; the other rows are better when higher.",
       plotFactory:advancedBoxDumbbellPlot(rows,away,home),
-      tableHTML:story.advancedTable,
+      tableHTML:dataTable("Advanced team box",["Team","PTS","eFG%","TS%","TOV%","FT rate","AST/TO","OREB","REB"],rows.map(team=>[team.TEAM,String(team.PTS??"—"),`${fmt(Number(team.EFG_PCT)*100,1)}%`,`${fmt(Number(team.TS_PCT)*100,1)}%`,`${fmt(Number(team.TOV_RATE)*100,1)}%`,`${fmt(Number(team.FT_RATE)*100,1)}%`,fmt(team.AST_TOV,2),String(team.OREB??"—"),String(team.REB??"—")])),
       dataLabel:"View full advanced box",
     });
   }else $("game-advanced-chart").innerHTML=`<div class="data-figure"><div class="figure-heading"><h4>Advanced team box</h4><p>Advanced team rows are unavailable for this game.</p></div>${story.advancedTable||""}</div>`;
@@ -661,6 +666,8 @@ function mountCompareVisuals(names, result) {
     takeaway:"Lines show how each scoring arc rose, peaked, or held; hover any season for the exact value.",
     description:"Points per game by season start year · one line per player.",
     plotFactory:compareCareerPlot(withCareer,result.career_seasons),
+    tableHTML:dataTable("Points per game by season",["Season",...withCareer],[...new Set(withCareer.flatMap(name=>result.career_seasons[name].map(row=>row.SEASON_ID)))].sort().reverse().map(season=>[season,...withCareer.map(name=>{const row=result.career_seasons[name].find(item=>item.SEASON_ID===season);return row?fmt(row.PTS):"—";})])),
+    dataLabel:"View every season",
   });
 }
 $("compare-go").addEventListener("click", async () => {
@@ -758,7 +765,7 @@ function mountTeamVisuals(team, result, factorTiles, impactRows) {
       takeaway:`Best: ${result.factor_labels[best[0]]} (${best[0].startsWith("off")?"offense":"defense"}, #${best[1]}). Weakest: ${result.factor_labels[worst[0]]} (${worst[0].startsWith("off")?"offense":"defense"}, #${worst[1]}).`,
       description:"League rank, 1 is best. Turnover and free-throw rates are ranked in the direction that helps the team. The white tick marks the league median.",
       plotFactory:fourFactorBulletPlot(result.four_factors,result.factor_labels,Math.max(league.length,...ranks.map(([,rank])=>rank))),
-      tableHTML:`<div class="factor-grid">${factorTiles}</div>`,
+      tableHTML:dataTable("Four factors",["Factor","Value","League rank"],Object.keys(result.factor_labels||{}).filter(key=>result.four_factors?.[key]!=null).map(key=>[`${key.startsWith("off")?"Offense":"Defense"} ${result.factor_labels[key]}`,`${fmt(Number(result.four_factors[key])*100)}%`,`#${result.four_factors[`${key}_rank`]}`])),
       dataLabel:"View exact factor values",
     });
   } else {
@@ -770,7 +777,7 @@ function mountTeamVisuals(team, result, factorTiles, impactRows) {
       takeaway:"Net rating swing between minutes with each player on and off the floor. It reflects lineups and opponents as well as the player.",
       description:`${result.season} · players with 100+ minutes on the floor · points per 100 possessions.`,
       plotFactory:onOffSwingPlot(result.on_off||[]),
-      tableHTML:impactRows,
+      tableHTML:dataTable("On/off net rating by player",["Player","Minutes on","Net on","Net off","Swing"],(result.on_off||[]).map(player=>[player.PLAYER_NAME,fmt(player.MIN_ON,0),`${Number(player.NET_ON)>=0?"+":""}${fmt(player.NET_ON)}`,`${Number(player.NET_OFF)>=0?"+":""}${fmt(player.NET_OFF)}`,`${Number(player.NET_DIFF)>=0?"+":""}${fmt(player.NET_DIFF)}`])),
       dataLabel:"View exact on/off splits",
     });
   }
@@ -809,17 +816,22 @@ async function loadSeasonForecast(force=false){
       tableHTML:table(conference),
       dataLabel:`View exact ${conference} forecast`,
     }));
+const probabilityTable=(key,label)=>dataTable(`${label} probability by team`,["Team","Conference",`${label} probability`],[...allTeams].sort((a,b)=>Number(b[key])-Number(a[key])).map(team=>[team.TEAM,team.CONFERENCE||(result.conferences.East?.includes(team)?"East":"West"),pct(team[key])]));
     mountChart($("outlook-playoff-chart"),{
       title:"Playoff probability",
       takeaway:"The 50% guide separates likely qualifiers from teams whose postseason case remains fragile.",
       description:`All teams · ${Number(result.n_sims).toLocaleString()} simulations.`,
       plotFactory:probabilityPlot(allTeams,"Playoff","PLAYOFF_PROB"),
+      tableHTML:probabilityTable("PLAYOFF_PROB","Playoff"),
+      dataLabel:"View every team's playoff probability",
     });
     mountChart($("outlook-title-chart"),{
       title:"Championship probability",
       takeaway:`${result.favorites.championship.team} leads the title field, but the full distribution shows how concentrated that edge is.`,
       description:`Model probability, not betting odds · ${result.basis_season} basis.`,
       plotFactory:probabilityPlot(allTeams,"NBA title","CHAMP_PROB","#ff5c35"),
+      tableHTML:probabilityTable("CHAMP_PROB","Title"),
+      dataLabel:"View every team's title probability",
     });
     if(playerForecast)mountChart($("outlook-player-chart"),{
       title:"Top projected scorers",
@@ -834,7 +846,7 @@ async function loadSeasonForecast(force=false){
       takeaway:`${result.favorites.nba_cup.team} has the strongest modeled Cup path; direct labels show the size of the edge.`,
       description:`${result.nba_cup.assumption} Source ${result.nba_cup.source_date}.`,
       plotFactory:probabilityPlot(allTeams,"NBA Cup","CUP_PROB","#c7ff4a"),
-      tableHTML:`<div class="forecast-conferences">${cupGroups}</div>`,
+      tableHTML:Object.entries(result.nba_cup?.groups||{}).map(([group,teams])=>dataTable(`${group} · official draw`,["Team","Rank","Group","Wild card","Knockout","Final","Champion"],teams.map(team=>[team.TEAM,fmt(team.CUP_PROJECTED_GROUP_RANK,1),pct(team.CUP_GROUP_WIN_PROB),pct(team.CUP_WILD_CARD_PROB),pct(team.CUP_KNOCKOUT_PROB),pct(team.CUP_FINAL_PROB),pct(team.CUP_PROB)]))).join(""),
       dataLabel:"View group and knockout probabilities",
     });
     forecastLoadedFor=season;
@@ -934,8 +946,8 @@ function renderTeamComparison(result){
   const rotation=team=>{const profile=result.teams?.[team]||{},players=(profile.rotation||[]).map(player=>`<div class="rotation-player"><span>${escapeHTML(player.PLAYER_NAME)}</span><span>${fmt(player.MIN)} MIN</span><span>${fmt(player.PTS)} PTS</span></div>`).join(""),lineup=profile.top_lineup;return `<article class="rotation-card"><h4>${escapeHTML(team)}</h4><div class="context-grid" style="grid-template-columns:repeat(2,1fr)"><div class="context-tile"><b>${profile.bench_points_per_game==null?'—':fmt(profile.bench_points_per_game)}</b><span>Bench PTS / game</span></div><div class="context-tile"><b>${profile.clutch?`${profile.clutch.net_rating>=0?'+':''}${fmt(profile.clutch.net_rating)}`:'—'}</b><span>Clutch net rating</span></div></div><div style="margin-top:12px">${players||'<p class="analytics-note">Rotation unavailable.</p>'}</div><p class="analytics-note">${lineup?`Top unit: ${escapeHTML(lineup.GROUP_NAME)} · ${fmt(lineup.MIN,0)} minutes · ${Number(lineup.NET_RATING)>=0?'+':''}${fmt(lineup.NET_RATING)} net.`:'Five-player lineup sample unavailable.'}</p></article>`;};
   const h2h=result.head_to_head||{};
   const metricTable=`<div class="metric-board" role="table" aria-label="${escapeHTML(away)} and ${escapeHTML(home)} exact matchup metrics"><div class="team-metric-row header" role="row"><span role="columnheader">Category</span><b role="columnheader">${escapeHTML(away)}</b><span role="columnheader">Metric</span><b role="columnheader">${escapeHTML(home)}</b></div>${metricRows}</div>`;
-  const driverTable=drivers?`<div aria-label="Exact model driver contributions">${drivers}</div>`:"";
-  output.innerHTML=`<div class="subhead"><div><div class="panel-kicker">${escapeHTML(result.season)} · data through ${escapeHTML(result.sample.as_of)}</div><h3>${escapeHTML(away)} at ${escapeHTML(home)} · full comparison</h3></div><div class="comparison-actions"><button class="btn" id="comparison-share">Copy share link</button><button class="btn" id="comparison-export">Export JSON</button></div></div><p class="analytics-note">${escapeHTML(result.sample.definition)} · ${escapeHTML(away)} ${escapeHTML(result.sample.games[away])} games · ${escapeHTML(home)} ${escapeHTML(result.sample.games[home])} games.</p><div class="viz-legend"><span><i class="away"></i>${escapeHTML(away)}</span><span><i></i>${escapeHTML(home)}</span></div><div class="viz-grid" style="margin-top:14px"><div id="matchup-rank-chart"></div><div id="matchup-driver-chart"></div></div><div class="rotation-grid">${rotation(away)}${rotation(home)}</div><div class="context-grid"><div class="context-tile"><b>${escapeHTML(h2h.first_wins??0)}–${escapeHTML(h2h.second_wins??0)}</b><span>${escapeHTML(away)}–${escapeHTML(home)} head to head</span></div><div class="context-tile"><b>${h2h.first_average_margin==null?'—':`${Number(h2h.first_average_margin)>=0?'+':''}${fmt(h2h.first_average_margin)}`}</b><span>${escapeHTML(away)} average margin</span></div><div class="context-tile"><b>${fmt(Number(result.home_win_prob)*100,0)}%</b><span>${escapeHTML(home)} model probability</span></div><div class="context-tile"><b>${escapeHTML(result.basis_season)}</b><span>Model data basis</span></div></div><ul class="limitations">${(result.limitations||[]).map(item=>`<li>${escapeHTML(item)}</li>`).join("")}</ul>`;
+  const driverTable=drivers?dataTable("Model driver contributions",["Driver","Raw home–away difference","Log-odds contribution","Favors"],(result.drivers||[]).slice(0,8).map(driver=>[driver.label,driver.raw_difference==null?"baseline":fmt(driver.raw_difference,2),`${driver.log_odds_contribution>=0?"+":""}${fmt(driver.log_odds_contribution,3)}`,driver.favors])):"";
+  output.innerHTML=`<div class="subhead"><div><div class="panel-kicker">${escapeHTML(result.season)} · data through ${escapeHTML(result.sample.as_of)}</div><h3>${escapeHTML(away)} at ${escapeHTML(home)} · full comparison</h3></div><div class="comparison-actions"><button class="btn" id="comparison-share">Copy share link</button><button class="btn" id="comparison-export">Export JSON</button></div></div><p class="analytics-note">${escapeHTML(result.sample.definition)} · ${escapeHTML(away)} ${escapeHTML(result.sample.games[away])} games · ${escapeHTML(home)} ${escapeHTML(result.sample.games[home])} games.</p><div class="viz-legend"><span><i class="away"></i>${escapeHTML(away)} · circle</span><span><i class="home"></i>${escapeHTML(home)} · square</span></div><div class="viz-grid" style="margin-top:14px"><div id="matchup-rank-chart"></div><div id="matchup-driver-chart"></div></div><div class="rotation-grid">${rotation(away)}${rotation(home)}</div><div class="context-grid"><div class="context-tile"><b>${escapeHTML(h2h.first_wins??0)}–${escapeHTML(h2h.second_wins??0)}</b><span>${escapeHTML(away)}–${escapeHTML(home)} head to head</span></div><div class="context-tile"><b>${h2h.first_average_margin==null?'—':`${Number(h2h.first_average_margin)>=0?'+':''}${fmt(h2h.first_average_margin)}`}</b><span>${escapeHTML(away)} average margin</span></div><div class="context-tile"><b>${fmt(Number(result.home_win_prob)*100,0)}%</b><span>${escapeHTML(home)} model probability</span></div><div class="context-tile"><b>${escapeHTML(result.basis_season)}</b><span>Model data basis</span></div></div><ul class="limitations">${(result.limitations||[]).map(item=>`<li>${escapeHTML(item)}</li>`).join("")}</ul>`;
   mountChart($("matchup-rank-chart"),{
     title:"Same-sample league ranks",
     takeaway:"Connected dots make the category-by-category advantage visible on one comparable rank scale; rank one is best.",
@@ -946,7 +958,7 @@ function renderTeamComparison(result){
   });
   mountChart($("matchup-driver-chart"),{
     title:"Why the prediction moved",
-    takeaway:`Orange steps move the forecast toward ${home}; blue steps move it toward ${away}.`,
+    takeaway:`Steps to the right (square ends) move the forecast toward ${home}; steps to the left (round ends) move it toward ${away}.`,
     description:"Ordered local contributions accumulate from the baseline. They explain this prediction, not general team quality.",
     plotFactory:driverWaterfallPlot(result.drivers||[],away,home),
     tableHTML:driverTable,
