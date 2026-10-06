@@ -10,4 +10,3 @@ def test_readiness_reports_shell_and_optional_models():
     assert result["status"] == "ready"
     assert result["pwa_shell"] is True
     assert set(result["optional_models"]) == {"outcome", "points", "lineup"}
-

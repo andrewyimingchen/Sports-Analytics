@@ -157,7 +157,16 @@ def test_game_log_table_shapes_and_sorts():
     )
     out = game_log_table(log)
     assert list(out.columns) == [
-        "DATE", "MATCHUP", "WL", "MIN", "PTS", "REB", "AST", "FG", "3PM", "+/-"
+        "DATE",
+        "MATCHUP",
+        "WL",
+        "MIN",
+        "PTS",
+        "REB",
+        "AST",
+        "FG",
+        "3PM",
+        "+/-",
     ]
     assert str(out["DATE"].iloc[0]) == "2026-01-03"  # newest first
     assert out["FG"].iloc[0] == "8/19"

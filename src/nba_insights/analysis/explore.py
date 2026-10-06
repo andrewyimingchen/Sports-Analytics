@@ -12,8 +12,23 @@ import pandas as pd
 # box-score counting columns that scale with minutes; rates (percentages,
 # ratings, plus/minus per-game context) are left untouched
 _COUNTING = [
-    "PTS", "FGM", "FGA", "FG3M", "FG3A", "FTM", "FTA",
-    "OREB", "DREB", "REB", "AST", "TOV", "STL", "BLK", "BLKA", "PF", "PFD",
+    "PTS",
+    "FGM",
+    "FGA",
+    "FG3M",
+    "FG3A",
+    "FTM",
+    "FTA",
+    "OREB",
+    "DREB",
+    "REB",
+    "AST",
+    "TOV",
+    "STL",
+    "BLK",
+    "BLKA",
+    "PF",
+    "PFD",
 ]
 
 

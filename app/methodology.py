@@ -54,9 +54,7 @@ def _coef_chart(pipeline, features: list[str], title: str, pal: dict) -> go.Figu
     )
     # diverging encoding: sign is the polarity, blue helps home / red hurts
     colors = ["#2a78d6" if c > 0 else "#e34948" for c in df["coef"]]
-    fig = go.Figure(
-        go.Bar(x=df["coef"], y=df["feature"], orientation="h", marker_color=colors)
-    )
+    fig = go.Figure(go.Bar(x=df["coef"], y=df["feature"], orientation="h", marker_color=colors))
     fig.update_layout(
         title=title,
         template="none",
@@ -90,13 +88,21 @@ def _calibration_chart(preds: pd.DataFrame, pal: dict) -> go.Figure:
     )
     fig = go.Figure()
     fig.add_trace(
-        go.Scatter(x=[0, 1], y=[0, 1], mode="lines", name="perfect",
-                   line=dict(color=pal["grid"], width=1, dash="dot"))
+        go.Scatter(
+            x=[0, 1],
+            y=[0, 1],
+            mode="lines",
+            name="perfect",
+            line=dict(color=pal["grid"], width=1, dash="dot"),
+        )
     )
     fig.add_trace(
         go.Scatter(
-            x=cal["predicted"], y=cal["actual"], mode="lines+markers",
-            name="model", line=dict(color="#2a78d6", width=2),
+            x=cal["predicted"],
+            y=cal["actual"],
+            mode="lines+markers",
+            name="model",
+            line=dict(color="#2a78d6", width=2),
             marker=dict(size=(cal["n"] / cal["n"].max() * 14 + 6)),
             text=[f"{n} games" for n in cal["n"]],
         )
@@ -104,7 +110,8 @@ def _calibration_chart(preds: pd.DataFrame, pal: dict) -> go.Figure:
     fig.update_layout(
         title="Calibration on the holdout season (marker size = games in bin)",
         template="none",
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
         font=dict(color=pal["ink2"]),
         xaxis_title="predicted home-win probability",
         yaxis_title="actual home-win rate",
@@ -208,9 +215,12 @@ features, the classifier is not the bottleneck.
     fig.update_layout(
         title="Holdout accuracy by modeling round",
         template="none",
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(color=pal["ink2"]), showlegend=False,
-        margin=dict(l=160, r=40, t=50, b=40), height=300,
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color=pal["ink2"]),
+        showlegend=False,
+        margin=dict(l=160, r=40, t=50, b=40),
+        height=300,
     )
     fig.update_xaxes(range=[50, 74], gridcolor=pal["grid"])
     fig.update_yaxes(autorange="reversed", showgrid=False)

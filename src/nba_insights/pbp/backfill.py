@@ -69,7 +69,10 @@ def backfill_season(client: NBAClient, season: str, limit: int | None = None) ->
                     logger.warning(
                         "%s: %s mostly failing (%d of %d) — skipping it for the rest "
                         "of the season (likely unavailable upstream)",
-                        season, label, breakers[label].failures, breakers[label].attempts,
+                        season,
+                        label,
+                        breakers[label].failures,
+                        breakers[label].attempts,
                     )
         if i % 100 == 0:
             logger.info("%s: %d/%d games", season, i, len(game_ids))
@@ -83,7 +86,9 @@ def main() -> None:
     parser.add_argument("--seasons", nargs="+", default=[current_season()])
     parser.add_argument("--limit", type=int, default=None, help="games per season (for testing)")
     parser.add_argument(
-        "--delay", type=float, default=3.0,
+        "--delay",
+        type=float,
+        default=3.0,
         help="seconds between requests (default 3.0 — the rotation endpoint "
         "serves empty responses when hit faster, and tar-pits to ~20s per "
         "request regardless, so a historical season is an overnight run)",

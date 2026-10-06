@@ -21,8 +21,18 @@ def _two_games() -> pd.DataFrame:
         ("0002", 2, "BBB", 99, 37, 87, 8, 17, 22, 15, 8, 31),
     ]
     cols = [
-        "GAME_ID", "TEAM_ID", "TEAM_ABBREVIATION",
-        "PTS", "FGM", "FGA", "FG3M", "FTM", "FTA", "TOV", "OREB", "DREB",
+        "GAME_ID",
+        "TEAM_ID",
+        "TEAM_ABBREVIATION",
+        "PTS",
+        "FGM",
+        "FGA",
+        "FG3M",
+        "FTM",
+        "FTA",
+        "TOV",
+        "OREB",
+        "DREB",
     ]
     return pd.DataFrame(rows, columns=cols)
 

@@ -17,10 +17,7 @@ from nba_insights.api.security import (
 
 
 def _request(host: str, headers: dict[str, str] | None = None) -> Request:
-    encoded = [
-        (name.lower().encode(), value.encode())
-        for name, value in (headers or {}).items()
-    ]
+    encoded = [(name.lower().encode(), value.encode()) for name, value in (headers or {}).items()]
     return Request(
         {
             "type": "http",
@@ -77,9 +74,7 @@ def test_private_remote_access_accepts_configured_bearer_key(monkeypatch):
     with pytest.raises(HTTPException) as error:
         require_private_access(_request("198.51.100.7"))
     assert error.value.status_code == 401
-    require_private_access(
-        _request("198.51.100.7", {"Authorization": "Bearer correct-horse"})
-    )
+    require_private_access(_request("198.51.100.7", {"Authorization": "Bearer correct-horse"}))
 
 
 def test_simulation_budget_is_weighted_by_requested_work(monkeypatch):
@@ -125,9 +120,7 @@ def _route_dependencies(path: str, method: str) -> set:
 
 def test_sensitive_guards_run_as_route_dependencies():
     assert protect_ai in _route_dependencies("/ask", "POST")
-    assert require_private_access in _route_dependencies(
-        "/players/{player_id}/contract", "GET"
-    )
+    assert require_private_access in _route_dependencies("/players/{player_id}/contract", "GET")
     for path, method in (
         ("/predict/simulate", "GET"),
         ("/predict/season", "GET"),

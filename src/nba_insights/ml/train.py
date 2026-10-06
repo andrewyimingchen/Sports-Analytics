@@ -42,6 +42,7 @@ def _prev_season(season: str) -> str:
     start = int(season[:4])
     return f"{start - 1}-{start % 100:02d}"
 
+
 logger = logging.getLogger(__name__)
 
 OUTCOME_PATH = MODELS_DIR / "outcome.joblib"
@@ -80,10 +81,7 @@ ELO_WARMUP_SEASONS = 2  # extra seasons before the earliest, so Elo converges
 def build_elo(client: NBAClient, seasons: list[str]) -> pd.DataFrame:
     """Continuous Elo over warm-up + given seasons (one pass, carried over)."""
     earliest = min(int(s[:4]) for s in seasons)
-    warmup = [
-        f"{y}-{(y + 1) % 100:02d}"
-        for y in range(earliest - ELO_WARMUP_SEASONS, earliest)
-    ]
+    warmup = [f"{y}-{(y + 1) % 100:02d}" for y in range(earliest - ELO_WARMUP_SEASONS, earliest)]
     frames = [client.team_games(s) for s in [*warmup, *sorted(seasons)]]
     return elo_ratings(pd.concat(frames, ignore_index=True))
 

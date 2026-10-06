@@ -109,13 +109,9 @@ def simulate_cup_once(
             points[team_a] += score_a
             points[team_b] += score_b
             head_to_head[tuple(sorted((team_a, team_b)))] = winner
-        ranked = _rank_group(
-            members, wins, differential, points, head_to_head, strength, rng
-        )
+        ranked = _rank_group(members, wins, differential, points, head_to_head, strength, rng)
         group_ranks[name] = ranked
-        records.update(
-            {team: (wins[team], differential[team], points[team]) for team in members}
-        )
+        records.update({team: (wins[team], differential[team], points[team]) for team in members})
 
     qualifiers = []
     wild_cards = []

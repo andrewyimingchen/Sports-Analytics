@@ -437,13 +437,15 @@ class NBAClient:
         endpoint = leaguehustlestatsplayer if scope == "Player" else leaguehustlestatsteam
         return self._cached(
             f"hustle/{scope.lower()}/{season}",
-            lambda: endpoint.LeagueHustleStatsPlayer(
-                season=season, per_mode_time="PerGame"
-            ).get_data_frames()[0]
-            if scope == "Player"
-            else endpoint.LeagueHustleStatsTeam(
-                season=season, per_mode_time="PerGame"
-            ).get_data_frames()[0],
+            lambda: (
+                endpoint.LeagueHustleStatsPlayer(
+                    season=season, per_mode_time="PerGame"
+                ).get_data_frames()[0]
+                if scope == "Player"
+                else endpoint.LeagueHustleStatsTeam(
+                    season=season, per_mode_time="PerGame"
+                ).get_data_frames()[0]
+            ),
             ttl=self._season_ttl(season),
             fetched_after=self._season_fetched_after(season),
         )
@@ -488,9 +490,7 @@ class NBAClient:
         past = int(year) < int(calendar_season()[:4])
         return self._cached(
             f"draft_combine/{year}",
-            lambda: draftcombinestats.DraftCombineStats(
-                season_all_time=year
-            ).get_data_frames()[0],
+            lambda: draftcombinestats.DraftCombineStats(season_all_time=year).get_data_frames()[0],
             ttl=None if past else CURRENT_SEASON_TTL,
         )
 

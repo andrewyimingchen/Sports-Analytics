@@ -20,9 +20,7 @@ def _league() -> pd.DataFrame:
 def _contracts() -> pd.DataFrame:
     return pd.DataFrame(
         {
-            "PLAYER_NAME": [
-                "East Star", "East Vet", "West Star", "West Prospect", "New Rookie"
-            ],
+            "PLAYER_NAME": ["East Star", "East Vet", "West Star", "West Prospect", "New Rookie"],
             "TEAM_ABBREVIATION": ["W00", "E00", "W00", "W00", "E00"],
             "2026-27": [40_000_000, 8_000_000, 35_000_000, 10_000_000, 12_000_000],
         }
@@ -47,13 +45,9 @@ def test_roster_inputs_are_versioned_explainable_and_minutes_normalized():
 
 def test_roster_adjustments_change_forecast_and_add_record_bands():
     teams = [f"E{i:02d}" for i in range(15)] + [f"W{i:02d}" for i in range(15)]
-    snapshot = pd.DataFrame(
-        {"form_win_pct": 0.5, "form_net": 0.0, "elo": 1500.0}, index=teams
-    )
+    snapshot = pd.DataFrame({"form_win_pct": 0.5, "form_net": 0.0, "elo": 1500.0}, index=teams)
     conferences = {team: ("East" if team.startswith("E") else "West") for team in teams}
-    adjustments = pd.DataFrame(
-        {"STRENGTH_ADJUSTMENT": 0.0, "UNCERTAINTY": 0.12}, index=teams
-    )
+    adjustments = pd.DataFrame({"STRENGTH_ADJUSTMENT": 0.0, "UNCERTAINTY": 0.12}, index=teams)
     adjustments.loc["E00", "STRENGTH_ADJUSTMENT"] = 0.7
 
     result = season_forecast(

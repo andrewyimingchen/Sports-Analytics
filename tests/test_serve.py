@@ -16,9 +16,7 @@ class RecordingClient:
 
     def league_player_stats(self, season=None, per_mode="PerGame"):
         self.seasons.append(season)
-        return pd.DataFrame(
-            {"PLAYER_ID": [1], "PLAYER_NAME": ["Alice"], "GP": [50], "PTS": [20.0]}
-        )
+        return pd.DataFrame({"PLAYER_ID": [1], "PLAYER_NAME": ["Alice"], "GP": [50], "PTS": [20.0]})
 
     def league_player_advanced(self, season=None):
         self.seasons.append(season)

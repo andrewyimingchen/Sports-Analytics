@@ -68,9 +68,9 @@ def project_player_seasons(
         current = pd.to_numeric(joined[stat], errors="coerce")
         rookie_rate = {"PTS": 12, "REB": 4.5, "AST": 2.5, "STL": 0.7, "BLK": 0.5, "FG3M": 1.2}[stat]
         joined[f"PROJECTED_{stat}"] = (
-            current.mul(minutes_ratio).mul(age_factor).fillna(
-                rookie_rate * joined["PROJECTED_MIN"] / 24
-            )
+            current.mul(minutes_ratio)
+            .mul(age_factor)
+            .fillna(rookie_rate * joined["PROJECTED_MIN"] / 24)
         ).clip(lower=0)
     for stat, average in (("FG_PCT", 0.47), ("FG3_PCT", 0.36), ("FT_PCT", 0.78)):
         values = pd.to_numeric(joined.get(stat), errors="coerce").fillna(average)
@@ -95,13 +95,17 @@ def project_player_seasons(
         joined["TEAM_WINS"] = 41.0
     role = joined["PROJECTED_MIN"] / 36
     mvp_score = (
-        0.08 * joined["PROJECTED_PTS"] + 0.035 * joined["PROJECTED_AST"]
-        + 0.025 * joined["PROJECTED_REB"] + 0.025 * joined["TEAM_WINS"]
+        0.08 * joined["PROJECTED_PTS"]
+        + 0.035 * joined["PROJECTED_AST"]
+        + 0.025 * joined["PROJECTED_REB"]
+        + 0.025 * joined["TEAM_WINS"]
         + 0.12 * joined["PROJECTED_IMPACT"]
     ) * role
     dpoy_score = (
-        0.65 * joined["PROJECTED_STL"] + 0.75 * joined["PROJECTED_BLK"]
-        + 0.08 * joined["PROJECTED_REB"] + 0.10 * joined["PROJECTED_IMPACT"]
+        0.65 * joined["PROJECTED_STL"]
+        + 0.75 * joined["PROJECTED_BLK"]
+        + 0.08 * joined["PROJECTED_REB"]
+        + 0.10 * joined["PROJECTED_IMPACT"]
     ) * role
     star_score = mvp_score + 0.018 * joined["PROJECTED_PTS"]
     joined["MVP_PROB"] = _capped_field_probabilities(mvp_score, 1)

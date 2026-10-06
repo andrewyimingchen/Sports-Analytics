@@ -34,10 +34,7 @@ def _game_probability(strength_a: float, strength_b: float, home: bool = False) 
 def _series_probability(strength_a: float, strength_b: float) -> float:
     """Chance A wins a best-of-seven, approximated by four-plus wins in seven."""
     game = _game_probability(strength_a, strength_b)
-    return sum(
-        math.comb(7, wins) * game**wins * (1.0 - game) ** (7 - wins)
-        for wins in range(4, 8)
-    )
+    return sum(math.comb(7, wins) * game**wins * (1.0 - game) ** (7 - wins) for wins in range(4, 8))
 
 
 def _winner(
@@ -124,9 +121,7 @@ def season_forecast(
     win_component = scoped["form_win_pct"].fillna(0.5).clip(0.1, 0.9).to_numpy(float)
     net_component = _sigmoid(scoped["form_net"].fillna(0.0).to_numpy(float) / 11.0)
     if "elo" in scoped:
-        elo_component = _sigmoid(
-            (scoped["elo"].fillna(1500.0).to_numpy(float) - 1500.0) / 145.0
-        )
+        elo_component = _sigmoid((scoped["elo"].fillna(1500.0).to_numpy(float) - 1500.0) / 145.0)
     else:
         elo_component = np.full(len(teams), 0.5)
     known_strength = 0.45 * win_component + 0.35 * net_component + 0.20 * elo_component
@@ -138,9 +133,12 @@ def season_forecast(
             roster.get("STRENGTH_ADJUSTMENT"), errors="coerce"
         ).fillna(0.0)
         base_strength = _sigmoid(_logit(base_strength) + strength_adjustment.to_numpy())
-        uncertainty = pd.to_numeric(
-            roster.get("UNCERTAINTY"), errors="coerce"
-        ).fillna(0.20).clip(0.08, 0.50).to_numpy()
+        uncertainty = (
+            pd.to_numeric(roster.get("UNCERTAINTY"), errors="coerce")
+            .fillna(0.20)
+            .clip(0.08, 0.50)
+            .to_numpy()
+        )
 
     rng = np.random.default_rng(seed)
     wins_total = np.zeros(len(teams))
@@ -191,9 +189,7 @@ def season_forecast(
             cup_count[int(np.argmax(cup_score))] += 1
 
     group_by_team = {
-        team: group
-        for group, members in (cup_groups or {}).items()
-        for team in members
+        team: group for group, members in (cup_groups or {}).items() for team in members
     }
 
     result = pd.DataFrame(
@@ -209,9 +205,7 @@ def season_forecast(
             "CHAMP_PROB": title_count / n_sims,
             "CUP_PROB": cup_count / n_sims,
             "CUP_GROUP": [group_by_team.get(team) for team in teams],
-            "CUP_PROJECTED_GROUP_RANK": (
-                cup_group_rank_total / n_sims if cup_groups else np.nan
-            ),
+            "CUP_PROJECTED_GROUP_RANK": (cup_group_rank_total / n_sims if cup_groups else np.nan),
             "CUP_GROUP_WIN_PROB": cup_group_win_count / n_sims,
             "CUP_WILD_CARD_PROB": cup_wild_card_count / n_sims,
             "CUP_KNOCKOUT_PROB": cup_knockout_count / n_sims,

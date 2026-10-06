@@ -48,9 +48,11 @@ def game_timeline(pbp: pd.DataFrame) -> pd.DataFrame:
     frame["HOME_SCORE"] = pd.to_numeric(frame["scoreHome"], errors="coerce")
     frame["AWAY_SCORE"] = pd.to_numeric(frame["scoreAway"], errors="coerce")
     frame = frame.dropna(subset=["HOME_SCORE", "AWAY_SCORE"])
-    changed = frame[["HOME_SCORE", "AWAY_SCORE"]].ne(
-        frame[["HOME_SCORE", "AWAY_SCORE"]].shift()
-    ).any(axis=1)
+    changed = (
+        frame[["HOME_SCORE", "AWAY_SCORE"]]
+        .ne(frame[["HOME_SCORE", "AWAY_SCORE"]].shift())
+        .any(axis=1)
+    )
     frame = frame[changed].copy()
     frame["PERIOD"] = pd.to_numeric(frame["period"], errors="coerce").astype(int)
     frame["ELAPSED"] = [
@@ -70,7 +72,12 @@ def game_timeline(pbp: pd.DataFrame) -> pd.DataFrame:
     frame["MARGIN"] = margin
     frame["CLOCK"] = frame["clock"]
     columns = [
-        "ELAPSED", "PERIOD", "CLOCK", "HOME_SCORE", "AWAY_SCORE", "MARGIN",
+        "ELAPSED",
+        "PERIOD",
+        "CLOCK",
+        "HOME_SCORE",
+        "AWAY_SCORE",
+        "MARGIN",
         "HOME_WIN_PROB",
     ]
     return frame[columns].reset_index(drop=True)
@@ -82,8 +89,18 @@ def _team_advanced(player_rows: pd.DataFrame) -> list[dict]:
         totals = {
             column: float(pd.to_numeric(frame.get(column), errors="coerce").sum())
             for column in (
-                "PTS", "FGM", "FGA", "FG3M", "FTA", "OREB", "DREB", "REB",
-                "AST", "TOV", "STL", "BLK",
+                "PTS",
+                "FGM",
+                "FGA",
+                "FG3M",
+                "FTA",
+                "OREB",
+                "DREB",
+                "REB",
+                "AST",
+                "TOV",
+                "STL",
+                "BLK",
             )
         }
         fga = totals["FGA"]
@@ -94,9 +111,9 @@ def _team_advanced(player_rows: pd.DataFrame) -> list[dict]:
                 **{key: round(value) for key, value in totals.items()},
                 "EFG_PCT": (totals["FGM"] + 0.5 * totals["FG3M"]) / fga if fga else None,
                 "TS_PCT": totals["PTS"] / denominator if denominator else None,
-                "TOV_RATE": totals["TOV"] / (
-                    fga + 0.44 * totals["FTA"] + totals["TOV"]
-                ) if fga else None,
+                "TOV_RATE": totals["TOV"] / (fga + 0.44 * totals["FTA"] + totals["TOV"])
+                if fga
+                else None,
                 "FT_RATE": totals["FTA"] / fga if fga else None,
                 "AST_TOV": totals["AST"] / totals["TOV"] if totals["TOV"] else None,
             }
@@ -116,9 +133,7 @@ def _lineup_summary(
         return []
     ratings = lineup_ratings(stints).head(10)
     names = player_rows.drop_duplicates("PLAYER_ID").set_index("PLAYER_ID")["PLAYER_NAME"]
-    teams = player_rows.drop_duplicates("PLAYER_ID").set_index("PLAYER_ID")[
-        "TEAM_ABBREVIATION"
-    ]
+    teams = player_rows.drop_duplicates("PLAYER_ID").set_index("PLAYER_ID")["TEAM_ABBREVIATION"]
     result = []
     for row in ratings.itertuples():
         ids = list(row.LINEUP)
@@ -167,8 +182,16 @@ def game_story(
     shot_columns = [
         column
         for column in (
-            "period", "clock", "TEAM", "PLAYER", "actionType", "subType",
-            "MADE", "xLegacy", "yLegacy", "shotDistance",
+            "period",
+            "clock",
+            "TEAM",
+            "PLAYER",
+            "actionType",
+            "subType",
+            "MADE",
+            "xLegacy",
+            "yLegacy",
+            "shotDistance",
         )
         if column in events
     ]
@@ -208,9 +231,7 @@ def game_story(
     clutch_home = clutch_away = 0
     previous_home = previous_away = previous_margin = 0
     for row in timeline.itertuples():
-        late_game = row.PERIOD > 4 or (
-            row.PERIOD == 4 and _remaining_seconds(row.CLOCK) <= 300
-        )
+        late_game = row.PERIOD > 4 or (row.PERIOD == 4 and _remaining_seconds(row.CLOCK) <= 300)
         in_clutch = late_game and abs(previous_margin) <= 5
         if in_clutch:
             clutch_home += int(row.HOME_SCORE - previous_home)
@@ -245,9 +266,7 @@ def game_story(
         "timeline": _records(timeline),
         "turning_points": turning_points,
         "biggest_runs": {home: best_home, away: best_away},
-        "lead_changes": int(
-            ((timeline["MARGIN"] * timeline["MARGIN"].shift(1)) < 0).sum()
-        ),
+        "lead_changes": int(((timeline["MARGIN"] * timeline["MARGIN"].shift(1)) < 0).sum()),
         "clutch_points": {home: clutch_home, away: clutch_away},
         "shots": _records(shots),
         "shot_summary": _records(shot_summary),

@@ -36,9 +36,7 @@ def league_with_ratings(client: NBAClient, season: str | None = None) -> pd.Data
             league, client.league_player_advanced(season), client.league_player_clutch(season)
         )
     except Exception:
-        logger.warning(
-            "rating endpoints unavailable; serving plain per-game table", exc_info=True
-        )
+        logger.warning("rating endpoints unavailable; serving plain per-game table", exc_info=True)
     if season is None or season == current_season():
         try:
             league = attach_dpm(league, client.darko_dpm())

@@ -34,9 +34,7 @@ def draft_class(
         if col not in history.columns:
             raise KeyError(f"draft history missing column: {col}")
     picks = history[history["SEASON"].astype(str) == str(year)].copy()
-    keep = _HISTORY_COLS + [
-        c for c in ("TEAM_ABBREVIATION", "ORGANIZATION") if c in picks.columns
-    ]
+    keep = _HISTORY_COLS + [c for c in ("TEAM_ABBREVIATION", "ORGANIZATION") if c in picks.columns]
     picks = picks[keep].sort_values("OVERALL_PICK")
 
     if combine is not None and "PLAYER_ID" in combine.columns:

@@ -42,9 +42,7 @@ _DIVISIONS: dict[str, list[str]] = {
 }
 _EAST_DIVS = ("Atlantic", "Central", "Southeast")
 DIVISION = {t: d for d, ts in _DIVISIONS.items() for t in ts}
-CONFERENCE = {
-    t: ("East" if d in _EAST_DIVS else "West") for t, d in DIVISION.items()
-}
+CONFERENCE = {t: ("East" if d in _EAST_DIVS else "West") for t, d in DIVISION.items()}
 
 
 def _conf_order(conf: str) -> list[str]:
@@ -149,8 +147,16 @@ def _conf_bracket(rng, ratings, seeds, add):
     c_home_wins = _play_game(rng, ratings, loser_a, winner_b)
     seed8 = np.where(c_home_wins, loser_a, winner_b)
 
-    bracket = [seeds[:, 0], seeds[:, 1], seeds[:, 2], seeds[:, 3],
-               seeds[:, 4], seeds[:, 5], seed7, seed8]
+    bracket = [
+        seeds[:, 0],
+        seeds[:, 1],
+        seeds[:, 2],
+        seeds[:, 3],
+        seeds[:, 4],
+        seeds[:, 5],
+        seed7,
+        seed8,
+    ]
     for team_idx in bracket:
         np.add.at(add["playoff"], team_idx, 1)
 
@@ -161,6 +167,7 @@ def _conf_bracket(rng, ratings, seeds, add):
         _play_series(rng, ratings, bracket[2], bracket[5]),
         _play_series(rng, ratings, bracket[1], bracket[6]),
     ]
+
     # Semifinals: (1/8 v 4/5) and (3/6 v 2/7). Higher Elo hosts.
     def matchup(x, y):
         hi = np.where(ratings[x] >= ratings[y], x, y)
