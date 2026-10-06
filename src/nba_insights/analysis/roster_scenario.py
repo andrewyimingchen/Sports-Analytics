@@ -100,9 +100,7 @@ def apply_roster_scenario(
     if missing := required - set(players.columns):
         raise KeyError(f"roster scenario missing columns: {sorted(missing)}")
     players["_KEY"] = players["PLAYER_NAME"].map(normalize_name)
-    players["PROJECTED_MIN"] = pd.to_numeric(
-        players["PROJECTED_MIN"], errors="raise"
-    ).astype(float)
+    players["PROJECTED_MIN"] = pd.to_numeric(players["PROJECTED_MIN"], errors="raise").astype(float)
     if players["_KEY"].duplicated().any():
         raise ValueError("baseline roster contains duplicate players")
     players["GAMES_MISSED"] = 0
@@ -184,18 +182,20 @@ def apply_roster_scenario(
         adjustment = float(np.clip(impact - current, -6, 6))
         availability_loss = replacement_minutes / 240
         moved = any(
-            row["from_team"] != row["to_team"]
-            and team in {row["from_team"], row["to_team"]}
+            row["from_team"] != row["to_team"] and team in {row["from_team"], row["to_team"]}
             for row in applied
         )
         baseline_uncertainty = float(scenario_teams.at[team, "UNCERTAINTY"])
-        scenario_teams.loc[team, [
-            "ROSTER_IMPACT",
-            "NET_ADJUSTMENT",
-            "STRENGTH_ADJUSTMENT",
-            "UNCERTAINTY",
-            "PLAYER_COUNT",
-        ]] = [
+        scenario_teams.loc[
+            team,
+            [
+                "ROSTER_IMPACT",
+                "NET_ADJUSTMENT",
+                "STRENGTH_ADJUSTMENT",
+                "UNCERTAINTY",
+                "PLAYER_COUNT",
+            ],
+        ] = [
             impact,
             adjustment,
             adjustment / 14,

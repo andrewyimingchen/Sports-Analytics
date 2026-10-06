@@ -176,9 +176,7 @@ def prior_team_form(prior_team_games: pd.DataFrame) -> pd.DataFrame:
     team's first ~10 games. Indexed by TEAM_ID.
     """
     df = _with_derived_stats(_prepare(prior_team_games))
-    return df.groupby("TEAM_ID").agg(
-        {source: "mean" for source in set(_FORM_SOURCES.values())}
-    )
+    return df.groupby("TEAM_ID").agg({source: "mean" for source in set(_FORM_SOURCES.values())})
 
 
 FORM_PRIOR_WEIGHT = 10.0  # prior-season mean counts as this many pseudo-games

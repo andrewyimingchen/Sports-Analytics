@@ -170,9 +170,9 @@ class Cache:
 
     def _load(self, key: str) -> tuple[datetime, pd.DataFrame] | None:
         row = self._read_row(f"{_FORMAT_VERSION}:{key}")
-        if row is not None:
-            fetched_at, payload = row
-            return fetched_at, _deserialize(payload)
+        # parquet entries are always written as bytes; anything else is not ours
+        if row is not None and isinstance(row[1], bytes):
+            return row[0], _deserialize(row[1])
         # legacy JSON entry: migrate to parquet, keeping the fetch time
         row = self._read_row(f"{_LEGACY_JSON_VERSION}:{key}")
         if row is None:

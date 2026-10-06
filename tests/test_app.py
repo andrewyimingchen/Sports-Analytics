@@ -87,9 +87,7 @@ def test_games_page_opens_with_selectable_scores():
 def test_predictions_page_renders_all_tabs():
     from streamlit.testing.v1 import AppTest
 
-    at = AppTest.from_string(
-        _page_script("predictions_page(A.get_client())"), default_timeout=300
-    )
+    at = AppTest.from_string(_page_script("predictions_page(A.get_client())"), default_timeout=300)
     at.run()
     assert not at.exception, [e.value for e in at.exception]
     # outcome tab renders the win-probability duel bar

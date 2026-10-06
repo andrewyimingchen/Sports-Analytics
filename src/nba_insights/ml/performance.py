@@ -88,9 +88,9 @@ class PlayerPointsModel:
         minutes = pd.Series(
             self.minutes.predict(features[MIN_FEATURES]), index=features.index
         ).clip(0, 48)
-        rate = pd.Series(
-            self.rate.predict(features[RATE_FEATURES]), index=features.index
-        ).clip(lower=0)
+        rate = pd.Series(self.rate.predict(features[RATE_FEATURES]), index=features.index).clip(
+            lower=0
+        )
         return (minutes * rate).rename("pred_pts")
 
     def evaluate(self, player_games: pd.DataFrame) -> dict:

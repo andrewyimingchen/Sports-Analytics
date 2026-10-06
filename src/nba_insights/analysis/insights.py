@@ -58,9 +58,7 @@ def player_scouting_take(ranks: pd.Series, max_per_clause: int = 3) -> str:
     empty string when no skill stats are present.
     """
     present = {
-        stat: float(v)
-        for stat, v in ranks.items()
-        if stat in _SKILL_PHRASES and pd.notna(v)
+        stat: float(v) for stat, v in ranks.items() if stat in _SKILL_PHRASES and pd.notna(v)
     }
     if not present:
         return ""
@@ -68,8 +66,9 @@ def player_scouting_take(ranks: pd.Series, max_per_clause: int = 3) -> str:
     ranked = sorted(present.items(), key=lambda kv: kv[1], reverse=True)
     elite = [_SKILL_PHRASES[s] for s, v in ranked if v >= _ELITE][:max_per_clause]
     strong = [_SKILL_PHRASES[s] for s, v in ranked if _STRONG <= v < _ELITE][:max_per_clause]
-    weak = [_SKILL_PHRASES[s] for s, v in sorted(present.items(), key=lambda kv: kv[1])
-            if v <= _WEAK][:2]
+    weak = [
+        _SKILL_PHRASES[s] for s, v in sorted(present.items(), key=lambda kv: kv[1]) if v <= _WEAK
+    ][:2]
 
     clauses: list[str] = []
     if elite:

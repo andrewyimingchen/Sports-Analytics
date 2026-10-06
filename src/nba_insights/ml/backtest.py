@@ -67,16 +67,12 @@ def _actual_outcomes(client: NBAClient, season: str) -> tuple[pd.DataFrame, str,
         .rename(columns={"TEAM_ABBREVIATION": "TEAM"})
     )
     board = scoreboard(client.schedule(season))
-    playoff_games = board[
-        board["GAME_ID"].str.startswith("004") & board["STATUS"].eq("Final")
-    ]
+    playoff_games = board[board["GAME_ID"].str.startswith("004") & board["STATUS"].eq("Final")]
     playoff_teams = set(playoff_games["HOME"]) | set(playoff_games["AWAY"])
     if playoff_games.empty:
         raise ValueError(f"no completed playoff games for {season}")
     champion = str(playoff_games.sort_values("GAME_DATE").iloc[-1]["WINNER"])
-    cup_games = board[
-        board["GAME_ID"].str.startswith("006") & board["STATUS"].eq("Final")
-    ]
+    cup_games = board[board["GAME_ID"].str.startswith("006") & board["STATUS"].eq("Final")]
     if cup_games.empty:
         raise ValueError(f"no completed NBA Cup final for {season}")
     cup_champion = str(cup_games.sort_values("GAME_DATE").iloc[-1]["WINNER"])

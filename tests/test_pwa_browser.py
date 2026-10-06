@@ -36,22 +36,24 @@ from test_ml import synthetic_team_games  # noqa: E402
 api_module = importlib.import_module("nba_insights.api.app")
 
 # Same shape as test_api's season-forecast fixture; replaces the simulator.
-SEASON_TABLE = pd.DataFrame({
-    "TEAM": ["T1", "T2", "T3", "T4"],
-    "CONFERENCE": ["East", "East", "West", "West"],
-    "PROJECTED_SEED": [1.2, 2.1, 1.1, 2.4],
-    "PROJECTED_WINS": [55.0, 48.0, 58.0, 45.0],
-    "PROJECTED_LOSSES": [27.0, 34.0, 24.0, 37.0],
-    "PLAYOFF_PROB": [0.95, 0.8, 0.97, 0.7],
-    "CHAMP_PROB": [0.25, 0.1, 0.4, 0.05],
-    "CUP_PROB": [0.2, 0.1, 0.3, 0.1],
-    "CUP_GROUP": ["East A", "East A", "West A", "West A"],
-    "CUP_PROJECTED_GROUP_RANK": [1.2, 2.0, 1.1, 2.4],
-    "CUP_GROUP_WIN_PROB": [0.7, 0.3, 0.8, 0.2],
-    "CUP_WILD_CARD_PROB": [0.1, 0.2, 0.1, 0.1],
-    "CUP_KNOCKOUT_PROB": [0.8, 0.5, 0.9, 0.3],
-    "CUP_FINAL_PROB": [0.4, 0.2, 0.5, 0.1],
-})
+SEASON_TABLE = pd.DataFrame(
+    {
+        "TEAM": ["T1", "T2", "T3", "T4"],
+        "CONFERENCE": ["East", "East", "West", "West"],
+        "PROJECTED_SEED": [1.2, 2.1, 1.1, 2.4],
+        "PROJECTED_WINS": [55.0, 48.0, 58.0, 45.0],
+        "PROJECTED_LOSSES": [27.0, 34.0, 24.0, 37.0],
+        "PLAYOFF_PROB": [0.95, 0.8, 0.97, 0.7],
+        "CHAMP_PROB": [0.25, 0.1, 0.4, 0.05],
+        "CUP_PROB": [0.2, 0.1, 0.3, 0.1],
+        "CUP_GROUP": ["East A", "East A", "West A", "West A"],
+        "CUP_PROJECTED_GROUP_RANK": [1.2, 2.0, 1.1, 2.4],
+        "CUP_GROUP_WIN_PROB": [0.7, 0.3, 0.8, 0.2],
+        "CUP_WILD_CARD_PROB": [0.1, 0.2, 0.1, 0.1],
+        "CUP_KNOCKOUT_PROB": [0.8, 0.5, 0.9, 0.3],
+        "CUP_FINAL_PROB": [0.4, 0.2, 0.5, 0.1],
+    }
+)
 
 DESKTOP = {"width": 1280, "height": 900}
 PHONE = {"width": 390, "height": 844}
@@ -460,7 +462,7 @@ def test_primary_flows_have_no_serious_accessibility_violations(page, base_url, 
     violations = axe_sync.Axe().run(page).response["violations"]
     # Moderate issues (heading levels) are tracked separately; these block.
     blocking = [
-        f'{v["id"]} ({v["impact"]}): {[node["target"] for node in v["nodes"][:3]]}'
+        f"{v['id']} ({v['impact']}): {[node['target'] for node in v['nodes'][:3]]}"
         for v in violations
         if v["impact"] in ("serious", "critical")
     ]

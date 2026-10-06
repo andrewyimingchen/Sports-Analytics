@@ -53,9 +53,7 @@ def test_compare_teams_rejects_duplicates():
     games = synthetic_team_games(10)
 
     try:
-        compare_teams(
-            games, pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), "T1", "T1"
-        )
+        compare_teams(games, pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), "T1", "T1")
     except ValueError as exc:
         assert str(exc) == "teams must differ"
     else:

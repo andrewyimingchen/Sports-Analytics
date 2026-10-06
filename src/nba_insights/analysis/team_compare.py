@@ -19,18 +19,18 @@ def _number(value: Any) -> float | int | None:
     return float(value)
 
 
-def _shared_sample(
-    team_games: pd.DataFrame, first: str, second: str
-) -> tuple[pd.DataFrame, str]:
+def _shared_sample(team_games: pd.DataFrame, first: str, second: str) -> tuple[pd.DataFrame, str]:
     required = {"TEAM_ABBREVIATION", "GAME_DATE", "WL", "PLUS_MINUS"}
     missing = required - set(team_games.columns)
     if missing:
         raise KeyError(f"team_games missing columns: {sorted(missing)}")
     games = team_games.copy()
     games["GAME_DATE"] = pd.to_datetime(games["GAME_DATE"])
-    latest = games[games["TEAM_ABBREVIATION"].isin([first, second])].groupby(
-        "TEAM_ABBREVIATION"
-    )["GAME_DATE"].max()
+    latest = (
+        games[games["TEAM_ABBREVIATION"].isin([first, second])]
+        .groupby("TEAM_ABBREVIATION")["GAME_DATE"]
+        .max()
+    )
     absent = [team for team in (first, second) if team not in latest.index]
     if absent:
         raise ValueError(f"unknown team(s): {', '.join(absent)}")
@@ -38,9 +38,7 @@ def _shared_sample(
     return games[games["GAME_DATE"] <= cutoff].copy(), cutoff.date().isoformat()
 
 
-def _rotation_summary(
-    league: pd.DataFrame, lineups: pd.DataFrame, team: str
-) -> dict[str, Any]:
+def _rotation_summary(league: pd.DataFrame, lineups: pd.DataFrame, team: str) -> dict[str, Any]:
     roster = league[league.get("TEAM_ABBREVIATION", pd.Series(dtype=str)) == team].copy()
     if not roster.empty:
         roster = roster.sort_values("MIN", ascending=False) if "MIN" in roster else roster
@@ -235,8 +233,7 @@ def compare_teams(
             "as_of": cutoff,
             "definition": "Same season through the earlier of the teams' latest game dates",
             "games": {
-                team: int((games["TEAM_ABBREVIATION"] == team).sum())
-                for team in (first, second)
+                team: int((games["TEAM_ABBREVIATION"] == team).sum()) for team in (first, second)
             },
         },
         "metrics": metrics,

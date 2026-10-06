@@ -12,8 +12,14 @@ import pandas as pd
 # dashboard columns shown, in order; the rest (ranks, redundant E_ variants)
 # are dropped
 _DISPLAY = [
-    "GROUP_NAME", "GP", "MIN", "NET_RATING", "OFF_RATING", "DEF_RATING",
-    "EFG_PCT", "POSS",
+    "GROUP_NAME",
+    "GP",
+    "MIN",
+    "NET_RATING",
+    "OFF_RATING",
+    "DEF_RATING",
+    "EFG_PCT",
+    "POSS",
 ]
 
 

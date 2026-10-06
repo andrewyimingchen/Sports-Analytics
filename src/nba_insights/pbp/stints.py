@@ -166,9 +166,7 @@ def lineup_ratings(stints: pd.DataFrame, min_minutes: float = 0.0) -> pd.DataFra
     """
     sides = []
     for lineup_col, sign in (("HOME_LINEUP", 1.0), ("AWAY_LINEUP", -1.0)):
-        side = stints[[lineup_col, "MIN", "MARGIN", "POSS"]].rename(
-            columns={lineup_col: "LINEUP"}
-        )
+        side = stints[[lineup_col, "MIN", "MARGIN", "POSS"]].rename(columns={lineup_col: "LINEUP"})
         side["PLUS_MINUS"] = side.pop("MARGIN") * sign
         sides.append(side)
     both = pd.concat(sides, ignore_index=True)

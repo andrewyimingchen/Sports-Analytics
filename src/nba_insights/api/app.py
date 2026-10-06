@@ -169,9 +169,7 @@ Client = Annotated[NBAClient, Depends(get_client)]
 @lru_cache(maxsize=1)
 def get_outcome_model() -> GameOutcomeModel:
     if not OUTCOME_PATH.exists():
-        raise HTTPException(
-            503, "models not trained: run `uv run python -m nba_insights.ml.train`"
-        )
+        raise HTTPException(503, "models not trained: run `uv run python -m nba_insights.ml.train`")
     return GameOutcomeModel.load(OUTCOME_PATH)
 
 
@@ -181,18 +179,14 @@ OutcomeModel = Annotated[GameOutcomeModel, Depends(get_outcome_model)]
 @lru_cache(maxsize=1)
 def get_points_model() -> PlayerPointsModel:
     if not POINTS_PATH.exists():
-        raise HTTPException(
-            503, "models not trained: run `uv run python -m nba_insights.ml.train`"
-        )
+        raise HTTPException(503, "models not trained: run `uv run python -m nba_insights.ml.train`")
     return PlayerPointsModel.load(POINTS_PATH)
 
 
 @lru_cache(maxsize=1)
 def get_win_curve() -> WinCurve:
     if not WIN_CURVE_PATH.exists():
-        raise HTTPException(
-            503, "models not trained: run `uv run python -m nba_insights.ml.train`"
-        )
+        raise HTTPException(503, "models not trained: run `uv run python -m nba_insights.ml.train`")
     return WinCurve.load(WIN_CURVE_PATH)
 
 
@@ -233,9 +227,7 @@ def get_model_registry() -> dict:
         "outcome": {
             "kind": "trained supervised model",
             "status": (
-                "temporal holdout evaluated"
-                if trained.get("outcome")
-                else "artifact missing"
+                "temporal holdout evaluated" if trained.get("outcome") else "artifact missing"
             ),
             "version": "logistic-outcome-v1",
             "data_cutoff": trained.get("holdout_season"),
@@ -308,8 +300,7 @@ def _snapshot_for_day(day: str, client: NBAClient) -> pd.DataFrame:
     try:
         priors = prior_team_form(client.team_games(past_seasons(1)[0]))
     except Exception:
-        logger.warning("prior-season form unavailable; serving unseeded snapshot",
-                       exc_info=True)
+        logger.warning("prior-season form unavailable; serving unseeded snapshot", exc_info=True)
         priors = None
     snapshot = team_form_snapshot(client.team_games(), form_priors=priors)
     try:
@@ -320,8 +311,7 @@ def _snapshot_for_day(day: str, client: NBAClient) -> pd.DataFrame:
         snapshot["elo"] = current_elo(games).reindex(snapshot.index)
     except Exception:
         # matchup_features degrades to a neutral elo_diff
-        logger.warning("Elo unavailable; predictions use a neutral elo_diff",
-                       exc_info=True)
+        logger.warning("Elo unavailable; predictions use a neutral elo_diff", exc_info=True)
     return snapshot
 
 
@@ -378,9 +368,7 @@ def _finite_records(frame: pd.DataFrame) -> list[dict]:
     for column in clean.columns:
         clean[column] = clean[column].map(
             lambda value: (
-                value.isoformat()
-                if isinstance(value, (pd.Timestamp, pd.Timedelta))
-                else value
+                value.isoformat() if isinstance(value, (pd.Timestamp, pd.Timedelta)) else value
             )
         )
     return clean.to_dict(orient="records")
@@ -422,7 +410,8 @@ def league_pulse(client: Client, season: str | None = None) -> dict:
             slate = upcoming_games(client.schedule())
             rest = (
                 team_rest_features(client.team_games(), tipoff=slate["tipoff"].iloc[0])
-                if not slate.empty else None
+                if not slate.empty
+                else None
             )
             model = get_outcome_model()
             for game in slate.itertuples():
@@ -438,9 +427,7 @@ def league_pulse(client: Client, season: str | None = None) -> dict:
                     }
                 probability = float(
                     model.predict_proba(
-                        matchup_features(
-                            indexed_snapshot, game.home, game.away, **fatigue
-                        )
+                        matchup_features(indexed_snapshot, game.home, game.away, **fatigue)
                     ).iloc[0]
                 )
                 next_slate.append(
@@ -500,9 +487,7 @@ def tracking_surface(
     if selected not in seasons_since():
         raise HTTPException(422, f"season must be one of {', '.join(seasons_since())}")
     if category not in TRACKING_CATEGORIES:
-        raise HTTPException(
-            422, f"category must be one of {', '.join(TRACKING_CATEGORIES)}"
-        )
+        raise HTTPException(422, f"category must be one of {', '.join(TRACKING_CATEGORIES)}")
     normalized_scope = scope.capitalize()
     if normalized_scope not in {"Player", "Team"}:
         raise HTTPException(422, "scope must be player or team")
@@ -512,22 +497,14 @@ def tracking_surface(
         if category == "hustle"
         else f"tracking/{scope.lower()}/{config['measure']}/{selected}"
     )
-    endpoint = (
-        "LeagueHustleStatsPlayer/Team"
-        if category == "hustle"
-        else "LeagueDashPtStats"
-    )
+    endpoint = "LeagueHustleStatsPlayer/Team" if category == "hustle" else "LeagueDashPtStats"
     try:
         frame = (
             client.hustle_stats(selected, normalized_scope)
             if category == "hustle"
             else client.tracking_stats(config["measure"], selected, normalized_scope)
         )
-        if (
-            normalized_scope == "Team"
-            and "TEAM_ABBREVIATION" not in frame
-            and "TEAM_ID" in frame
-        ):
+        if normalized_scope == "Team" and "TEAM_ABBREVIATION" not in frame and "TEAM_ID" in frame:
             games = client.team_games(selected)
             if {"TEAM_ID", "TEAM_ABBREVIATION"} <= set(games.columns):
                 team_codes = games[["TEAM_ID", "TEAM_ABBREVIATION"]].drop_duplicates(
@@ -656,7 +633,10 @@ def team_profile(team: str, request: Request, client: Client) -> dict:
     recent = log.tail(10)
     try:
         take = team_scouting_take(
-            snapshot.loc[team], wins, losses, snapshot,
+            snapshot.loc[team],
+            wins,
+            losses,
+            snapshot,
             recent=(int((recent["WL"] == "W").sum()), int((recent["WL"] == "L").sum())),
         )
     except Exception:
@@ -691,8 +671,16 @@ def team_profile(team: str, request: Request, client: Client) -> dict:
         standing_columns = [
             column
             for column in (
-                "Conference", "PlayoffRank", "TeamCity", "TeamName", "TeamID",
-                "WINS", "LOSSES", "WinPCT", "L10", "strCurrentStreak",
+                "Conference",
+                "PlayoffRank",
+                "TeamCity",
+                "TeamName",
+                "TeamID",
+                "WINS",
+                "LOSSES",
+                "WinPCT",
+                "L10",
+                "strCurrentStreak",
             )
             if column in raw_standings
         ]
@@ -716,8 +704,7 @@ def team_profile(team: str, request: Request, client: Client) -> dict:
             logger.warning("contract book unavailable for %s", team, exc_info=True)
 
     recent_columns = [
-        column for column in ("GAME_DATE", "MATCHUP", "WL", "PTS", "PLUS_MINUS")
-        if column in recent
+        column for column in ("GAME_DATE", "MATCHUP", "WL", "PTS", "PLUS_MINUS") if column in recent
     ]
     # League-wide efficiency lets the Team Room place this team on the
     # offense/defense quadrant without a second request.
@@ -725,9 +712,7 @@ def team_profile(team: str, request: Request, client: Client) -> dict:
         column for column in ("form_ortg", "form_drtg", "form_net") if column in snapshot
     ]
     league_form = (
-        _finite_records(
-            snapshot[league_form_columns].rename_axis("team").reset_index()
-        )
+        _finite_records(snapshot[league_form_columns].rename_axis("team").reset_index())
         if {"form_ortg", "form_drtg"} <= set(league_form_columns)
         else []
     )
@@ -904,7 +889,10 @@ def predict_game(
     if home == away:
         raise HTTPException(422, "home and away must differ")
     features = matchup_features(
-        snapshot, home, away, home_missing_min=home_missing_min,
+        snapshot,
+        home,
+        away,
+        home_missing_min=home_missing_min,
         away_missing_min=away_missing_min,
     )
     prob = float(model.predict_proba(features).iloc[0])
@@ -944,13 +932,21 @@ def predict_simulation(
         f"{selected}|{home}|{away}|{home_missing_min}|{away_missing_min}|{n_sims}".encode()
     )
     sims = simulate_matchup(
-        snapshot, home, away, home_missing_min=home_missing_min,
-        away_missing_min=away_missing_min, n_sims=n_sims, seed=seed,
+        snapshot,
+        home,
+        away,
+        home_missing_min=home_missing_min,
+        away_missing_min=away_missing_min,
+        n_sims=n_sims,
+        seed=seed,
     )
     margin = sims["home_pts"] - sims["away_pts"]
     total = sims["home_pts"] + sims["away_pts"]
     model_features = matchup_features(
-        snapshot, home, away, home_missing_min=home_missing_min,
+        snapshot,
+        home,
+        away,
+        home_missing_min=home_missing_min,
         away_missing_min=away_missing_min,
     )
     model_prob = float(model.predict_proba(model_features).iloc[0])
@@ -996,9 +992,7 @@ def _season_forecast_table(
             roster_adjustments=(roster_inputs.teams if roster_inputs else None),
         )
         if roster_inputs:
-            table = table.merge(
-                roster_inputs.teams.reset_index(), on="TEAM", how="left"
-            )
+            table = table.merge(roster_inputs.teams.reset_index(), on="TEAM", how="left")
             table.attrs["roster_metadata"] = roster_inputs.metadata
         return table
     except (KeyError, ValueError) as error:
@@ -1091,9 +1085,7 @@ class RosterScenarioBody(BaseModel):
     "/predict/season/scenario",
     dependencies=[Depends(require_simulation_access)],
 )
-def predict_roster_scenario(
-    body: RosterScenarioBody, request: Request, client: Client
-) -> dict:
+def predict_roster_scenario(body: RosterScenarioBody, request: Request, client: Client) -> dict:
     """Run an ephemeral roster/minutes/availability scenario against baseline."""
     # A scenario computes both a baseline and a changed forecast.
     protect_simulation(request, cost=body.n_sims * 2)
@@ -1160,9 +1152,7 @@ def predict_roster_scenario(
                     "before_net_adjustment": float(
                         baseline_inputs.teams.at[team, "NET_ADJUSTMENT"]
                     ),
-                    "after_net_adjustment": float(
-                        scenario.teams.at[team, "NET_ADJUSTMENT"]
-                    ),
+                    "after_net_adjustment": float(scenario.teams.at[team, "NET_ADJUSTMENT"]),
                     "causal_players": [
                         change["player"]
                         for change in scenario.changes
@@ -1307,9 +1297,7 @@ def predict_season(
     cup_favorite = table.sort_values("CUP_PROB", ascending=False).iloc[0]
     cup_groups = {
         group: _finite_records(
-            table[table["CUP_GROUP"] == group].sort_values(
-                "CUP_PROJECTED_GROUP_RANK"
-            )
+            table[table["CUP_GROUP"] == group].sort_values("CUP_PROJECTED_GROUP_RANK")
         )
         for group in CUP_2026_GROUPS
     }
@@ -1419,15 +1407,11 @@ def predict_lineup(
     if len(set(player_ids)) != 5:
         raise HTTPException(422, "select five different players")
     league = league_with_ratings(client)
-    roster = league[
-        (league["TEAM_ABBREVIATION"] == team) & league["PLAYER_ID"].isin(player_ids)
-    ]
+    roster = league[(league["TEAM_ABBREVIATION"] == team) & league["PLAYER_ID"].isin(player_ids)]
     if len(roster) != 5:
         raise HTTPException(404, "all five players must be on the selected team")
     names = roster.set_index("PLAYER_ID").loc[player_ids, "PLAYER_NAME"].tolist()
-    net, minutes = blended_lineup_estimate(
-        client.lineups(), league, names, player_ids
-    )
+    net, minutes = blended_lineup_estimate(client.lineups(), league, names, player_ids)
     return {
         "team": team,
         "players": names,
@@ -1445,9 +1429,7 @@ def methodology() -> dict:
         "evaluation": {
             "protocol": "Temporal holdout; hyperparameters tune on the last training season.",
             "leakage": "Every rolling feature is shifted; Elo and availability are pre-game.",
-            "decision_metrics": [
-                "log loss", "Brier score", "accuracy", "mean absolute error"
-            ],
+            "decision_metrics": ["log loss", "Brier score", "accuracy", "mean absolute error"],
         },
         "metrics": get_model_metrics(),
         "registry": get_model_registry(),
@@ -1486,8 +1468,11 @@ def methodology() -> dict:
             ),
         },
         "rejected": [
-            "Venue-split form", "SOS-adjusted net", "Garbage-time form filtering",
-            "Gradient boosting", "Five neural-network configurations",
+            "Venue-split form",
+            "SOS-adjusted net",
+            "Garbage-time form filtering",
+            "Gradient boosting",
+            "Five neural-network configurations",
         ],
     }
 
@@ -1583,9 +1568,7 @@ def player_insights(
     position_ranks: dict = {}
     position_group = None
     try:
-        positioned, position_group = positional_percentile_ranks(
-            league, player["full_name"]
-        )
+        positioned, position_group = positional_percentile_ranks(league, player["full_name"])
         position_ranks = positioned.dropna().to_dict()
     except (KeyError, ValueError):
         pass
@@ -1619,9 +1602,7 @@ def player_shots(
     player_id: int,
     client: Client,
     season: str | None = None,
-    season_type: Annotated[
-        str, Query(pattern="^(Regular Season|Playoffs)$")
-    ] = "Regular Season",
+    season_type: Annotated[str, Query(pattern="^(Regular Season|Playoffs)$")] = "Regular Season",
 ) -> dict:
     """Raw locations plus league-relative zone, hex, diet, and quality views."""
     player = _find_player(client, player_id)
@@ -1629,16 +1610,26 @@ def player_shots(
     shots = client.shot_chart(player_id, season=selected, season_type=season_type)
     if shots.empty:
         return {
-            "player": player["full_name"], "season": selected,
-            "season_type": season_type, "attempts": [], "zones": [], "hexes": [],
-            "breakdown": [], "quality": {},
+            "player": player["full_name"],
+            "season": selected,
+            "season_type": season_type,
+            "attempts": [],
+            "zones": [],
+            "hexes": [],
+            "breakdown": [],
+            "quality": {},
         }
     averages = client.shot_league_averages(season=selected, season_type=season_type)
     raw_columns = [
         column
         for column in (
-            "LOC_X", "LOC_Y", "SHOT_MADE_FLAG", "SHOT_ZONE_BASIC",
-            "SHOT_ZONE_AREA", "SHOT_ZONE_RANGE", "SHOT_TYPE",
+            "LOC_X",
+            "LOC_Y",
+            "SHOT_MADE_FLAG",
+            "SHOT_ZONE_BASIC",
+            "SHOT_ZONE_AREA",
+            "SHOT_ZONE_RANGE",
+            "SHOT_TYPE",
         )
         if column in shots
     ]
@@ -1665,10 +1656,7 @@ def player_split_tables(
     player = _find_player(client, player_id)
     selected = season or current_season()
     log = client.game_log(player_id, season=selected)
-    tables = {
-        dimension: _finite_records(player_splits(log, dimension))
-        for dimension in DIMENSIONS
-    }
+    tables = {dimension: _finite_records(player_splits(log, dimension)) for dimension in DIMENSIONS}
     return {"player": player["full_name"], "season": selected, "splits": tables}
 
 
@@ -1706,9 +1694,7 @@ def player_contract_detail(player_id: int, request: Request, client: Client) -> 
         raise HTTPException(404, str(error)) from error
     seasons = salary_seasons(contracts)
     salaries = {
-        selected: float(row[selected])
-        for selected in seasons
-        if pd.notna(row.get(selected))
+        selected: float(row[selected]) for selected in seasons if pd.notna(row.get(selected))
     }
     guaranteed = row.get("GUARANTEED")
     history: list[dict] = []
@@ -1927,9 +1913,7 @@ def game_story_detail(
         }
     logs = client.player_games(selected)
     rows = (
-        logs[logs["GAME_ID"].astype(str) == str(game_id)]
-        if "GAME_ID" in logs
-        else pd.DataFrame()
+        logs[logs["GAME_ID"].astype(str) == str(game_id)] if "GAME_ID" in logs else pd.DataFrame()
     )
     if rows.empty:
         try:
@@ -1979,9 +1963,7 @@ def ask_league(body: AskBody, client: Client) -> dict:
         import anthropic
         from anthropic import beta_tool
     except ImportError as error:
-        raise HTTPException(
-            503, "AI Q&A requires `uv sync --extra ai`"
-        ) from error
+        raise HTTPException(503, "AI Q&A requires `uv sync --extra ai`") from error
 
     league = league_with_ratings(client)
 
@@ -2028,7 +2010,11 @@ def ask_league(body: AskBody, client: Client) -> dict:
         final = None
         for message in runner:
             final = message
-        answer = "".join(block.text for block in final.content if block.type == "text")
+        if final is None:
+            raise RuntimeError("tool runner produced no message")
+        answer = "".join(
+            getattr(block, "text", "") for block in final.content if block.type == "text"
+        )
     except anthropic.AuthenticationError as error:
         raise HTTPException(503, "Anthropic credential was rejected") from error
     except Exception as error:
@@ -2042,9 +2028,7 @@ def ask_league(body: AskBody, client: Client) -> dict:
 
 
 @app.get("/compare")
-def compare(
-    names: Annotated[list[str], Query(min_length=2, max_length=4)], client: Client
-) -> dict:
+def compare(names: Annotated[list[str], Query(min_length=2, max_length=4)], client: Client) -> dict:
     """Current and career comparison for 2-4 active or retired players."""
     league = league_with_ratings(client)
     players = []

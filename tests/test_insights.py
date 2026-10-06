@@ -10,10 +10,17 @@ from nba_insights.analysis import player_scouting_take, team_scouting_take
 def test_player_take_names_elite_then_strong_then_weak():
     ranks = pd.Series(
         {
-            "PTS": 100.0, "AST": 96.0, "REB": 20.0, "STL": 94.0, "BLK": 60.0,
-            "FG_PCT": 85.0, "FG3_PCT": 40.0, "FT_PCT": 88.0,
+            "PTS": 100.0,
+            "AST": 96.0,
+            "REB": 20.0,
+            "STL": 94.0,
+            "BLK": 60.0,
+            "FG_PCT": 85.0,
+            "FG3_PCT": 40.0,
+            "FT_PCT": 88.0,
             # composite stats must be ignored, not surfaced as "skills"
-            "NET_RATING": 99.0, "DPM": 99.0,
+            "NET_RATING": 99.0,
+            "DPM": 99.0,
         }
     )
     take = player_scouting_take(ranks)
