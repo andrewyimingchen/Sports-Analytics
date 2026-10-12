@@ -887,6 +887,31 @@ def test_methodology(api):
     registry = api.get("/methodology/registry")
     assert registry.status_code == 200
     assert registry.json()["models"]["lineup"]["kind"] == "observed/proxy blend"
+    assert registry.json()["manifest"]["status"] == "available"
+
+
+def test_manifest_endpoint_reports_verification(api, monkeypatch):
+    from nba_insights.api import deps
+
+    response = api.get("/methodology/manifest")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "available"
+    assert set(body["manifest"]["runs"]) == {"train", "season_backtest", "player_backtest"}
+    # artifacts are local-only, so CI sees them missing; either way it is explicit
+    assert body["verification"]["status"] in {"verified", "drift"}
+    assert set(body["verification"]["artifacts"].values()) <= {"match", "mismatch", "missing"}
+
+    monkeypatch.setattr(deps, "load_manifest", lambda: None)
+    missing = api.get("/methodology/manifest").json()
+    assert missing["status"] == "missing"
+    assert missing["manifest"] is None
+    assert missing["verification"]["status"] == "manifest_missing"
+    assert api.get("/methodology/registry").json()["manifest"] == {
+        "status": "missing",
+        "updated_at": None,
+        "verification": "manifest_missing",
+    }
 
 
 def test_headshot_proxy(api, monkeypatch):
@@ -1049,7 +1074,7 @@ def test_mobile_app_shell_served(api):
     service_worker = api.get("/app/sw.js")
     assert service_worker.status_code == 200
     assert "fetch(e.request)" in service_worker.text
-    assert "nba-insights-shell-v24" in service_worker.text
+    assert "nba-insights-shell-v25" in service_worker.text
     assert "nba-insights-public-data-v1" in service_worker.text
     assert '!e.request.headers.has("Authorization")' in service_worker.text
     assert '!e.request.headers.has("X-API-Key")' in service_worker.text

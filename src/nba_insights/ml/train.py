@@ -36,6 +36,7 @@ from nba_insights.ml.features import (
     prior_team_form,
     team_form_features,
 )
+from nba_insights.ml.manifest import MODEL_VERSIONS, record_run, source_snapshots
 
 
 def _prev_season(season: str) -> str:
@@ -164,21 +165,47 @@ def main() -> None:
     curve.save(WIN_CURVE_PATH)
 
     # single source of truth for every number the UI quotes
+    trained_at = datetime.now(UTC).isoformat(timespec="seconds")
+    metrics = {
+        "outcome": {**outcome_metrics, "C": best_c},
+        "points": points_metrics,
+        "win_curve_slope": curve.slope,
+    }
+    data = {
+        "train_seasons": train_seasons,
+        "dev_season": train_seasons[-1],
+        "holdout_season": test_season,
+        "holdout_cutoff": pd.to_datetime(client.team_games(test_season)["GAME_DATE"])
+        .max()
+        .date()
+        .isoformat(),
+    }
     METRICS_PATH.write_text(
         json.dumps(
             {
-                "trained_at": datetime.now(UTC).isoformat(timespec="seconds"),
+                "trained_at": trained_at,
                 "train_seasons": train_seasons,
                 "dev_season": train_seasons[-1],
                 "holdout_season": test_season,
-                "outcome": {**outcome_metrics, "C": best_c},
-                "points": points_metrics,
-                "win_curve_slope": curve.slope,
+                **metrics,
             },
             indent=2,
         )
     )
-    logger.info("models and metrics saved to %s", MODELS_DIR)
+    record_run(
+        "train",
+        configuration={
+            "train_seasons": args.train_seasons,
+            "outcome_C_grid": C_GRID,
+            "elo_warmup_seasons": ELO_WARMUP_SEASONS,
+        },
+        data=data,
+        models={key: MODEL_VERSIONS[key] for key in ("outcome", "player_points", "lineup")},
+        metrics=metrics,
+        sources=source_snapshots(client.cache),
+        recorded_at=trained_at,
+    )
+    logger.info("models and metrics saved to %s; manifest updated", MODELS_DIR)
 
 
 if __name__ == "__main__":

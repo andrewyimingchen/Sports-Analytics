@@ -16,6 +16,7 @@ from nba_insights.analysis import (
 from nba_insights.analysis.salaries import normalize_name
 from nba_insights.config import MODELS_DIR
 from nba_insights.ingest import NBAClient
+from nba_insights.ml.manifest import MODEL_VERSIONS, record_run, source_snapshots
 
 PLAYER_SEASON_METRICS_PATH = MODELS_DIR / "player_season_metrics.json"
 
@@ -53,7 +54,7 @@ def run_player_backtest(client: NBAClient, source_season: str, target_season: st
     )
     projected = project_player_seasons(source, roster)
     return {
-        "version": "player-season-v1",
+        "version": MODEL_VERSIONS["player_season"],
         "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "source_season": source_season,
         "holdout_season": target_season,
@@ -72,9 +73,24 @@ def main() -> None:
     parser.add_argument("--target", default="2025-26")
     parser.add_argument("--output", type=Path, default=PLAYER_SEASON_METRICS_PATH)
     args = parser.parse_args()
-    artifact = run_player_backtest(NBAClient(), args.source, args.target)
+    client = NBAClient()
+    artifact = run_player_backtest(client, args.source, args.target)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(artifact, indent=2) + "\n")
+    if args.output.resolve() == PLAYER_SEASON_METRICS_PATH.resolve():
+        record_run(
+            "player_backtest",
+            configuration={"source": args.source, "target": args.target},
+            data={
+                "source_season": args.source,
+                "holdout_season": args.target,
+                "population": artifact["population"],
+            },
+            models={"player_season": artifact["version"]},
+            metrics=artifact["metrics"],
+            sources=source_snapshots(client.cache),
+            recorded_at=artifact["generated_at"],
+        )
     print(json.dumps(artifact, indent=2))
 
 

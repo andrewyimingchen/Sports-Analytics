@@ -377,9 +377,41 @@ class Methodology(Schema):
     rejected: list[str]
 
 
+class ManifestVerification(Schema):
+    status: str = Field(
+        description=(
+            "verified (every recorded artifact matches), drift (one is missing, "
+            "changed, or unrecorded), empty, or manifest_missing"
+        )
+    )
+    artifacts: dict[str, str] = Field(
+        description="Per artifact: match, mismatch, missing, or not_recorded."
+    )
+
+
+class ManifestSummary(Schema):
+    status: str = Field(description="available or missing")
+    updated_at: str | None
+    verification: str
+
+
+class ManifestReport(Schema):
+    status: str = Field(description="available or missing")
+    path: str
+    verification: ManifestVerification
+    manifest: Record | None = Field(
+        description=(
+            "models/manifest.json: per producing run, the command, configuration, code "
+            "revision, data cutoffs, feature schema, source snapshot fingerprints, "
+            "artifact hashes, and metrics with baselines."
+        )
+    )
+
+
 class Registry(Schema):
     models: dict[str, RegistryEntry]
     season_backtest: Record
+    manifest: ManifestSummary
 
 
 # --- players ----------------------------------------------------------------
