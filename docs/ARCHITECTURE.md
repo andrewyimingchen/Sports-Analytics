@@ -42,7 +42,7 @@ flowchart TB
 
     subgraph SERVE["serving"]
         STREAMLIT["app/streamlit_app.py — internal console<br/>research · diagnostics · experiments"]
-        API["api/app.py — product backend<br/>JSON endpoints + player cards"]
+        API["api/ — product backend<br/>routers/ per domain · schemas.py contracts"]
         PWA["api/static/ — official POSSESSION LAB PWA<br/>responsive · installable · offline shell"]
         MOBILE["mobile/ — Expo / React Native<br/>iOS · Android · secure local settings"]
     end
@@ -74,7 +74,7 @@ flowchart TB
 | `analysis/`, `ml/features.py`, `pbp/` | Pure functions: DataFrames in, DataFrames out; `KeyError` on missing players/columns. No I/O, so tests stay offline. |
 | `ml/train.py` | The evaluation protocol lives here: train on the three seasons before the current one, tune hyperparameters on the most recent training season (dev), score on the current season as a temporal holdout touched exactly once. The shipped artifacts are the ones whose numbers were printed, and `data/models/metrics.json` records them for the app to quote. |
 | `app/` | Internal Streamlit research/diagnostics console. It can move faster than the public product and does not define release parity. |
-| `api/` | Product boundary: typed JSON contracts plus the official installable PWA. Reads through the cache and saved artifacts only. |
+| `api/` | Product boundary: typed JSON contracts plus the official installable PWA. Reads through the cache and saved artifacts only. `app.py` only assembles the app; routes live in `routers/` (system, league, teams, players, games, predictions, methodology, ai, posters), response models in `schemas.py` (undeclared fields are rejected, so contract drift fails tests), dependency providers in `deps.py`, and cross-router helpers in `shared.py`. |
 | `mobile/` | Expo/React Native iOS and Android client. Consumes the JSON API, persists only device preferences and response fallbacks locally, and stores API credentials in native secure storage. |
 
 ## Supporting pieces

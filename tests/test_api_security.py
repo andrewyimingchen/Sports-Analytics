@@ -109,10 +109,20 @@ def test_ai_requires_remote_auth_and_has_its_own_budget(monkeypatch):
     assert error.value.status_code == 429
 
 
+def _flatten(routes):
+    # FastAPI keeps included routers as wrappers that expose the source router.
+    for route in routes:
+        included = getattr(route, "original_router", None)
+        if included is not None:
+            yield from _flatten(included.routes)
+        else:
+            yield route
+
+
 def _route_dependencies(path: str, method: str) -> set:
     route = next(
         route
-        for route in app.routes
+        for route in _flatten(app.routes)
         if getattr(route, "path", None) == path and method in getattr(route, "methods", set())
     )
     return {dependency.call for dependency in route.dependant.dependencies}

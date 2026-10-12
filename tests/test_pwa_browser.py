@@ -8,7 +8,6 @@ job (``uv sync --group browser`` + ``playwright install chromium``).
 
 from __future__ import annotations
 
-import importlib
 import socket
 import threading
 import time
@@ -20,20 +19,18 @@ uvicorn = pytest.importorskip("uvicorn")
 
 import pandas as pd  # noqa: E402
 
-from nba_insights.api import app  # noqa: E402
-from nba_insights.api.app import (  # noqa: E402
+from nba_insights.api import app, deps  # noqa: E402
+from nba_insights.api.deps import (  # noqa: E402
     get_client,
     get_outcome_model,
     get_points_model,
     get_win_curve,
 )
+from nba_insights.api.routers import predictions as predictions_router  # noqa: E402
 from nba_insights.ml import GameOutcomeModel  # noqa: E402
 from nba_insights.ml.features import game_matchup_frame, team_form_features  # noqa: E402
 from test_api import FakeCurve, FakeNBAClient, FakePointsModel  # noqa: E402
 from test_ml import synthetic_team_games  # noqa: E402
-
-# The module, not the FastAPI object the package re-exports as `app`.
-api_module = importlib.import_module("nba_insights.api.app")
 
 # Same shape as test_api's season-forecast fixture; replaces the simulator.
 SEASON_TABLE = pd.DataFrame(
@@ -103,8 +100,10 @@ def base_url():
     app.dependency_overrides[get_points_model] = FakePointsModel
     app.dependency_overrides[get_win_curve] = FakeCurve
     patches = pytest.MonkeyPatch()
-    patches.setattr(api_module, "_season_forecast_table", lambda *args: SEASON_TABLE)
-    patches.setattr(api_module, "get_player_season_metrics", lambda: {"metrics": {"players": 241}})
+    patches.setattr(predictions_router, "_season_forecast_table", lambda *args: SEASON_TABLE)
+    season_metrics = {"metrics": {"players": 241}}
+    patches.setattr(predictions_router, "get_player_season_metrics", lambda: season_metrics)
+    patches.setattr(deps, "get_player_season_metrics", lambda: season_metrics)
     port = _free_port()
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
     thread = threading.Thread(target=server.run, daemon=True)
