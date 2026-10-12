@@ -9,6 +9,8 @@ from collections.abc import Callable
 from datetime import date
 from pathlib import Path
 
+from nba_insights.errors import EXPECTED_ERRORS
+
 logger = logging.getLogger(__name__)
 
 DATA_DIR = Path(os.environ.get("NBA_INSIGHTS_DATA_DIR", "data"))
@@ -96,7 +98,7 @@ def _season_started(season: str) -> bool:
     _checking = True  # the check itself fetches data, which may ask for the season
     try:
         started = bool(_season_started_check(season))
-    except Exception:
+    except EXPECTED_ERRORS:
         logger.warning("season-start check failed for %s", season, exc_info=True)
         started = False
     finally:

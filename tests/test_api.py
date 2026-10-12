@@ -14,6 +14,7 @@ from nba_insights.api.deps import (
 from nba_insights.api.routers import players as players_router
 from nba_insights.api.routers import predictions as predictions_router
 from nba_insights.config import prediction_seasons
+from nba_insights.errors import UpstreamError
 from nba_insights.ml import GameOutcomeModel
 from nba_insights.ml.features import game_matchup_frame, team_form_features
 from test_ml import synthetic_team_games
@@ -329,6 +330,20 @@ class FakeNBAClient:
     def cached_rotation(self, game_id):
         return None
 
+    # Rating, DARKO, and draft sources are down in this fixture, so every
+    # route exercises its documented plain-table / degraded fallback.
+    def league_player_advanced(self, season=None):
+        raise UpstreamError("advanced dashboard unavailable in fixture")
+
+    def league_player_clutch(self, season=None):
+        raise UpstreamError("clutch dashboard unavailable in fixture")
+
+    def darko_dpm(self):
+        raise UpstreamError("DARKO unavailable in fixture")
+
+    def draft_history(self):
+        raise UpstreamError("draft history unavailable in fixture")
+
 
 @pytest.fixture
 def api():
@@ -507,12 +522,15 @@ def test_tracking_surface_definitions_filters_and_failure_state(api):
 
     client = FakeNBAClient()
     client.tracking_stats = lambda *args, **kwargs: (_ for _ in ()).throw(
-        RuntimeError("upstream blocked")
+        UpstreamError("upstream blocked")
     )
     app.dependency_overrides[get_client] = lambda: client
     unavailable = api.get("/tracking", params={"category": "defense"})
     assert unavailable.status_code == 200
     assert unavailable.json()["source"]["status"] == "unavailable"
+    assert unavailable.json()["source"]["reason"] == "upstream_unavailable"
+    # a fixed, user-facing message instead of the raw exception text
+    assert "upstream blocked" not in unavailable.text
     assert unavailable.json()["records"] == []
 
 
@@ -1137,3 +1155,89 @@ def test_card_html(api):
     assert "Alice Hooper" in r.text
     assert "PTS / game" in r.text
     assert "League percentile" in r.text
+
+
+def test_degraded_sections_carry_reason_codes(api):
+    # The fixture's draft history, ratings, and DARKO sources are down.
+    insights = api.get("/players/1/insights").json()
+    assert insights["draft"] is None
+    assert insights["degraded"] == [{"section": "draft", "reason": "upstream_unavailable"}]
+
+    profile = api.get("/teams/T1/profile").json()
+    assert {"section": "draft", "reason": "upstream_unavailable"} not in profile["degraded"]
+    assert all(set(item) == {"section", "reason"} for item in profile["degraded"])
+
+
+def test_box_score_upstream_outage_is_503_not_404(api):
+    client = FakeNBAClient()
+    client.player_games = lambda *args, **kwargs: pd.DataFrame()
+
+    def down(game_id):
+        raise UpstreamError("box score endpoint down")
+
+    client.box_score = down
+    app.dependency_overrides[get_client] = lambda: client
+    response = api.get("/games/001/box-score")
+    assert response.status_code == 503
+    assert response.json()["reason"] == "upstream_unavailable"
+
+
+def _fake_anthropic(monkeypatch, messages=None, error=None):
+    """Install a minimal stand-in for the optional anthropic SDK."""
+    import sys
+    import types
+
+    module = types.ModuleType("anthropic")
+
+    class APIError(Exception):
+        pass
+
+    class AuthenticationError(APIError):
+        pass
+
+    class Runner:
+        def __iter__(self):
+            if error is not None:
+                raise error(module)
+            return iter(messages or [])
+
+    class Anthropic:
+        def __init__(self):
+            self.beta = types.SimpleNamespace(
+                messages=types.SimpleNamespace(tool_runner=lambda **kwargs: Runner())
+            )
+
+    module.APIError = APIError
+    module.AuthenticationError = AuthenticationError
+    module.Anthropic = Anthropic
+    module.beta_tool = lambda function: function
+    monkeypatch.setitem(sys.modules, "anthropic", module)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    return module
+
+
+def test_ask_answers_and_falls_back_on_an_empty_stream(api, monkeypatch):
+    import types
+
+    text = types.SimpleNamespace(type="text", text="Alice leads with 9.1 assists.")
+    tool = types.SimpleNamespace(type="tool_use")
+    _fake_anthropic(monkeypatch, messages=[types.SimpleNamespace(content=[tool, text])])
+    answered = api.post("/ask", json={"question": "Who leads in assists?"})
+    assert answered.status_code == 200
+    assert answered.json()["answer"] == "Alice leads with 9.1 assists."
+
+    _fake_anthropic(monkeypatch, messages=[])
+    empty = api.post("/ask", json={"question": "Who leads in assists?"})
+    assert empty.status_code == 200
+    assert empty.json()["answer"] == "No answer was produced."
+
+
+def test_ask_provider_failures_are_categorized(api, monkeypatch):
+    _fake_anthropic(monkeypatch, error=lambda module: module.APIError("overloaded"))
+    failed = api.post("/ask", json={"question": "Who leads in assists?"})
+    assert failed.status_code == 502
+    assert failed.json()["reason"] == "provider_failed"
+
+    _fake_anthropic(monkeypatch, error=lambda module: module.AuthenticationError("bad key"))
+    rejected = api.post("/ask", json={"question": "Who leads in assists?"})
+    assert rejected.status_code == 503

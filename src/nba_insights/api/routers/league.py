@@ -19,8 +19,9 @@ from nba_insights.analysis import (
 from nba_insights.api import schemas
 from nba_insights.api.deps import Client, get_outcome_model
 from nba_insights.api.schemas import errors
-from nba_insights.api.shared import finite_records, snapshot_for_day, today
+from nba_insights.api.shared import Degradations, finite_records, snapshot_for_day, today
 from nba_insights.config import current_season, seasons_since
+from nba_insights.errors import EXPECTED_ERRORS, FAILURES, reason_for
 from nba_insights.ml.features import (
     matchup_features,
     team_form_snapshot,
@@ -61,12 +62,13 @@ def league_pulse(client: Client, season: str | None = None) -> dict:
         board = league_leaders(pool, stat, top=5, min_gp=min_gp)
         leaders[label] = finite_records(board)
 
+    degraded = Degradations("league_pulse", season=selected)
     next_slate: list[dict] = []
     if selected == current_season():
         day = today()
         indexed_snapshot = snapshot_for_day(day, client)
         snapshot = indexed_snapshot.reset_index()
-        try:
+        with degraded.section("next_slate"):
             slate = upcoming_games(client.schedule())
             rest = (
                 team_rest_features(client.team_games(), tipoff=slate["tipoff"].iloc[0])
@@ -98,8 +100,6 @@ def league_pulse(client: Client, season: str | None = None) -> dict:
                         "home_win_prob": probability,
                     }
                 )
-        except Exception:
-            logger.warning("next slate unavailable for league pulse", exc_info=True)
     else:
         snapshot = team_form_snapshot(client.team_games(selected)).reset_index()
     if snapshot.columns[0] != "team":
@@ -127,7 +127,15 @@ def league_pulse(client: Client, season: str | None = None) -> dict:
         "leaders": leaders,
         "team_form": finite_records(snapshot[form_columns]),
         "next_slate": next_slate,
+        "degraded": degraded.items,
     }
+
+
+_TRACKING_UNAVAILABLE = {
+    "upstream_unavailable": "stats.nba.com did not return this tracking table; try again later.",
+    "data_unavailable": "The tracking table came back without the columns this view needs.",
+    "default": "This tracking table is temporarily unavailable.",
+}
 
 
 @router.get(
@@ -225,8 +233,17 @@ def tracking_surface(
                 + "#tracking"
             ),
         }
-    except Exception as exc:
-        logger.warning("tracking category %s unavailable", category, exc_info=True)
+    except EXPECTED_ERRORS as exc:
+        reason = reason_for(exc)
+        FAILURES.record(reason)
+        logger.warning(
+            "tracking degraded: category=%s scope=%s season=%s %s",
+            category,
+            normalized_scope,
+            selected,
+            reason,
+            exc_info=True,
+        )
         return {
             "season": selected,
             "category": category,
@@ -239,7 +256,8 @@ def tracking_surface(
                 "status": "unavailable",
                 "endpoint": endpoint,
                 "provider": "stats.nba.com via nba_api",
-                "detail": str(exc),
+                "reason": reason,
+                "detail": _TRACKING_UNAVAILABLE.get(reason, _TRACKING_UNAVAILABLE["default"]),
             },
             "count": 0,
             "records": [],

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Annotated
 from urllib.parse import urlencode
 
@@ -26,6 +25,7 @@ from nba_insights.api.deps import Client, OutcomeModel
 from nba_insights.api.schemas import errors
 from nba_insights.api.security import can_access_private_data, is_local_request
 from nba_insights.api.shared import (
+    Degradations,
     finite_records,
     prediction_context,
     snapshot_for_day,
@@ -33,10 +33,9 @@ from nba_insights.api.shared import (
     validate_matchup,
 )
 from nba_insights.config import current_season
+from nba_insights.errors import DATA_ERRORS, DataUnavailableError
 from nba_insights.ml.features import matchup_features
 from nba_insights.serve import league_with_ratings
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["teams"])
 
@@ -63,13 +62,12 @@ def team_profile(team: str, request: Request, client: Client) -> dict:
     roster = league[league["TEAM_ABBREVIATION"] == team].sort_values(
         "MIN" if "MIN" in league else "GP", ascending=False
     )
+    degraded = Degradations("team_profile", team=team)
     contracts = None
     if can_access_private_data(request):
-        try:
+        with degraded.section("salaries"):
             contracts = client.player_contracts()
             roster = attach_salary(roster, contracts)
-        except Exception:
-            logger.warning("local salary context unavailable for %s", team, exc_info=True)
     roster_columns = [
         column
         for column in (
@@ -98,7 +96,8 @@ def team_profile(team: str, request: Request, client: Client) -> dict:
     wins = int((log["WL"] == "W").sum()) if "WL" in log else 0
     losses = int((log["WL"] == "L").sum()) if "WL" in log else 0
     recent = log.tail(10)
-    try:
+    take = ""
+    with degraded.section("scouting_take"):
         take = team_scouting_take(
             snapshot.loc[team],
             wins,
@@ -106,34 +105,26 @@ def team_profile(team: str, request: Request, client: Client) -> dict:
             snapshot,
             recent=(int((recent["WL"] == "W").sum()), int((recent["WL"] == "L").sum())),
         )
-    except Exception:
-        take = ""
 
     factors: dict = {}
-    try:
+    with degraded.section("four_factors"):
         factor_table = four_factors_table(games)
         if team in factor_table.index:
             factor_frame = factor_table.loc[[team]].reset_index()
             factors = finite_records(factor_frame)[0]
-    except Exception:
-        logger.warning("four factors unavailable for %s", team, exc_info=True)
 
     lineups: list[dict] = []
-    try:
+    with degraded.section("lineups"):
         lineups = finite_records(most_used_lineups(client.lineups(), team).head(20))
-    except Exception:
-        logger.warning("lineups unavailable for %s", team, exc_info=True)
 
     on_off: list[dict] = []
     if not log.empty and "TEAM_ID" in log:
-        try:
+        with degraded.section("on_off"):
             impact = team_on_off(client.team_player_on_off(int(log["TEAM_ID"].iloc[0])))
             on_off = finite_records(impact[impact["MIN_ON"] >= 100].head(20))
-        except Exception:
-            logger.warning("on/off unavailable for %s", team, exc_info=True)
 
     standings: list[dict] = []
-    try:
+    with degraded.section("standings"):
         raw_standings = client.standings()
         standing_columns = [
             column
@@ -152,12 +143,10 @@ def team_profile(team: str, request: Request, client: Client) -> dict:
             if column in raw_standings
         ]
         standings = finite_records(raw_standings[standing_columns])
-    except Exception:
-        logger.warning("standings unavailable", exc_info=True)
 
     finances = None
     if contracts is not None:
-        try:
+        with degraded.section("finances"):
             book = team_contracts(contracts, team)
             payroll = team_payroll(contracts)
             finances = {
@@ -167,8 +156,6 @@ def team_profile(team: str, request: Request, client: Client) -> dict:
                 "payroll": float(payroll.get(team, 0)),
                 "contracts": finite_records(book),
             }
-        except Exception:
-            logger.warning("contract book unavailable for %s", team, exc_info=True)
 
     recent_columns = [
         column for column in ("GAME_DATE", "MATCHUP", "WL", "PTS", "PLUS_MINUS") if column in recent
@@ -198,6 +185,7 @@ def team_profile(team: str, request: Request, client: Client) -> dict:
         "lineups": lineups,
         "on_off": on_off,
         "finances": finances,
+        "degraded": degraded.items,
     }
 
 
@@ -242,23 +230,19 @@ def team_comparison(
 
     games = client.team_games(basis)
     league = league_with_ratings(client, basis)
-    try:
+    degraded = Degradations("team_comparison", home=home, away=away, season=basis)
+    lineups = clutch = pd.DataFrame()
+    with degraded.section("lineups"):
         lineups = client.lineups(basis)
-    except Exception:
-        logger.warning("lineup comparison unavailable", exc_info=True)
-        lineups = pd.DataFrame()
-    try:
+    with degraded.section("clutch"):
         clutch = client.league_player_clutch(basis)
-    except Exception:
-        logger.warning("clutch comparison unavailable", exc_info=True)
-        clutch = pd.DataFrame()
 
     try:
         comparison = compare_teams(
             games, league, lineups, clutch, away, home, elo=prediction_snapshot.get("elo")
         )
-    except (KeyError, ValueError) as exc:
-        raise HTTPException(503, f"team comparison unavailable: {exc}") from exc
+    except DATA_ERRORS as exc:
+        raise DataUnavailableError("team comparison inputs are incomplete") from exc
 
     features = matchup_features(
         prediction_snapshot,
@@ -306,4 +290,5 @@ def team_comparison(
         ],
         "share_url": f"/app/?{query}#matchup",
         "export_filename": f"{away}-at-{home}-{selected}-comparison.json",
+        "degraded": degraded.items,
     }

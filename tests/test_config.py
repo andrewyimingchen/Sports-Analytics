@@ -9,6 +9,7 @@ from nba_insights.config import (
     seasons_since,
     set_season_started_check,
 )
+from nba_insights.errors import UpstreamError
 
 
 def test_calendar_season_rolls_over_in_october():
@@ -54,7 +55,7 @@ def test_failed_season_check_keeps_prior_season(monkeypatch):
     monkeypatch.setattr(config, "_today", lambda: date(2026, 10, 5))
 
     def broken(season):
-        raise RuntimeError("stats.nba.com unreachable")
+        raise UpstreamError("stats.nba.com unreachable")
 
     set_season_started_check(broken)
     assert current_season() == "2025-26"

@@ -69,3 +69,6 @@ def test_decode_darko_rejects_shapeless_payload():
         decode_darko({"nodes": []})
     with pytest.raises(ValueError):
         decode_darko({})
+    # the players pointer resolves to a dict instead of an index list (2026-10 site change)
+    with pytest.raises(ValueError, match="unexpected shape"):
+        decode_darko({"nodes": [{"type": "data", "data": [{"players": 1}, {"id": 2}]}]})

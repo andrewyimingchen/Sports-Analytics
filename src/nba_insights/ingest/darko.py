@@ -55,10 +55,14 @@ def decode_darko(payload: dict) -> pd.DataFrame:
         root = data[0]
         if not isinstance(root, dict) or "players" not in root:
             continue
-        rows = [
-            {out: _resolve(data, fields[src]) for src, out in _COLUMNS.items() if src in fields}
-            for fields in (data[i] for i in data[root["players"]])
-        ]
+        try:
+            rows = [
+                {out: _resolve(data, fields[src]) for src, out in _COLUMNS.items() if src in fields}
+                for fields in (data[i] for i in data[root["players"]])
+            ]
+        except (TypeError, KeyError, IndexError) as error:
+            # the index graph no longer has the shape this decoder expects
+            raise ValueError("DARKO player rows have an unexpected shape") from error
         df = pd.DataFrame(rows)
         if "PLAYER_ID" not in df.columns or "DPM" not in df.columns:
             raise ValueError("DARKO payload rows lack nba_id/dpm fields")

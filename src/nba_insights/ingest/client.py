@@ -15,6 +15,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 
 import pandas as pd
+import requests
 from nba_api.stats.endpoints import (
     boxscoretraditionalv3,
     draftcombinestats,
@@ -40,11 +41,18 @@ from nba_api.stats.endpoints import (
 from nba_api.stats.static import players
 
 from nba_insights.config import CACHE_DB, calendar_season, current_season
+from nba_insights.errors import UpstreamError
 from nba_insights.ingest.darko import fetch_darko
 from nba_insights.ingest.salaries import fetch_career_salaries, fetch_contracts
 from nba_insights.store import Cache
 
 logger = logging.getLogger(__name__)
+
+# What a remote fetch raises when the source is down or answers with an
+# unexpected payload: requests/socket errors (OSError), JSON decoding and
+# parser ValueErrors, and KeyError/IndexError from nba_api reading a
+# malformed response. Retried, then surfaced as UpstreamError.
+_FETCH_ERRORS = (requests.RequestException, OSError, ValueError, KeyError, IndexError)
 
 CURRENT_SEASON_TTL = timedelta(hours=24)
 # contracts change rarely outside July; a weekly refresh keeps scrape
@@ -320,7 +328,7 @@ class NBAClient:
                 lambda: self._fetch_pbp(game_id),
                 ttl=None,  # only fetched for finished games; the log never changes
             )
-        except Exception:
+        except UpstreamError:
             legacy = self.cache.get(f"pbp/v3/{game_id}")
             if legacy is not None:
                 return legacy
@@ -543,15 +551,20 @@ class NBAClient:
         fetched_after: datetime | None = None,
     ) -> pd.DataFrame:
         return self.cache.get_or_fetch(
-            key, lambda: self._call(fetch), ttl=ttl, fetched_after=fetched_after
+            key, lambda: self._call(fetch, key), ttl=ttl, fetched_after=fetched_after
         )
 
     # Empty responses are cached only briefly (see Cache.get_or_fetch): a
     # transient upstream glitch can't get pinned for a whole TTL, and a
     # legitimately empty response doesn't refetch on every render.
 
-    def _call(self, fetch: Callable[[], pd.DataFrame]) -> pd.DataFrame:
-        """Run a remote fetch with rate limiting and retry with backoff."""
+    def _call(self, fetch: Callable[[], pd.DataFrame], key: str = "") -> pd.DataFrame:
+        """Run a remote fetch with rate limiting and retry with backoff.
+
+        Network, HTTP, and malformed-payload failures are retried and then
+        raised as :class:`UpstreamError`; anything else is a defect and
+        propagates on the first attempt.
+        """
         last_error: Exception | None = None
         for attempt in range(self.retries):
             with self._rate_lock:
@@ -561,11 +574,17 @@ class NBAClient:
                 self._last_call = time.monotonic()
             try:
                 return fetch()
-            except Exception as e:  # nba_api raises assorted requests/JSON errors
+            except _FETCH_ERRORS as e:
                 last_error = e
                 backoff = 2**attempt
                 logger.warning(
-                    "fetch failed (attempt %d): %s; retrying in %ss", attempt + 1, e, backoff
+                    "fetch %s failed (attempt %d): %s; retrying in %ss",
+                    key or "<unkeyed>",
+                    attempt + 1,
+                    type(e).__name__,
+                    backoff,
                 )
                 time.sleep(backoff)
-        raise RuntimeError(f"NBA API fetch failed after {self.retries} attempts") from last_error
+        raise UpstreamError(
+            f"fetch {key or '<unkeyed>'} failed after {self.retries} attempts"
+        ) from last_error

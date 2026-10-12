@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import logging
 import os
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -15,9 +14,8 @@ from nba_insights.api.deps import Client
 from nba_insights.api.schemas import errors
 from nba_insights.api.security import protect_ai
 from nba_insights.config import current_season
+from nba_insights.errors import ProviderError
 from nba_insights.serve import league_with_ratings
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["ai"])
 
@@ -89,16 +87,15 @@ def ask_league(body: AskBody, client: Client) -> dict:
         final = None
         for message in runner:
             final = message
-        if final is None:
-            raise RuntimeError("tool runner produced no message")
-        answer = "".join(
-            getattr(block, "text", "") for block in final.content if block.type == "text"
-        )
     except anthropic.AuthenticationError as error:
         raise HTTPException(503, "Anthropic credential was rejected") from error
-    except Exception as error:
-        logger.warning("AI Q&A failed", exc_info=True)
-        raise HTTPException(502, "AI answer failed") from error
+    except anthropic.APIError as error:
+        # connection, rate-limit, and server errors; the central handler logs
+        # and answers 502 provider_failed
+        raise ProviderError("AI provider request failed") from error
+    # an empty stream falls through to the "No answer was produced." fallback
+    blocks = final.content if final is not None else []
+    answer = "".join(block.text for block in blocks if block.type == "text")
     return {
         "answer": answer or "No answer was produced.",
         "model": model,

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import logging
-
 import pandas as pd
 from fastapi import APIRouter, HTTPException
 
@@ -16,10 +14,9 @@ from nba_insights.analysis import (
 from nba_insights.api import schemas
 from nba_insights.api.deps import Client
 from nba_insights.api.schemas import errors
-from nba_insights.api.shared import finite_records
+from nba_insights.api.shared import Degradations, finite_records
 from nba_insights.config import current_season
-
-logger = logging.getLogger(__name__)
+from nba_insights.errors import DATA_ERRORS
 
 router = APIRouter(tags=["games"])
 
@@ -34,24 +31,23 @@ def games(client: Client, season: str | None = None) -> dict:
 @router.get("/games/{game_id}/box-score", response_model=schemas.BoxScore, responses=errors(404))
 def game_box_score(game_id: str, client: Client, season: str | None = None) -> dict:
     """Team-grouped traditional box score for a completed game."""
+    degraded = Degradations("game_box_score", game_id=game_id)
     table = pd.DataFrame()
     source = "league_game_finder"
-    try:
+    with degraded.section("league_game_finder"):
         logs = client.player_games(season or current_season())
         if "GAME_ID" in logs:
             rows = logs[logs["GAME_ID"].astype(str) == str(game_id)]
             if not rows.empty:
                 table = game_finder_box_score_table(rows)
-    except Exception:
-        logger.warning("cached player-game box score unavailable", exc_info=True)
     if table.empty:
         source = "traditional_box_score"
         try:
             raw = client.box_score(game_id)
             if not raw.empty:
                 table = box_score_table(raw)
-        except Exception as error:
-            logger.warning("traditional box score unavailable", exc_info=True)
+        except DATA_ERRORS as error:
+            # an upstream outage propagates as 503 upstream_unavailable instead
             raise HTTPException(404, "box score is unavailable for this game") from error
     if table.empty:
         raise HTTPException(404, "box score is unavailable for this game")
@@ -59,7 +55,7 @@ def game_box_score(game_id: str, client: Client, season: str | None = None) -> d
         str(team): finite_records(rows.drop(columns="TEAM"))
         for team, rows in table.groupby("TEAM", sort=False)
     }
-    return {"game_id": game_id, "source": source, "teams": teams}
+    return {"game_id": game_id, "source": source, "teams": teams, "degraded": degraded.items}
 
 
 def _traditional_story_rows(raw: pd.DataFrame) -> pd.DataFrame:
@@ -125,16 +121,16 @@ def game_story_detail(game_id: str, client: Client, season: str | None = None) -
         logs[logs["GAME_ID"].astype(str) == str(game_id)] if "GAME_ID" in logs else pd.DataFrame()
     )
     if rows.empty:
-        try:
+        degraded = Degradations("game_story", game_id=game_id)
+        with degraded.section("box_score"):
             rows = _traditional_story_rows(client.box_score(game_id))
-        except Exception:
-            rows = pd.DataFrame()
-    if rows.empty:
-        return {
-            "game_id": game_id,
-            "available": False,
-            "reason": "Player/team identity data is unavailable for this game.",
-        }
+        if rows.empty:
+            return {
+                "game_id": game_id,
+                "available": False,
+                "reason": "Player/team identity data is unavailable for this game.",
+                "degraded": degraded.items,
+            }
     rotation = client.cached_rotation(game_id)
     story = game_story(pbp, rows, home=str(game["HOME"]), away=str(game["AWAY"]), rotation=rotation)
     return {

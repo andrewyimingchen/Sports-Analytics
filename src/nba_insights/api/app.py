@@ -11,7 +11,10 @@ the app warm each other.
 
 from __future__ import annotations
 
-from fastapi import FastAPI
+import logging
+
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from nba_insights.api.deps import (
@@ -32,6 +35,14 @@ from nba_insights.api.routers import (
     teams,
 )
 from nba_insights.api.routers.system import STATIC_DIR, healthcheck, readiness
+from nba_insights.errors import (
+    FAILURES,
+    ArtifactUnavailableError,
+    DataUnavailableError,
+    NBAInsightsError,
+    ProviderError,
+    UpstreamError,
+)
 
 __all__ = [
     "app",
@@ -59,6 +70,41 @@ app = FastAPI(
     ],
 )
 app.mount("/app", StaticFiles(directory=STATIC_DIR, html=True), name="mobile")
+
+logger = logging.getLogger(__name__)
+
+# Expected categories map to stable status codes and reason codes; the message
+# is ours (never upstream text), so it is safe to return.
+_STATUS = {
+    UpstreamError.reason: 503,
+    DataUnavailableError.reason: 503,
+    ArtifactUnavailableError.reason: 503,
+    ProviderError.reason: 502,
+}
+
+
+@app.exception_handler(NBAInsightsError)
+async def categorized_failure(request: Request, error: NBAInsightsError) -> JSONResponse:
+    FAILURES.record(error.reason)
+    logger.warning(
+        "%s %s failed: %s", request.method, request.url.path, error.reason, exc_info=error
+    )
+    return JSONResponse(
+        {"detail": str(error), "reason": error.reason},
+        status_code=_STATUS.get(error.reason, 500),
+    )
+
+
+@app.exception_handler(Exception)
+async def unexpected_failure(request: Request, error: Exception) -> JSONResponse:
+    # Path only: query strings can carry names, and headers carry API keys.
+    FAILURES.record(NBAInsightsError.reason)
+    logger.error("%s %s raised unexpectedly", request.method, request.url.path, exc_info=error)
+    return JSONResponse(
+        {"detail": "internal server error", "reason": NBAInsightsError.reason},
+        status_code=500,
+    )
+
 
 for module in (system, league, teams, players, games, predictions, methodology, ai, posters):
     app.include_router(module.router)

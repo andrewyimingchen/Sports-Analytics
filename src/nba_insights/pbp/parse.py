@@ -11,6 +11,8 @@ import logging
 
 import pandas as pd
 
+from nba_insights.errors import DATA_ERRORS
+
 logger = logging.getLogger(__name__)
 
 
@@ -58,6 +60,6 @@ def gt_margins_table(pbp_by_game: dict[str, pd.DataFrame]) -> pd.DataFrame:
     for game_id, pbp in pbp_by_game.items():
         try:
             rows.append({"GAME_ID": game_id, "gt_margin_home": garbage_time_margin(pbp)})
-        except Exception as e:
+        except DATA_ERRORS as e:
             logger.warning("skipping PBP for %s: %s", game_id, e)
     return pd.DataFrame(rows, columns=["GAME_ID", "gt_margin_home"])
