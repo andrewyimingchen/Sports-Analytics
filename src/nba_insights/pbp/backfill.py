@@ -16,6 +16,7 @@ import argparse
 import logging
 
 from nba_insights.config import current_season
+from nba_insights.errors import EXPECTED_ERRORS
 from nba_insights.ingest import NBAClient
 
 logger = logging.getLogger(__name__)
@@ -61,7 +62,7 @@ def backfill_season(client: NBAClient, season: str, limit: int | None = None) ->
             try:
                 fetch(game_id)
                 breakers[label].record(ok=True)
-            except Exception as e:
+            except EXPECTED_ERRORS as e:
                 failures += 1
                 breakers[label].record(ok=False)
                 logger.warning("%s failed for %s: %s", label, game_id, e)

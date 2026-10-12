@@ -33,6 +33,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from nba_insights.errors import UpstreamError
+
 logger = logging.getLogger(__name__)
 
 _SCHEMA = """
@@ -154,7 +156,7 @@ class Cache:
                 return cached
             try:
                 df = fetcher()
-            except Exception:
+            except (UpstreamError, OSError):
                 stale = self.get(key)
                 if stale is not None and not stale.empty:
                     logger.warning("fetch failed for %s; serving stale cache entry", key)

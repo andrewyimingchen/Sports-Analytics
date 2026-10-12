@@ -16,6 +16,7 @@ import argparse
 import logging
 import sys
 
+from nba_insights.errors import EXPECTED_ERRORS, reason_for
 from nba_insights.ingest import NBAClient
 
 logger = logging.getLogger(__name__)
@@ -42,9 +43,9 @@ def warm(client: NBAClient, top: int = 20) -> int:
         ]:
             try:
                 fetch(player_id)
-            except Exception as e:
+            except EXPECTED_ERRORS as e:
                 failures += 1
-                logger.warning("skipping %s for %s: %s", label, name, e)
+                logger.warning("skipping %s for %s: %s", label, name, reason_for(e))
         logger.info("warmed %s", name)
     return failures
 
@@ -64,9 +65,9 @@ def warm_season(client: NBAClient, season: str) -> int:
     ]:
         try:
             fetch(season)
-        except Exception as e:
+        except EXPECTED_ERRORS as e:
             failures += 1
-            logger.warning("skipping %s dashboard for %s: %s", label, season, e)
+            logger.warning("skipping %s dashboard for %s: %s", label, season, reason_for(e))
     logger.info("warmed %s", season)
     return failures
 

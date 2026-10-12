@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
+from contextlib import contextmanager
 from functools import lru_cache
 from typing import Any
 
@@ -10,6 +12,7 @@ import pandas as pd
 from fastapi import HTTPException
 
 from nba_insights.config import current_season, past_seasons, prediction_seasons
+from nba_insights.errors import EXPECTED_ERRORS, FAILURES, reason_for
 from nba_insights.ingest import NBAClient
 from nba_insights.ml import GameOutcomeModel
 from nba_insights.ml.elo import current_elo
@@ -32,7 +35,8 @@ def snapshot_for_day(day: str, client: NBAClient) -> pd.DataFrame:
     """
     try:
         priors = prior_team_form(client.team_games(past_seasons(1)[0]))
-    except Exception:
+    except EXPECTED_ERRORS as error:
+        FAILURES.record(reason_for(error))
         logger.warning("prior-season form unavailable; serving unseeded snapshot", exc_info=True)
         priors = None
     snapshot = team_form_snapshot(client.team_games(), form_priors=priors)
@@ -42,10 +46,38 @@ def snapshot_for_day(day: str, client: NBAClient) -> pd.DataFrame:
             ignore_index=True,
         )
         snapshot["elo"] = current_elo(games).reindex(snapshot.index)
-    except Exception:
+    except EXPECTED_ERRORS as error:
+        FAILURES.record(reason_for(error))
         # matchup_features degrades to a neutral elo_diff
         logger.warning("Elo unavailable; predictions use a neutral elo_diff", exc_info=True)
     return snapshot
+
+
+class Degradations:
+    """The optional sections one response had to serve without, and why.
+
+    Wrap each optional section in :meth:`section`: an expected failure
+    (upstream, data, artifact) is logged with the endpoint and context,
+    counted, and recorded as ``{"section", "reason"}`` for the response's
+    ``degraded`` list; any other exception propagates as a defect.
+    """
+
+    def __init__(self, endpoint: str, **context: object) -> None:
+        self.endpoint = endpoint
+        self.context = " ".join(f"{key}={value}" for key, value in context.items())
+        self.items: list[dict[str, str]] = []
+
+    @contextmanager
+    def section(self, name: str) -> Iterator[None]:
+        try:
+            yield
+        except EXPECTED_ERRORS as error:
+            reason = reason_for(error)
+            FAILURES.record(reason)
+            logger.warning(
+                "%s degraded: %s %s %s", self.endpoint, name, reason, self.context, exc_info=True
+            )
+            self.items.append({"section": name, "reason": reason})
 
 
 def find_player(client: NBAClient, player_id: int) -> dict[str, Any]:

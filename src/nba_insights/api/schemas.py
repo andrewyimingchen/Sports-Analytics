@@ -9,7 +9,7 @@ documents them as row objects rather than pinning every column.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -22,6 +22,13 @@ class Schema(BaseModel):
 
 
 class ErrorResponse(Schema):
+    reason: str | None = Field(
+        default=None,
+        description=(
+            "Stable failure category: upstream_unavailable, data_unavailable, "
+            "artifact_unavailable, provider_failed, or internal_error."
+        ),
+    )
     detail: str | Records = Field(
         description=(
             "Human-readable reason the request failed; request validation errors "
@@ -35,6 +42,7 @@ def errors(*codes: int) -> dict[int | str, dict[str, Any]]:
     descriptions = {
         401: "A valid API key is required for remote access",
         403: "Remote access to this endpoint is disabled",
+        500: "Unexpected server error (reason internal_error); details are logged, not returned",
         404: "The requested player, team, game, or record does not exist",
         422: "The request parameters are invalid for this route",
         429: "The request budget for this client is exhausted",
@@ -61,6 +69,22 @@ class Readiness(Schema):
     status: str
     pwa_shell: bool
     optional_models: ModelAvailability
+    failures: dict[str, int] = Field(
+        description="Failures by reason code since this process started."
+    )
+
+
+class Degradation(Schema):
+    section: str = Field(description="The part of the response served without data.")
+    reason: str = Field(
+        description="upstream_unavailable, data_unavailable, or artifact_unavailable"
+    )
+
+
+Degraded = Annotated[
+    list[Degradation],
+    Field(description="Optional sections this response had to omit, with reason codes."),
+]
 
 
 class Capabilities(Schema):
@@ -92,6 +116,7 @@ class LeaguePulse(Schema):
     leaders: dict[str, Records] = Field(description="Top five per stat label.")
     team_form: Records
     next_slate: list[SlateGame]
+    degraded: Degraded
 
 
 class SchemaAudit(Schema):
@@ -108,7 +133,8 @@ class TrackingSource(Schema):
     stale: bool | None = None
     upstream_rows: int | None = None
     schema_audit: SchemaAudit | None = None
-    detail: str | None = Field(default=None, description="Failure reason when unavailable.")
+    reason: str | None = Field(default=None, description="Failure category when unavailable.")
+    detail: str | None = Field(default=None, description="Human-readable note when unavailable.")
 
 
 class Tracking(Schema):
@@ -168,6 +194,7 @@ class TeamProfile(Schema):
     finances: TeamFinances | None = Field(
         description="Contract book; present only for local or API-key requests."
     )
+    degraded: Degraded
 
 
 class Driver(Schema):
@@ -195,6 +222,7 @@ class TeamComparison(Schema):
     limitations: list[str]
     share_url: str
     export_filename: str
+    degraded: Degraded
 
 
 # --- predictions --------------------------------------------------------------
@@ -438,6 +466,7 @@ class PlayerInsights(Schema):
     position_percentiles: dict[str, float]
     scouting_take: str
     draft: str | None = Field(description='Draft line such as "#41 overall, 2014 (DEN)".')
+    degraded: Degraded
 
 
 class PlayerShots(Schema):
@@ -470,6 +499,7 @@ class PlayerContract(Schema):
     salaries: dict[str, float]
     history: Records
     guaranteed: float | None
+    degraded: Degraded
 
 
 class PlayerGames(Schema):
@@ -492,6 +522,7 @@ class PlayerComparison(Schema):
     percentiles: dict[str, dict[str, float]]
     shot_quality: dict[str, Record]
     poster_png: str | None
+    degraded: Degraded
 
 
 # --- games ------------------------------------------------------------------
@@ -506,6 +537,7 @@ class BoxScore(Schema):
     game_id: str
     source: str
     teams: dict[str, Records]
+    degraded: Degraded
 
 
 class StoryAvailability(Schema):
@@ -521,6 +553,7 @@ class GameStory(Schema):
     game_id: str
     available: bool
     reason: str | None = None
+    degraded: Degraded | None = None
     availability: StoryAvailability | None = None
     home: str | None = None
     away: str | None = None

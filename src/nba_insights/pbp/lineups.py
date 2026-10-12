@@ -20,6 +20,7 @@ import logging
 import pandas as pd
 
 from nba_insights.config import current_season
+from nba_insights.errors import EXPECTED_ERRORS
 from nba_insights.ingest import NBAClient
 from nba_insights.pbp.stints import lineup_ratings, stint_table
 from nba_insights.store import Cache
@@ -52,7 +53,7 @@ def build_season(
             continue
         try:
             per_game.append(stint_table(rotation, client.play_by_play(game_id)))
-        except Exception as e:
+        except EXPECTED_ERRORS as e:
             broken += 1
             logger.warning("skipping stints for %s: %s", game_id, e)
     coverage = len(per_game) / len(game_ids) if game_ids else 0.0

@@ -11,10 +11,11 @@ import json
 from functools import lru_cache
 from typing import Annotated, Any
 
-from fastapi import Depends, HTTPException
+from fastapi import Depends
 
 from nba_insights.analysis import ROSTER_INPUT_VERSION
 from nba_insights.config import MANIFEST_PATH, set_season_started_check
+from nba_insights.errors import ArtifactUnavailableError
 from nba_insights.ingest import NBAClient
 from nba_insights.ml import GameOutcomeModel, PlayerPointsModel, WinCurve
 from nba_insights.ml.backtest import SEASON_FORECAST_METRICS_PATH
@@ -39,21 +40,21 @@ Client = Annotated[NBAClient, Depends(get_client)]
 @lru_cache(maxsize=1)
 def get_outcome_model() -> GameOutcomeModel:
     if not OUTCOME_PATH.exists():
-        raise HTTPException(503, _UNTRAINED)
+        raise ArtifactUnavailableError(_UNTRAINED)
     return GameOutcomeModel.load(OUTCOME_PATH)
 
 
 @lru_cache(maxsize=1)
 def get_points_model() -> PlayerPointsModel:
     if not POINTS_PATH.exists():
-        raise HTTPException(503, _UNTRAINED)
+        raise ArtifactUnavailableError(_UNTRAINED)
     return PlayerPointsModel.load(POINTS_PATH)
 
 
 @lru_cache(maxsize=1)
 def get_win_curve() -> WinCurve:
     if not WIN_CURVE_PATH.exists():
-        raise HTTPException(503, _UNTRAINED)
+        raise ArtifactUnavailableError(_UNTRAINED)
     return WinCurve.load(WIN_CURVE_PATH)
 
 
@@ -74,7 +75,7 @@ def model_availability() -> dict[str, bool]:
 def get_model_metrics() -> dict[str, Any]:
     try:
         return json.loads(METRICS_PATH.read_text())
-    except Exception:
+    except (OSError, ValueError):  # not produced yet, or unreadable JSON
         return {}
 
 
@@ -82,7 +83,7 @@ def get_model_metrics() -> dict[str, Any]:
 def get_season_forecast_metrics() -> dict[str, Any]:
     try:
         return json.loads(SEASON_FORECAST_METRICS_PATH.read_text())
-    except Exception:
+    except (OSError, ValueError):  # not produced yet, or unreadable JSON
         return {}
 
 
@@ -90,7 +91,7 @@ def get_season_forecast_metrics() -> dict[str, Any]:
 def get_player_season_metrics() -> dict[str, Any]:
     try:
         return json.loads(PLAYER_SEASON_METRICS_PATH.read_text())
-    except Exception:
+    except (OSError, ValueError):  # not produced yet, or unreadable JSON
         return {}
 
 

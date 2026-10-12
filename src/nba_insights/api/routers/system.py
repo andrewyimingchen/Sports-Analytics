@@ -12,6 +12,7 @@ from fastapi.responses import RedirectResponse
 from nba_insights.api.deps import model_availability
 from nba_insights.api.schemas import Health, Meta, Readiness
 from nba_insights.config import current_season, prediction_seasons, seasons_since
+from nba_insights.errors import FAILURES
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
@@ -36,6 +37,7 @@ def readiness() -> dict:
         "status": "ready",
         "pwa_shell": (STATIC_DIR / "index.html").exists(),
         "optional_models": model_availability(),
+        "failures": FAILURES.snapshot(),
     }
 
 

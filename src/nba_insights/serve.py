@@ -14,6 +14,7 @@ import pandas as pd
 
 from nba_insights.analysis import attach_dpm, attach_ratings
 from nba_insights.config import current_season
+from nba_insights.errors import EXPECTED_ERRORS, FAILURES, UpstreamError, reason_for
 from nba_insights.ingest import NBAClient
 
 logger = logging.getLogger(__name__)
@@ -35,12 +36,14 @@ def league_with_ratings(client: NBAClient, season: str | None = None) -> pd.Data
         league = attach_ratings(
             league, client.league_player_advanced(season), client.league_player_clutch(season)
         )
-    except Exception:
+    except EXPECTED_ERRORS as error:
+        FAILURES.record(reason_for(error))
         logger.warning("rating endpoints unavailable; serving plain per-game table", exc_info=True)
     if season is None or season == current_season():
         try:
             league = attach_dpm(league, client.darko_dpm())
-        except Exception:
+        except EXPECTED_ERRORS as error:
+            FAILURES.record(reason_for(error))
             logger.warning("DARKO unavailable; serving table without DPM", exc_info=True)
     return league
 
@@ -62,6 +65,7 @@ def _fetch_cdn(url: str) -> bytes | None:
         r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
         r.raise_for_status()
         return r.content
-    except Exception:
+    except requests.RequestException:
+        FAILURES.record(UpstreamError.reason)
         logger.warning("CDN fetch failed for %s", url, exc_info=True)
         return None

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from functools import lru_cache
 from typing import Annotated
 from urllib.parse import urlencode
@@ -36,11 +35,9 @@ from nba_insights.api.cards import render_player_card
 from nba_insights.api.deps import Client
 from nba_insights.api.schemas import errors
 from nba_insights.api.security import is_local_request, require_private_access
-from nba_insights.api.shared import find_player, finite_records
+from nba_insights.api.shared import Degradations, find_player, finite_records
 from nba_insights.config import current_season
 from nba_insights.serve import fetch_headshot, league_with_ratings
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["players"])
 
@@ -139,11 +136,10 @@ def player_insights(player_id: int, client: Client, season: str | None = None) -
         if column in row
     ]
     ratings = finite_records(row[rating_columns].head(1))
+    degraded = Degradations("player_insights", player_id=player_id)
     draft = None
-    try:
+    with degraded.section("draft"):
         draft = player_draft_line(client.draft_history(), player_id)
-    except Exception:
-        logger.warning("draft context unavailable for player %s", player_id, exc_info=True)
     return {
         "player": player["full_name"],
         "season": selected,
@@ -153,6 +149,7 @@ def player_insights(player_id: int, client: Client, season: str | None = None) -
         "position_percentiles": position_ranks,
         "scouting_take": player_scouting_take(ranks),
         "draft": draft,
+        "degraded": degraded.items,
     }
 
 
@@ -260,11 +257,10 @@ def player_contract_detail(player_id: int, request: Request, client: Client) -> 
     guaranteed = row.get("GUARANTEED")
     history: list[dict] = []
     slug = row.get("BREF_SLUG")
+    degraded = Degradations("player_contract", player_id=player_id)
     if pd.notna(slug):
-        try:
+        with degraded.section("history"):
             history = finite_records(client.player_salary_history(str(slug)))
-        except Exception:
-            logger.warning("career salary history unavailable", exc_info=True)
     return {
         "player": player["full_name"],
         "local_only": is_local_request(request),
@@ -272,6 +268,7 @@ def player_contract_detail(player_id: int, request: Request, client: Client) -> 
         "salaries": salaries,
         "history": history,
         "guaranteed": float(guaranteed) if pd.notna(guaranteed) else None,
+        "degraded": degraded.items,
     }
 
 
@@ -337,10 +334,10 @@ def compare(names: Annotated[list[str], Query(min_length=2, max_length=4)], clie
     career_seasons: dict[str, list[dict]] = {}
     ranks: dict[str, dict] = {}
     qualities: dict[str, dict] = {}
-    try:
+    degraded = Degradations("player_comparison", players=len(players))
+    league_averages = None
+    with degraded.section("shot_quality"):
         league_averages = client.shot_league_averages()
-    except Exception:
-        league_averages = None
     for player in players:
         name = player["full_name"]
         totals = client.career_stats(player["id"])
@@ -352,14 +349,13 @@ def compare(names: Annotated[list[str], Query(min_length=2, max_length=4)], clie
         except KeyError:
             ranks[name] = {}
         if league_averages is not None:
-            try:
+            qualities[name] = {}
+            with degraded.section(f"shot_quality:{player['id']}"):
                 qualities[name] = (
                     shot_quality(client.shot_chart(player["id"]), league_averages)
                     .dropna()
                     .to_dict()
                 )
-            except Exception:
-                qualities[name] = {}
     poster_png = None
     if not table.empty:
         query = urlencode({"names": names}, doseq=True)
@@ -372,6 +368,7 @@ def compare(names: Annotated[list[str], Query(min_length=2, max_length=4)], clie
         "percentiles": ranks,
         "shot_quality": qualities,
         "poster_png": poster_png,
+        "degraded": degraded.items,
     }
 
 
@@ -386,9 +383,8 @@ def player_card(player_id: int, client: Client) -> str:
 
     ranks = None
     if player["is_active"]:
-        try:
+        # the card degrades to stats-only rather than failing
+        with Degradations("player_card", player_id=player_id).section("percentiles"):
             ranks = percentile_ranks(client.league_player_stats(), player["full_name"])
-        except Exception:  # card degrades to stats-only rather than 500ing
-            ranks = None
 
     return render_player_card(player["full_name"], latest, ranks)
