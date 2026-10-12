@@ -5,12 +5,14 @@ import pytest
 from fastapi.testclient import TestClient
 
 from nba_insights.api import app
-from nba_insights.api.app import (
+from nba_insights.api.deps import (
     get_client,
     get_outcome_model,
     get_points_model,
     get_win_curve,
 )
+from nba_insights.api.routers import players as players_router
+from nba_insights.api.routers import predictions as predictions_router
 from nba_insights.config import prediction_seasons
 from nba_insights.ml import GameOutcomeModel
 from nba_insights.ml.features import game_matchup_frame, team_form_features
@@ -689,6 +691,8 @@ def test_simulation_and_player_points(api_with_models):
     assert simulation.status_code == 200
     body = simulation.json()
     assert body["n_sims"] == 1000
+    # Regression: the team check once shadowed the season with the away tricode.
+    assert body["season"] == prediction_seasons()[0]
     assert body["margin_histogram"] and body["total_histogram"]
     assert 0 < body["summary"]["home_win_prob"] < 1
 
@@ -699,9 +703,6 @@ def test_simulation_and_player_points(api_with_models):
 
 
 def test_season_prediction_tables(api, monkeypatch):
-    import importlib
-
-    api_module = importlib.import_module("nba_insights.api.app")
     table = pd.DataFrame(
         {
             "TEAM": ["T1", "T2", "T3", "T4"],
@@ -720,7 +721,7 @@ def test_season_prediction_tables(api, monkeypatch):
             "CUP_FINAL_PROB": [0.4, 0.2, 0.5, 0.1],
         }
     )
-    monkeypatch.setattr(api_module, "_season_forecast_table", lambda *args: table)
+    monkeypatch.setattr(predictions_router, "_season_forecast_table", lambda *args: table)
     upcoming = prediction_seasons()[1]
 
     response = api.get(
@@ -752,11 +753,8 @@ def test_roster_forecast_inputs_are_auditable(api):
 
 
 def test_roster_scenario_is_ephemeral_and_returns_before_after(api, monkeypatch):
-    import importlib
-
     from nba_insights.analysis.roster_forecast import RosterForecastInputs
 
-    api_module = importlib.import_module("nba_insights.api.app")
     players = pd.DataFrame(
         {
             "PLAYER_NAME": [f"A{i}" for i in range(6)] + [f"B{i}" for i in range(6)],
@@ -790,10 +788,10 @@ def test_roster_scenario_is_ephemeral_and_returns_before_after(api, monkeypatch)
         }
     )
 
-    monkeypatch.setattr(api_module, "_roster_forecast_inputs", lambda *args: inputs)
-    monkeypatch.setattr(api_module, "_season_forecast_table", lambda *args: baseline)
-    monkeypatch.setattr(api_module, "_snapshot_for_day", lambda *args: pd.DataFrame())
-    monkeypatch.setattr(api_module, "_forecast_conferences", lambda *args: {})
+    monkeypatch.setattr(predictions_router, "_roster_forecast_inputs", lambda *args: inputs)
+    monkeypatch.setattr(predictions_router, "_season_forecast_table", lambda *args: baseline)
+    monkeypatch.setattr(predictions_router, "snapshot_for_day", lambda *args: pd.DataFrame())
+    monkeypatch.setattr(predictions_router, "_forecast_conferences", lambda *args: {})
 
     def fake_scenario_forecast(*args, **kwargs):
         result = baseline.copy()
@@ -804,7 +802,7 @@ def test_roster_scenario_is_ephemeral_and_returns_before_after(api, monkeypatch)
         ]
         return result
 
-    monkeypatch.setattr(api_module, "season_forecast", fake_scenario_forecast)
+    monkeypatch.setattr(predictions_router, "season_forecast", fake_scenario_forecast)
     upcoming = prediction_seasons()[1]
     response = api.post(
         "/predict/season/scenario",
@@ -836,11 +834,8 @@ def test_roster_scenario_is_ephemeral_and_returns_before_after(api, monkeypatch)
 
 
 def test_player_season_projection_exposes_ranges_and_award_method(api, monkeypatch):
-    import importlib
-
-    api_module = importlib.import_module("nba_insights.api.app")
     monkeypatch.setattr(
-        api_module,
+        predictions_router,
         "get_player_season_metrics",
         lambda: {"metrics": {"players": 241}},
     )
@@ -855,9 +850,6 @@ def test_player_season_projection_exposes_ranges_and_award_method(api, monkeypat
 
 
 def test_lineup_prediction(api_with_models, monkeypatch):
-    import importlib
-
-    api_module = importlib.import_module("nba_insights.api.app")
     roster = pd.DataFrame(
         {
             "PLAYER_ID": [1, 2, 3, 4, 5],
@@ -867,7 +859,7 @@ def test_lineup_prediction(api_with_models, monkeypatch):
             "PLUS_MINUS": [5.0, 4.0, 3.0, 2.0, 1.0],
         }
     )
-    monkeypatch.setattr(api_module, "league_with_ratings", lambda client: roster)
+    monkeypatch.setattr(predictions_router, "league_with_ratings", lambda client: roster)
     response = api_with_models.get(
         "/predict/lineup",
         params=[("team", "T1"), *[("player_ids", player_id) for player_id in range(1, 6)]],
@@ -898,10 +890,9 @@ def test_methodology(api):
 
 
 def test_headshot_proxy(api, monkeypatch):
-    import importlib
-
-    api_module = importlib.import_module("nba_insights.api.app")
-    monkeypatch.setattr(api_module, "_fetch_headshot", lambda pid: b"fakepng" if pid == 1 else None)
+    monkeypatch.setattr(
+        players_router, "_fetch_headshot", lambda pid: b"fakepng" if pid == 1 else None
+    )
     ok = api.get("/players/1/headshot")
     assert ok.status_code == 200
     assert ok.headers["content-type"] == "image/png"
