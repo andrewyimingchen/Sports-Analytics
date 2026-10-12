@@ -19,14 +19,28 @@ Empty frames are cached but trusted only for :data:`EMPTY_TTL`:
 stats.nba.com intermittently serves empty row sets, so a glitch must not be
 pinned for a whole TTL — but a legitimately empty response (a player with
 no playoff games) must not trigger a network fetch on every render either.
+
+Process model: any number of threads and processes on one host may share
+one cache file (e.g. several uvicorn workers plus Streamlit). The database
+runs in WAL mode so readers never block the writer, every connection waits
+up to :data:`BUSY_TIMEOUT_SECONDS` for a lock instead of failing, and a
+miss is fetched once across processes: a per-key POSIX byte-range lock on
+``<db>.lock`` (single-flight across processes) backs the per-key thread
+lock (single-flight within one). The file must be on a local filesystem;
+network filesystems break both WAL and POSIX locks. Without ``fcntl``
+(Windows) only the in-process guarantee holds.
 """
 
 from __future__ import annotations
 
+import errno
+import hashlib
 import logging
+import os
 import sqlite3
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from io import BytesIO, StringIO
 from pathlib import Path
@@ -35,7 +49,15 @@ import pandas as pd
 
 from nba_insights.errors import UpstreamError
 
+try:
+    import fcntl
+except ImportError:  # Windows: in-process single-flight only
+    fcntl = None  # type: ignore[assignment]
+
 logger = logging.getLogger(__name__)
+
+# How long a connection waits for another writer before raising "locked".
+BUSY_TIMEOUT_SECONDS = 30.0
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS cache_entries (
@@ -55,6 +77,25 @@ _LEGACY_JSON_VERSION = "v2"
 # how long a cached *empty* frame is trusted before refetching
 EMPTY_TTL = timedelta(hours=1)
 
+# POSIX record locks belong to the process and are all released when *any*
+# descriptor for the file is closed, so each lock file is opened once per
+# process and never closed.
+_LOCK_FDS: dict[Path, int] = {}
+_LOCK_FDS_GUARD = threading.Lock()
+
+
+def _lock_fd(path: Path) -> int:
+    with _LOCK_FDS_GUARD:
+        if path not in _LOCK_FDS:
+            _LOCK_FDS[path] = os.open(path, os.O_RDWR | os.O_CREAT, 0o644)
+        return _LOCK_FDS[path]
+
+
+def _lock_offset(key: str) -> int:
+    """A byte in a 2**31 range per key; a rare collision only serializes two keys."""
+    digest = hashlib.blake2b(key.encode(), digest_size=4).digest()
+    return int.from_bytes(digest, "big") & 0x7FFFFFFF
+
 
 class Cache:
     def __init__(
@@ -72,11 +113,30 @@ class Cache:
         # keys served through get_or_fetch, so a training run can record
         # exactly which source snapshots it read (see ml/manifest.py)
         self._accessed: set[str] = set()
+        self._lock_path = self.db_path.with_name(self.db_path.name + ".lock")
         with self._connect() as conn:
+            # Persistent per database file; a no-op once set. Returns the
+            # previous mode when WAL is unsupported (e.g. network filesystem).
+            self.journal_mode = str(conn.execute("PRAGMA journal_mode=WAL").fetchone()[0])
             conn.execute(_SCHEMA)
+        if self.journal_mode.lower() != "wal":
+            logger.warning(
+                "cache %s runs in %s mode; concurrent readers may block writers",
+                self.db_path,
+                self.journal_mode,
+            )
 
-    def _connect(self) -> sqlite3.Connection:
-        return sqlite3.connect(self.db_path)
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
+        """A short-lived connection: committed on success, always closed."""
+        conn = sqlite3.connect(self.db_path, timeout=BUSY_TIMEOUT_SECONDS)
+        try:
+            # WAL makes NORMAL durable against application crashes
+            conn.execute("PRAGMA synchronous=NORMAL")
+            with conn:
+                yield conn
+        finally:
+            conn.close()
 
     def get(
         self,
@@ -149,8 +209,8 @@ class Cache:
         cached = self._get_valid(key, ttl, fetched_after)
         if cached is not None:
             return cached
-        with self._key_lock(key):
-            # another thread may have fetched while we waited for the lock
+        with self._key_lock(key), self._process_lock(key):
+            # another thread or process may have fetched while we waited
             cached = self._get_valid(key, ttl, fetched_after)
             if cached is not None:
                 return cached
@@ -178,11 +238,39 @@ class Cache:
         with self._locks_guard:
             return self._key_locks.setdefault(key, threading.Lock())
 
+    @contextmanager
+    def _process_lock(self, key: str) -> Iterator[None]:
+        """Cross-process single-flight for *key* (no-op without fcntl)."""
+        if fcntl is None:
+            yield
+            return
+        fd = _lock_fd(self._lock_path)
+        offset = _lock_offset(key)
+        try:
+            fcntl.lockf(fd, fcntl.LOCK_EX, 1, offset)
+        except OSError as error:
+            if error.errno != errno.EDEADLK:
+                raise
+            # two processes each hold a key the other's nested fetch needs;
+            # fetching without the lock risks one duplicate request, not a hang
+            logger.warning("cache lock deadlock avoided for %s; fetching unlocked", key)
+            yield
+            return
+        try:
+            yield
+        finally:
+            fcntl.lockf(fd, fcntl.LOCK_UN, 1, offset)
+
     def _load(self, key: str) -> tuple[datetime, pd.DataFrame] | None:
         row = self._read_row(f"{_FORMAT_VERSION}:{key}")
-        # parquet entries are always written as bytes; anything else is not ours
-        if row is not None and isinstance(row[1], bytes):
-            return row[0], _deserialize(row[1])
+        if row is not None:
+            if isinstance(row[1], bytes):
+                return row[0], _deserialize(row[1])
+            # parquet entries are always bytes: a foreign writer put this row
+            # here. Treat it as a miss (the next fetch overwrites it) rather
+            # than resurrecting older legacy data over it.
+            logger.error("cache entry %s is not a parquet payload; ignoring it", key)
+            return None
         # legacy JSON entry: migrate to parquet, keeping the fetch time
         row = self._read_row(f"{_LEGACY_JSON_VERSION}:{key}")
         if row is None:

@@ -68,6 +68,38 @@ compares its recorded SHA-256 hashes with the mounted artifacts and reports
 `missing`. After retraining, commit the updated manifest so the deployed
 record describes the artifacts you mount.
 
+## Processes and the shared cache
+
+The supported model is **one host, one local cache file, any number of
+processes**: several Uvicorn workers (`--workers N`), the Streamlit console,
+and warm/backfill jobs may all share `data/cache.sqlite3`.
+
+- The cache runs in SQLite WAL mode, so readers never block the writer, and
+  every connection waits up to 30 seconds for a lock instead of failing with
+  "database is locked".
+- A cache miss is fetched once across processes. A per-key POSIX lock on
+  `data/cache.sqlite3.lock` makes other processes wait for the first
+  fetch and then read its result, instead of each calling stats.nba.com.
+  On Windows (no `fcntl`) the guarantee is per process only, so expect up
+  to one duplicate fetch per process on a cold key.
+- Keep the file on a **local filesystem**. NFS/SMB and most container
+  volume drivers backed by network storage break both WAL and POSIX locks.
+  The cache logs a warning when WAL cannot be enabled.
+- Multiple hosts must not share one cache file; give each host its own
+  warmed copy.
+
+**Recovering from lock or corruption problems.** The cache is rebuildable
+and never the source of truth:
+
+1. Stop every process using it (API workers, Streamlit, warm jobs).
+2. If startup or reads report `database disk image is malformed`, move
+   `cache.sqlite3`, `cache.sqlite3-wal`, and `cache.sqlite3-shm` aside.
+   Do not delete only the `-wal` file: it may hold committed entries.
+3. Re-run `uv run python -m nba_insights.warm` (and the play-by-play
+   backfill if you use game stories) to rebuild it.
+
+`cache.sqlite3.lock` holds no data and can be deleted while nothing is running.
+
 ## Remote API safeguards
 
 Localhost callers can use all locally configured features without a POSSESSION
