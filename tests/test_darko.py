@@ -72,3 +72,48 @@ def test_decode_darko_rejects_shapeless_payload():
     # the players pointer resolves to a dict instead of an index list (2026-10 site change)
     with pytest.raises(ValueError, match="unexpected shape"):
         decode_darko({"nodes": [{"type": "data", "data": [{"players": 1}, {"id": 2}]}]})
+
+
+def make_columnar_payload() -> dict:
+    # October 2026 layout: players -> {"keys": [name indices], "values":
+    # [one value-index list per key]}; fields the decoder ignores are kept.
+    data = [
+        {"players": 1, "ratingsThrough": 21},
+        {"keys": 2, "values": 7},
+        [3, 4, 5, 6],
+        "nba_id",
+        "player_name",
+        "team_name",
+        "dpm",
+        [8, 11, 14, 17],
+        [9, 10],
+        203999,
+        2544,
+        [12, 13],
+        "Nikola Jokic",
+        "LeBron James",
+        [15, 16],
+        "Denver Nuggets",
+        "Los Angeles Lakers",
+        [18, -3],
+        7.35,
+        None,
+        None,
+        "2026-06-03",
+    ]
+    return {"nodes": [None, {"type": "data", "data": data}]}
+
+
+def test_decode_darko_reads_the_columnar_layout():
+    df = decode_darko(make_columnar_payload()).set_index("PLAYER_NAME")
+    assert list(df.columns) == ["PLAYER_ID", "DPM"]
+    assert df.loc["Nikola Jokic", "PLAYER_ID"] == 203999
+    assert df.loc["Nikola Jokic", "DPM"] == pytest.approx(7.35)
+    assert pd.isna(df.loc["LeBron James", "DPM"])
+
+
+def test_decode_darko_rejects_ragged_columns():
+    payload = make_columnar_payload()
+    payload["nodes"][1]["data"][17] = [18]  # dpm column shorter than the others
+    with pytest.raises(ValueError, match="different lengths"):
+        decode_darko(payload)

@@ -44,9 +44,12 @@ def decode_darko(payload: dict) -> pd.DataFrame:
     """Flatten the SvelteKit payload to one row per player.
 
     Finds the route node whose root object has a "players" key and
-    resolves each row's field indices. Raises ValueError when no node
-    carries player data (the site changed shape) so the cache serves a
-    stale copy instead of pinning garbage.
+    resolves its field indices. Two layouts are understood: a list of
+    per-player objects (field -> value index), and the columnar layout the
+    site switched to in October 2026 (``{"keys": [...], "values": [...]}``,
+    one index list per field). Raises ValueError when no node carries
+    player data or the layout is unrecognized (the site changed shape), so
+    the cache serves a stale copy instead of pinning garbage.
     """
     for node in payload.get("nodes") or []:
         if not isinstance(node, dict) or node.get("type") != "data":
@@ -56,10 +59,18 @@ def decode_darko(payload: dict) -> pd.DataFrame:
         if not isinstance(root, dict) or "players" not in root:
             continue
         try:
-            rows = [
-                {out: _resolve(data, fields[src]) for src, out in _COLUMNS.items() if src in fields}
-                for fields in (data[i] for i in data[root["players"]])
-            ]
+            players = data[root["players"]]
+            if isinstance(players, dict) and {"keys", "values"} <= set(players):
+                rows = _columnar_rows(data, players)
+            else:
+                rows = [
+                    {
+                        out: _resolve(data, fields[src])
+                        for src, out in _COLUMNS.items()
+                        if src in fields
+                    }
+                    for fields in (data[i] for i in players)
+                ]
         except (TypeError, KeyError, IndexError) as error:
             # the index graph no longer has the shape this decoder expects
             raise ValueError("DARKO player rows have an unexpected shape") from error
@@ -68,6 +79,24 @@ def decode_darko(payload: dict) -> pd.DataFrame:
             raise ValueError("DARKO payload rows lack nba_id/dpm fields")
         return df
     raise ValueError("no player data found in DARKO payload")
+
+
+def _columnar_rows(data: list, players: dict) -> list[dict]:
+    """Rows from the columnar layout: one value-index list per field name."""
+    names = [data[index] for index in data[players["keys"]]]
+    columns = data[players["values"]]
+    if len(names) != len(columns):
+        raise ValueError("DARKO columnar keys and values differ in length")
+    wanted = {
+        _COLUMNS[name]: [_resolve(data, index) for index in data[column]]
+        for name, column in zip(names, columns, strict=True)
+        if name in _COLUMNS
+    }
+    lengths = {len(values) for values in wanted.values()}
+    if len(lengths) > 1:
+        raise ValueError("DARKO columnar fields have different lengths")
+    count = lengths.pop() if lengths else 0
+    return [{column: values[row] for column, values in wanted.items()} for row in range(count)]
 
 
 def _resolve(data: list, idx: int):
