@@ -13,11 +13,12 @@ from typing import Annotated, Any
 
 from fastapi import Depends, HTTPException
 
-from nba_insights.analysis import PLAYER_FORECAST_VERSION, ROSTER_INPUT_VERSION
-from nba_insights.config import set_season_started_check
+from nba_insights.analysis import ROSTER_INPUT_VERSION
+from nba_insights.config import MANIFEST_PATH, set_season_started_check
 from nba_insights.ingest import NBAClient
 from nba_insights.ml import GameOutcomeModel, PlayerPointsModel, WinCurve
 from nba_insights.ml.backtest import SEASON_FORECAST_METRICS_PATH
+from nba_insights.ml.manifest import MODEL_VERSIONS, load_manifest, verify_artifacts
 from nba_insights.ml.player_backtest import PLAYER_SEASON_METRICS_PATH
 from nba_insights.ml.train import METRICS_PATH, OUTCOME_PATH, POINTS_PATH, WIN_CURVE_PATH
 
@@ -105,14 +106,14 @@ def get_model_registry() -> dict[str, dict[str, Any]]:
             "status": (
                 "temporal holdout evaluated" if trained.get("outcome") else "artifact missing"
             ),
-            "version": "logistic-outcome-v1",
+            "version": MODEL_VERSIONS["outcome"],
             "data_cutoff": trained.get("holdout_season"),
             "metrics": trained.get("outcome", {}),
         },
         "player_points": {
             "kind": "trained supervised model",
             "status": "temporal holdout evaluated" if trained.get("points") else "artifact missing",
-            "version": "player-points-v1",
+            "version": MODEL_VERSIONS["player_points"],
             "data_cutoff": trained.get("holdout_season"),
             "metrics": trained.get("points", {}),
         },
@@ -123,7 +124,7 @@ def get_model_registry() -> dict[str, dict[str, Any]]:
                 if player_season.get("metrics")
                 else "holdout artifact missing"
             ),
-            "version": PLAYER_FORECAST_VERSION,
+            "version": MODEL_VERSIONS["player_season"],
             "data_cutoff": player_season.get("holdout_season"),
             "metrics": player_season.get("metrics", {}),
             "awards_status": player_season.get("awards_validation"),
@@ -131,14 +132,14 @@ def get_model_registry() -> dict[str, dict[str, Any]]:
         "lineup": {
             "kind": "observed/proxy blend",
             "status": "heuristic blend; win curve fitted, no lineup holdout",
-            "version": "lineup-blend-v1",
+            "version": MODEL_VERSIONS["lineup"],
             "data_cutoff": trained.get("holdout_season"),
             "metrics": {"win_curve_slope": trained.get("win_curve_slope")},
         },
         "score_simulator": {
             "kind": "mechanistic Monte Carlo",
             "status": "distribution diagnostic; not the calibrated headline probability",
-            "version": "matchup-simulator-v1",
+            "version": MODEL_VERSIONS["score_simulator"],
             "data_cutoff": trained.get("holdout_season"),
             "metrics": {},
         },
@@ -149,7 +150,7 @@ def get_model_registry() -> dict[str, dict[str, Any]]:
                 if forecast_metrics
                 else "heuristic; backtest artifact missing"
             ),
-            "version": "season-forecast-v2-roster",
+            "version": MODEL_VERSIONS["season_forecast"],
             "data_cutoff": forecast.get("data_cutoffs"),
             "metrics": forecast_metrics,
             "roster_overlay": {
@@ -163,4 +164,20 @@ def get_model_registry() -> dict[str, dict[str, Any]]:
                 record and record.get("mae", float("inf")) < record.get("baseline_mae", 0)
             ),
         },
+    }
+
+
+def get_manifest_report() -> dict[str, Any]:
+    """The tracked manifest plus a live check of the artifacts serving loads.
+
+    Read per request: it is small, and a retrain or redeploy must show up
+    without restarting the server.
+    """
+    manifest = load_manifest()
+    verification = verify_artifacts(manifest)
+    return {
+        "status": "available" if manifest is not None else "missing",
+        "path": str(MANIFEST_PATH),
+        "verification": verification,
+        "manifest": manifest,
     }

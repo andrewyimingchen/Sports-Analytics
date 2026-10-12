@@ -20,6 +20,8 @@ RUN uv sync --frozen --no-dev --no-install-project
 
 COPY src ./src
 RUN uv sync --frozen --no-dev
+# Tracked provenance record; /methodology/manifest verifies the mounted artifacts against it.
+COPY models ./models
 
 RUN addgroup --system possession-lab \
     && adduser --system --ingroup possession-lab --home /app possession-lab \

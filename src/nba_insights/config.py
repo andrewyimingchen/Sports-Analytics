@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 DATA_DIR = Path(os.environ.get("NBA_INSIGHTS_DATA_DIR", "data"))
 CACHE_DB = DATA_DIR / "cache.sqlite3"
 MODELS_DIR = DATA_DIR / "models"
+# Tracked (committed) record of how the artifacts in MODELS_DIR were produced.
+MANIFEST_PATH = Path(os.environ.get("NBA_INSIGHTS_MANIFEST", "models/manifest.json"))
 
 
 def past_seasons(n: int, today: date | None = None) -> list[str]:

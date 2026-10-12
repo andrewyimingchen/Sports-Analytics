@@ -5,7 +5,12 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from nba_insights.api import schemas
-from nba_insights.api.deps import get_model_metrics, get_model_registry, get_season_forecast_metrics
+from nba_insights.api.deps import (
+    get_manifest_report,
+    get_model_metrics,
+    get_model_registry,
+    get_season_forecast_metrics,
+)
 
 router = APIRouter(tags=["methodology"])
 
@@ -70,4 +75,19 @@ def methodology() -> dict:
 )
 def methodology_registry() -> dict:
     """Machine-readable model lineage, validation status, and data cutoffs."""
-    return {"models": get_model_registry(), "season_backtest": get_season_forecast_metrics()}
+    report = get_manifest_report()
+    return {
+        "models": get_model_registry(),
+        "season_backtest": get_season_forecast_metrics(),
+        "manifest": {
+            "status": report["status"],
+            "updated_at": (report["manifest"] or {}).get("updated_at"),
+            "verification": report["verification"]["status"],
+        },
+    }
+
+
+@router.get("/methodology/manifest", response_model=schemas.ManifestReport)
+def methodology_manifest() -> dict:
+    """Reproducibility record for the served artifacts, verified against their hashes."""
+    return get_manifest_report()

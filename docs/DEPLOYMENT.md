@@ -62,6 +62,12 @@ degraded states. Model artifacts are gitignored, so train them before mounting
 the data volume. Without them prediction cards show a "models not trained"
 notice and the rest of the product remains available.
 
+The image ships the tracked `models/manifest.json`. `/methodology/manifest`
+compares its recorded SHA-256 hashes with the mounted artifacts and reports
+`verified`, or `drift` with each artifact marked `match`, `mismatch`, or
+`missing`. After retraining, commit the updated manifest so the deployed
+record describes the artifacts you mount.
+
 ## Remote API safeguards
 
 Localhost callers can use all locally configured features without a POSSESSION

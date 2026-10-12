@@ -23,6 +23,7 @@ from nba_insights.config import MODELS_DIR
 from nba_insights.ingest import NBAClient
 from nba_insights.ml.elo import current_elo
 from nba_insights.ml.features import team_form_snapshot
+from nba_insights.ml.manifest import MODEL_VERSIONS, record_run, source_snapshots
 
 SEASON_FORECAST_METRICS_PATH = MODELS_DIR / "season_forecast_metrics.json"
 DEFAULT_SEASONS = ["2024-25", "2025-26"]
@@ -112,7 +113,7 @@ def run_backtest(
         outcomes[season] = {"champion": champion, "nba_cup_champion": cup_champion}
     frame = pd.concat(rows, ignore_index=True)
     return {
-        "version": "season-forecast-v2-roster",
+        "version": MODEL_VERSIONS["season_forecast"],
         "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
         "forecast_timing": "previous regular season complete; no target-season games",
         "n_sims_per_season": n_sims,
@@ -143,9 +144,25 @@ def main() -> None:
     parser.add_argument("--n-sims", type=int, default=5_000)
     parser.add_argument("--output", type=Path, default=SEASON_FORECAST_METRICS_PATH)
     args = parser.parse_args()
-    artifact = run_backtest(NBAClient(), args.seasons, n_sims=args.n_sims)
+    client = NBAClient()
+    artifact = run_backtest(client, args.seasons, n_sims=args.n_sims)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(artifact, indent=2) + "\n")
+    if args.output.resolve() == SEASON_FORECAST_METRICS_PATH.resolve():
+        record_run(
+            "season_backtest",
+            configuration={"seasons": args.seasons, "n_sims_per_season": args.n_sims},
+            data={
+                "seasons": args.seasons,
+                "data_cutoffs": artifact["data_cutoffs"],
+                "forecast_timing": artifact["forecast_timing"],
+                "outcomes": artifact["outcomes"],
+            },
+            models={"season_forecast": artifact["version"]},
+            metrics=artifact["metrics"],
+            sources=source_snapshots(client.cache),
+            recorded_at=artifact["generated_at"],
+        )
     print(json.dumps(artifact, indent=2))
 
 

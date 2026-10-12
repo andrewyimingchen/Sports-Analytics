@@ -67,6 +67,9 @@ class Cache:
         # missing the same key don't all hit the network
         self._key_locks: dict[str, threading.Lock] = {}
         self._locks_guard = threading.Lock()
+        # keys served through get_or_fetch, so a training run can record
+        # exactly which source snapshots it read (see ml/manifest.py)
+        self._accessed: set[str] = set()
         with self._connect() as conn:
             conn.execute(_SCHEMA)
 
@@ -110,6 +113,10 @@ class Cache:
             "rows": int(len(frame)),
         }
 
+    def accessed_keys(self) -> list[str]:
+        """Keys requested through :meth:`get_or_fetch` by this instance, sorted."""
+        return sorted(self._accessed)
+
     def put(self, key: str, df: pd.DataFrame) -> None:
         self._write(key, self._now(), df)
 
@@ -136,6 +143,7 @@ class Cache:
         glitch can't pin an empty frame for a whole TTL while a genuinely
         empty response doesn't refetch on every call.
         """
+        self._accessed.add(key)
         cached = self._get_valid(key, ttl, fetched_after)
         if cached is not None:
             return cached

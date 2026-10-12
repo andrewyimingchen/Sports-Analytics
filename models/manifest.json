@@ -1,0 +1,248 @@
+{
+  "runs": {
+    "player_backtest": {
+      "artifacts": {
+        "player_season_metrics.json": {
+          "bytes": 599,
+          "sha256": "86e131e852af0e863b16c1dc7be813c093c301aec70746d7c8126465ea663add"
+        }
+      },
+      "code": {
+        "git_commit": null,
+        "git_dirty": null,
+        "package_version": null
+      },
+      "command": "backfill python -m nba_insights.ml.player_backtest",
+      "configuration": {},
+      "data": {
+        "holdout_season": "2025-26",
+        "population": "same-team returners with 20+ games and 8+ minutes in source",
+        "source_season": "2024-25"
+      },
+      "feature_schema": null,
+      "metrics": {
+        "ast_mae": 0.711,
+        "blk_mae": 0.169,
+        "fg3m_mae": 0.36,
+        "players": 241,
+        "pts_interval_coverage": 0.8257,
+        "pts_mae": 2.68,
+        "reb_mae": 0.903,
+        "stl_mae": 0.226
+      },
+      "models": {
+        "player_season": "player-season-v1"
+      },
+      "recorded_at": "2026-07-22T15:21:25+00:00",
+      "sources": {
+        "reason": "artifact produced before manifest tracking; rerun the command to record sources",
+        "status": "not_recorded"
+      }
+    },
+    "season_backtest": {
+      "artifacts": {
+        "season_forecast_metrics.json": {
+          "bytes": 2333,
+          "sha256": "2cf3c66f92033d93743a06e497cd07e993eb3d9125bf939d564b5ef0849f4e4c"
+        }
+      },
+      "code": {
+        "git_commit": null,
+        "git_dirty": null,
+        "package_version": null
+      },
+      "command": "backfill python -m nba_insights.ml.backtest",
+      "configuration": {
+        "n_sims_per_season": 5000
+      },
+      "data": {
+        "data_cutoffs": {
+          "2024-25": "2024-04-14",
+          "2025-26": "2025-04-13"
+        },
+        "forecast_timing": "previous regular season complete; no target-season games",
+        "seasons": [
+          "2024-25",
+          "2025-26"
+        ]
+      },
+      "feature_schema": null,
+      "metrics": {
+        "championship": {
+          "baseline_brier": 0.03222,
+          "brier": 0.03364
+        },
+        "nba_cup": {
+          "baseline_brier": 0.03222,
+          "brier": 0.03228
+        },
+        "playoffs": {
+          "baseline_brier": 0.24889,
+          "brier": 0.24559,
+          "calibration": [
+            {
+              "count": 17,
+              "lower": -0.001,
+              "mean_probability": 0.0357,
+              "observed_rate": 0.3529,
+              "upper": 0.2
+            },
+            {
+              "count": 6,
+              "lower": 0.2,
+              "mean_probability": 0.3002,
+              "observed_rate": 0.3333,
+              "upper": 0.4
+            },
+            {
+              "count": 6,
+              "lower": 0.4,
+              "mean_probability": 0.5454,
+              "observed_rate": 0.3333,
+              "upper": 0.6
+            },
+            {
+              "count": 10,
+              "lower": 0.6,
+              "mean_probability": 0.7426,
+              "observed_rate": 0.6,
+              "upper": 0.8
+            },
+            {
+              "count": 21,
+              "lower": 0.8,
+              "mean_probability": 0.8998,
+              "observed_rate": 0.7619,
+              "upper": 1.0
+            }
+          ]
+        },
+        "record": {
+          "baseline_mae": 11.1,
+          "mae": 8.931,
+          "rmse": 11.552
+        },
+        "season_count": 2,
+        "seasons": [
+          "2024-25",
+          "2025-26"
+        ],
+        "team_seasons": 60
+      },
+      "models": {
+        "season_forecast": "season-forecast-v2-roster"
+      },
+      "recorded_at": "2026-07-22T15:14:03+00:00",
+      "sources": {
+        "reason": "artifact produced before manifest tracking; rerun the command to record sources",
+        "status": "not_recorded"
+      }
+    },
+    "train": {
+      "artifacts": {
+        "metrics.json": {
+          "bytes": 587,
+          "sha256": "1b702f403fa2fa3f3d904f7105db2079e197004c8477112f36a4129e2b6b01e6"
+        },
+        "outcome.joblib": {
+          "bytes": 2321,
+          "sha256": "30596bc603e9693017dfef423ad31f7c68f55cbeb3cbc081e36b7dff5fcaeb6b"
+        },
+        "points.joblib": {
+          "bytes": 2548,
+          "sha256": "273575f9461b71a9f3a0d5199e4eda62af7f6e634767f6438039b1335767307b"
+        },
+        "win_curve.joblib": {
+          "bytes": 32,
+          "sha256": "9aa1d6684e1d9e636c6ac3acb2a9912416b65778f482937caed824e5b200780a"
+        }
+      },
+      "code": {
+        "git_commit": null,
+        "git_dirty": null,
+        "package_version": null
+      },
+      "command": "backfill python -m nba_insights.ml.train",
+      "configuration": {
+        "outcome_C": 0.25,
+        "train_seasons": 3
+      },
+      "data": {
+        "dev_season": "2024-25",
+        "holdout_season": "2025-26",
+        "train_seasons": [
+          "2022-23",
+          "2023-24",
+          "2024-25"
+        ]
+      },
+      "feature_schema": {
+        "code_fingerprint": "4e7a7c6e23097bf0",
+        "matches_code": true,
+        "outcome": [
+          "form_win_pct_diff",
+          "form_pts_diff",
+          "form_net_diff",
+          "form_efg_diff",
+          "form_tov_pct_diff",
+          "form_oreb_pct_diff",
+          "form_ft_rate_diff",
+          "form_pace_diff",
+          "form_ortg_diff",
+          "form_drtg_diff",
+          "rest_diff",
+          "b2b_diff",
+          "three_in_four_diff",
+          "missing_min_diff",
+          "elo_diff"
+        ],
+        "points_minutes": [
+          "min_r5",
+          "min_ewm",
+          "rest_days",
+          "home",
+          "own_missing_min"
+        ],
+        "points_rate": [
+          "rate_ewm",
+          "fga_r5",
+          "home",
+          "opp_form_drtg",
+          "opp_form_pace",
+          "opp_form_net",
+          "own_missing_min"
+        ],
+        "source": "read from saved artifacts"
+      },
+      "metrics": {
+        "outcome": {
+          "C": 0.25,
+          "accuracy": 0.7020408163265306,
+          "baseline_accuracy": 0.5542857142857143,
+          "baseline_log_loss": 0.6872416687999924,
+          "log_loss": 0.588704545744708,
+          "n_games": 1225
+        },
+        "points": {
+          "baseline_mae": 4.7162186379928315,
+          "interval_coverage": 0.803763440860215,
+          "mae": 4.580501817931055,
+          "n_games": 21204
+        },
+        "win_curve_slope": 0.02798369248034133
+      },
+      "models": {
+        "lineup": "lineup-blend-v1",
+        "outcome": "logistic-outcome-v1",
+        "player_points": "player-points-v1"
+      },
+      "recorded_at": "2026-07-16T13:53:17+00:00",
+      "sources": {
+        "reason": "artifact produced before manifest tracking; rerun the command to record sources",
+        "status": "not_recorded"
+      }
+    }
+  },
+  "schema_version": "model-manifest-v1",
+  "updated_at": "2026-07-22T15:21:25+00:00"
+}
