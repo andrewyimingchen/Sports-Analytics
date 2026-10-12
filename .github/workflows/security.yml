@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
       - name: Export locked dependencies
         run: uv export --frozen --all-extras --all-groups --no-hashes --no-emit-project > requirements-audit.txt
       - name: Audit Python dependencies
