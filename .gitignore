@@ -16,6 +16,11 @@ dist/
 # Tooling
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
 .ipynb_checkpoints/
 .vscode/
 .idea/
