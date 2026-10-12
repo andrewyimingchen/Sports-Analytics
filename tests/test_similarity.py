@@ -7,8 +7,7 @@ import pytest
 
 from nba_insights.analysis import similar_players
 
-_COLS = ["PTS", "REB", "AST", "STL", "BLK", "TOV", "FG3A", "FTA",
-         "FG_PCT", "FG3_PCT", "FT_PCT"]
+_COLS = ["PTS", "REB", "AST", "STL", "BLK", "TOV", "FG3A", "FTA", "FG_PCT", "FG3_PCT", "FT_PCT"]
 
 
 def _player(name, team, min_, **stats):
@@ -21,12 +20,35 @@ def _league() -> pd.DataFrame:
     # a guard, a near-clone of the guard, a big, and a bench scrub
     return pd.DataFrame(
         [
-            _player("Star Guard", "AAA", 34, PTS=28, AST=8, FG3A=9, FTA=7,
-                    FG_PCT=0.48, FG3_PCT=0.40, FT_PCT=0.90, REB=4),
-            _player("Clone Guard", "BBB", 33, PTS=27, AST=7.5, FG3A=8.5, FTA=6.5,
-                    FG_PCT=0.47, FG3_PCT=0.39, FT_PCT=0.88, REB=4.2),
-            _player("Big Man", "CCC", 30, PTS=14, REB=12, BLK=2.2, AST=1.5,
-                    FG_PCT=0.62, FG3A=0.2, FTA=4),
+            _player(
+                "Star Guard",
+                "AAA",
+                34,
+                PTS=28,
+                AST=8,
+                FG3A=9,
+                FTA=7,
+                FG_PCT=0.48,
+                FG3_PCT=0.40,
+                FT_PCT=0.90,
+                REB=4,
+            ),
+            _player(
+                "Clone Guard",
+                "BBB",
+                33,
+                PTS=27,
+                AST=7.5,
+                FG3A=8.5,
+                FTA=6.5,
+                FG_PCT=0.47,
+                FG3_PCT=0.39,
+                FT_PCT=0.88,
+                REB=4.2,
+            ),
+            _player(
+                "Big Man", "CCC", 30, PTS=14, REB=12, BLK=2.2, AST=1.5, FG_PCT=0.62, FG3A=0.2, FTA=4
+            ),
             _player("Bench Scrub", "DDD", 6, PTS=2, AST=0.5),
         ]
     )
@@ -48,7 +70,12 @@ def test_target_excluded_from_own_comps_and_columns():
     comps = similar_players(_league(), "Star Guard", n=5, min_minutes=20)
     assert "Star Guard" not in set(comps["PLAYER_NAME"])
     assert list(comps.columns) == [
-        "PLAYER_NAME", "TEAM_ABBREVIATION", "PTS", "REB", "AST", "SIMILARITY"
+        "PLAYER_NAME",
+        "TEAM_ABBREVIATION",
+        "PTS",
+        "REB",
+        "AST",
+        "SIMILARITY",
     ]
 
 

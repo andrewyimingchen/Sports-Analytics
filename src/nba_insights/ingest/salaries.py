@@ -31,10 +31,8 @@ _PLAYER_SLUG_RE = re.compile(r"[a-z]/[a-z0-9]+\.html")
 
 
 def _money(col: pd.Series) -> pd.Series:
-    """"$62,587,158" → 62587158.0 (NaN for blanks)."""
-    return pd.to_numeric(
-        col.astype("string").str.replace(r"[$,]", "", regex=True), errors="coerce"
-    )
+    """ "$62,587,158" → 62587158.0 (NaN for blanks)."""
+    return pd.to_numeric(col.astype("string").str.replace(r"[$,]", "", regex=True), errors="coerce")
 
 
 def parse_contracts(html: str) -> pd.DataFrame:
@@ -66,9 +64,7 @@ def parse_contracts(html: str) -> pd.DataFrame:
         for cell in root.xpath('//tbody/tr/*[@data-stat="player"]'):
             hrefs = cell.xpath('.//a[starts-with(@href, "/players/")]/@href')
             if hrefs:
-                slugs[" ".join(cell.text_content().split())] = hrefs[0].removeprefix(
-                    "/players/"
-                )
+                slugs[" ".join(cell.text_content().split())] = hrefs[0].removeprefix("/players/")
     except (ValueError, TypeError):
         pass
 

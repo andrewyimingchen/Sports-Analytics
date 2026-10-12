@@ -128,9 +128,7 @@ def test_tracking_and_hustle_use_scoped_cache_keys(tmp_path, monkeypatch):
 
     pd.testing.assert_frame_equal(client.tracking_stats("Drives", "2025-26"), expected)
     pd.testing.assert_frame_equal(client.tracking_stats("Drives", "2025-26"), expected)
-    pd.testing.assert_frame_equal(
-        client.tracking_stats("Drives", "2025-26", "Team"), expected
-    )
+    pd.testing.assert_frame_equal(client.tracking_stats("Drives", "2025-26", "Team"), expected)
     pd.testing.assert_frame_equal(client.hustle_stats("2025-26"), expected)
     pd.testing.assert_frame_equal(client.hustle_stats("2025-26"), expected)
     pd.testing.assert_frame_equal(client.hustle_stats("2025-26", "Team"), expected)

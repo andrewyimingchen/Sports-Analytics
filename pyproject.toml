@@ -29,7 +29,9 @@ browser = [
 ]
 dev = [
     "httpx>=0.28.1",
+    "mypy>=2.4.0",
     "pytest>=8.0",
+    "pytest-cov>=7.1.0",
     "ruff>=0.6",
 ]
 
@@ -49,3 +51,24 @@ src = ["src", "tests", "app"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+# Agreed strictness (1xp.7): defaults plus checking unannotated bodies, over
+# the shipped package. pandas-stubs is deliberately not installed — it flags
+# pandas' dynamic API far more than it finds bugs here.
+python_version = "3.11"
+files = ["src/nba_insights"]
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+
+[tool.coverage.run]
+source = ["nba_insights"]
+
+[tool.coverage.report]
+# Pragmatic floor (1xp.7): measured 86% on 2026-10-06 without the data cache
+# or browser suite. Raise it as coverage grows; never lower it to pass CI.
+fail_under = 80
+skip_covered = true
+show_missing = true

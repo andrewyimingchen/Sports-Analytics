@@ -23,8 +23,13 @@ def scoreboard(schedule: pd.DataFrame) -> pd.DataFrame:
     Raises KeyError when a required column is missing.
     """
     need = [
-        "gameId", "gameDate", "gameStatus", "homeTeam_teamTricode", "homeTeam_score",
-        "awayTeam_teamTricode", "awayTeam_score",
+        "gameId",
+        "gameDate",
+        "gameStatus",
+        "homeTeam_teamTricode",
+        "homeTeam_score",
+        "awayTeam_teamTricode",
+        "awayTeam_score",
     ]
     missing = [c for c in need if c not in schedule.columns]
     if missing:
@@ -56,9 +61,7 @@ def scoreboard(schedule: pd.DataFrame) -> pd.DataFrame:
         last = df["pointsLeaders_0_lastName"]
         pts = pd.to_numeric(df["pointsLeaders_0_points"], errors="coerce")
         top = [
-            f"{f} {ln} · {int(p)}".strip()
-            if isinstance(ln, str) and ln and pd.notna(p)
-            else ""
+            f"{f} {ln} · {int(p)}".strip() if isinstance(ln, str) and ln and pd.notna(p) else ""
             for f, ln, p in zip(first, last, pts, strict=True)
         ]
         out.loc[final, "TOP_SCORER"] = pd.Series(top, index=df.index)[final]
@@ -88,10 +91,23 @@ def box_score_table(players: pd.DataFrame) -> pd.DataFrame:
     is rendered as makes/attempts so the compact table remains readable.
     """
     need = [
-        "teamTricode", "firstName", "familyName", "minutes", "fieldGoalsMade",
-        "fieldGoalsAttempted", "threePointersMade", "threePointersAttempted",
-        "freeThrowsMade", "freeThrowsAttempted", "reboundsTotal", "assists",
-        "steals", "blocks", "turnovers", "points", "plusMinusPoints",
+        "teamTricode",
+        "firstName",
+        "familyName",
+        "minutes",
+        "fieldGoalsMade",
+        "fieldGoalsAttempted",
+        "threePointersMade",
+        "threePointersAttempted",
+        "freeThrowsMade",
+        "freeThrowsAttempted",
+        "reboundsTotal",
+        "assists",
+        "steals",
+        "blocks",
+        "turnovers",
+        "points",
+        "plusMinusPoints",
     ]
     missing = [c for c in need if c not in players.columns]
     if missing:
@@ -141,9 +157,18 @@ def box_score_table(players: pd.DataFrame) -> pd.DataFrame:
         mask = df["teamTricode"] == team
         blocks.append(out[mask])
         total_cols = [
-            "points", "reboundsTotal", "assists", "steals", "blocks", "turnovers",
-            "fieldGoalsMade", "fieldGoalsAttempted", "threePointersMade",
-            "threePointersAttempted", "freeThrowsMade", "freeThrowsAttempted",
+            "points",
+            "reboundsTotal",
+            "assists",
+            "steals",
+            "blocks",
+            "turnovers",
+            "fieldGoalsMade",
+            "fieldGoalsAttempted",
+            "threePointersMade",
+            "threePointersAttempted",
+            "freeThrowsMade",
+            "freeThrowsAttempted",
         ]
         totals = {
             column: int(pd.to_numeric(df.loc[mask, column], errors="coerce").sum())
@@ -164,9 +189,7 @@ def box_score_table(players: pd.DataFrame) -> pd.DataFrame:
                         "BLK": totals["blocks"],
                         "TO": totals["turnovers"],
                         "FG": f"{totals['fieldGoalsMade']}/{totals['fieldGoalsAttempted']}",
-                        "3P": (
-                            f"{totals['threePointersMade']}/{totals['threePointersAttempted']}"
-                        ),
+                        "3P": (f"{totals['threePointersMade']}/{totals['threePointersAttempted']}"),
                         "FT": f"{totals['freeThrowsMade']}/{totals['freeThrowsAttempted']}",
                         "+/-": pd.NA,
                         "STATUS": "",
@@ -186,8 +209,21 @@ def game_finder_box_score_table(players: pd.DataFrame) -> pd.DataFrame:
     :func:`box_score_table`.
     """
     need = [
-        "TEAM_ABBREVIATION", "PLAYER_NAME", "MIN", "PTS", "REB", "AST",
-        "STL", "BLK", "TOV", "FGM", "FGA", "FG3M", "FG3A", "FTM", "FTA",
+        "TEAM_ABBREVIATION",
+        "PLAYER_NAME",
+        "MIN",
+        "PTS",
+        "REB",
+        "AST",
+        "STL",
+        "BLK",
+        "TOV",
+        "FGM",
+        "FGA",
+        "FG3M",
+        "FG3A",
+        "FTM",
+        "FTA",
         "PLUS_MINUS",
     ]
     missing = [column for column in need if column not in players.columns]
@@ -226,8 +262,18 @@ def game_finder_box_score_table(players: pd.DataFrame) -> pd.DataFrame:
         blocks.append(out[mask])
         team_rows = df.loc[mask]
         total_columns = [
-            "PTS", "REB", "AST", "STL", "BLK", "TOV", "FGM", "FGA",
-            "FG3M", "FG3A", "FTM", "FTA",
+            "PTS",
+            "REB",
+            "AST",
+            "STL",
+            "BLK",
+            "TOV",
+            "FGM",
+            "FGA",
+            "FG3M",
+            "FG3A",
+            "FTM",
+            "FTA",
         ]
         totals = {
             column: int(pd.to_numeric(team_rows[column], errors="coerce").sum())
@@ -247,9 +293,9 @@ def game_finder_box_score_table(players: pd.DataFrame) -> pd.DataFrame:
                         "STL": totals["STL"],
                         "BLK": totals["BLK"],
                         "TO": totals["TOV"],
-                        "FG": f'{totals["FGM"]}/{totals["FGA"]}',
-                        "3P": f'{totals["FG3M"]}/{totals["FG3A"]}',
-                        "FT": f'{totals["FTM"]}/{totals["FTA"]}',
+                        "FG": f"{totals['FGM']}/{totals['FGA']}",
+                        "3P": f"{totals['FG3M']}/{totals['FG3A']}",
+                        "FT": f"{totals['FTM']}/{totals['FTA']}",
                         "+/-": pd.NA,
                         "STATUS": "",
                     }
@@ -265,8 +311,19 @@ def game_log_table(game_log: pd.DataFrame) -> pd.DataFrame:
     Columns: DATE, MATCHUP, WL, MIN, PTS, REB, AST, FG ("7/14"), 3PM, +/-.
     Raises KeyError when a required column is missing.
     """
-    need = ["GAME_DATE", "MATCHUP", "WL", "MIN", "PTS", "REB", "AST",
-            "FGM", "FGA", "FG3M", "PLUS_MINUS"]
+    need = [
+        "GAME_DATE",
+        "MATCHUP",
+        "WL",
+        "MIN",
+        "PTS",
+        "REB",
+        "AST",
+        "FGM",
+        "FGA",
+        "FG3M",
+        "PLUS_MINUS",
+    ]
     missing = [c for c in need if c not in game_log.columns]
     if missing:
         raise KeyError(f"game log missing columns: {missing}")

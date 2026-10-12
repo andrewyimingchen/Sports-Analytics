@@ -26,6 +26,7 @@ def test_season_forecast_returns_conference_and_title_probabilities():
     assert result["CUP_PROB"].sum() == pytest.approx(1)
     assert result["PLAYOFF_PROB"].sum() == pytest.approx(16)
     assert result.loc[result["TEAM"] == "E00", "PROJECTED_WINS"].iloc[0] > 50
-    assert result.loc[result["TEAM"] == "E00", "CHAMP_PROB"].iloc[0] > result.loc[
-        result["TEAM"] == "W14", "CHAMP_PROB"
-    ].iloc[0]
+    assert (
+        result.loc[result["TEAM"] == "E00", "CHAMP_PROB"].iloc[0]
+        > result.loc[result["TEAM"] == "W14", "CHAMP_PROB"].iloc[0]
+    )

@@ -18,9 +18,7 @@ def test_tracking_table_filters_defines_and_audits_columns():
         }
     )
 
-    table, metadata = tracking_table(
-        frame, "drives", min_games=10, team="AAA", query="alp"
-    )
+    table, metadata = tracking_table(frame, "drives", min_games=10, team="AAA", query="alp")
 
     assert table["PLAYER_NAME"].tolist() == ["Alpha"]
     assert metadata["definitions"]["DRIVES"] == "Drives per game"
@@ -42,9 +40,7 @@ def test_tracking_table_sorts_defense_lower_first():
         }
     )
 
-    table, metadata = tracking_table(
-        frame, "defense", scope="Team", sort="DEF_RIM_FG_PCT"
-    )
+    table, metadata = tracking_table(frame, "defense", scope="Team", sort="DEF_RIM_FG_PCT")
 
     assert table["TEAM_ABBREVIATION"].tolist() == ["ONE", "TWO"]
     assert metadata["scope"] == "team"

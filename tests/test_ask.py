@@ -24,7 +24,10 @@ def _league() -> pd.DataFrame:
 def test_filter_sort_and_topn():
     # assist leaders among 30+ minute players
     out = query_players(
-        _league(), filters={"MIN": 30}, sort_by="AST", top_n=2,
+        _league(),
+        filters={"MIN": 30},
+        sort_by="AST",
+        top_n=2,
         columns=["PLAYER_NAME", "AST"],
     )
     assert [r["PLAYER_NAME"] for r in out] == ["Alice Adams", "Bob Brown"]  # Cara <30 min
@@ -35,7 +38,8 @@ def test_multiple_filters_and_team_and_name():
     lg = _league()
     # BOS players only
     assert {r["PLAYER_NAME"] for r in query_players(lg, teams=["BOS"], top_n=10)} == {
-        "Cara Cole", "Bench Guy"
+        "Cara Cole",
+        "Bench Guy",
     }
     # name substring
     assert [r["PLAYER_NAME"] for r in query_players(lg, name_contains="brown")] == ["Bob Brown"]

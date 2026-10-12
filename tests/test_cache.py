@@ -164,9 +164,7 @@ def test_legacy_json_entry_migrated_in_place(tmp_path, df):
     pd.testing.assert_frame_equal(out, df)
     # migrated to the current format keeping the original fetch time
     with sqlite3.connect(tmp_path / "cache.sqlite3") as conn:
-        row = conn.execute(
-            "SELECT fetched_at FROM cache_entries WHERE key = 'v3:k'"
-        ).fetchone()
+        row = conn.execute("SELECT fetched_at FROM cache_entries WHERE key = 'v3:k'").fetchone()
     assert row is not None and row[0] == datetime(2025, 6, 1, tzinfo=UTC).isoformat()
 
 

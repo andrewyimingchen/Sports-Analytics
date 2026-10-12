@@ -95,11 +95,5 @@ def current_elo(team_games: pd.DataFrame) -> pd.Series:
     each team's rating entering its next game.
     """
     _, ratings = _run_elo(team_games)
-    abbrev = (
-        team_games.sort_values("GAME_DATE")
-        .groupby("TEAM_ID")["TEAM_ABBREVIATION"]
-        .last()
-    )
-    return pd.Series(
-        {abbrev[t]: r for t, r in ratings.items() if t in abbrev.index}, name="elo"
-    )
+    abbrev = team_games.sort_values("GAME_DATE").groupby("TEAM_ID")["TEAM_ABBREVIATION"].last()
+    return pd.Series({abbrev[t]: r for t, r in ratings.items() if t in abbrev.index}, name="elo")

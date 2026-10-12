@@ -68,7 +68,12 @@ def build_season(
     client.cache.put(_KEY.format(season=season), table)
     logger.info(
         "%s: %d lineups from %d games (%.0f%% coverage, %d missing, %d broken)",
-        season, len(table), len(per_game), coverage * 100, missing, broken,
+        season,
+        len(table),
+        len(per_game),
+        coverage * 100,
+        missing,
+        broken,
     )
     return table
 
@@ -85,7 +90,9 @@ def main() -> None:
     parser.add_argument("--season", default=current_season(), help="season, e.g. 2025-26")
     parser.add_argument("--limit", type=int, default=None, help="only the first N games (debug)")
     parser.add_argument(
-        "--min-coverage", type=float, default=0.9,
+        "--min-coverage",
+        type=float,
+        default=0.9,
         help="fraction of games that must have cached rotations (default 0.9)",
     )
     args = parser.parse_args()

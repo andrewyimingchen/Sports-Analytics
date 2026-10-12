@@ -135,14 +135,18 @@ class FakeNBAClient:
                 "LOC_Y": [5, 10, 40, 38],
                 "SHOT_MADE_FLAG": [1, 0, 1, 0],
                 "SHOT_ZONE_BASIC": [
-                    "Restricted Area", "Restricted Area", "Right Corner 3", "Left Corner 3"
+                    "Restricted Area",
+                    "Restricted Area",
+                    "Right Corner 3",
+                    "Left Corner 3",
                 ],
-                "SHOT_ZONE_AREA": [
-                    "Center(C)", "Center(C)", "Right Side(R)", "Left Side(L)"
-                ],
+                "SHOT_ZONE_AREA": ["Center(C)", "Center(C)", "Right Side(R)", "Left Side(L)"],
                 "SHOT_ZONE_RANGE": ["Less Than 8 ft.", "Less Than 8 ft.", "24+ ft.", "24+ ft."],
                 "SHOT_TYPE": [
-                    "2PT Field Goal", "2PT Field Goal", "3PT Field Goal", "3PT Field Goal"
+                    "2PT Field Goal",
+                    "2PT Field Goal",
+                    "3PT Field Goal",
+                    "3PT Field Goal",
                 ],
             }
         )
@@ -556,9 +560,9 @@ def test_team_comparison_and_model_drivers(api_with_model):
     assert body["export_filename"].endswith(".json")
     assert len(body["limitations"]) >= 3
 
-    assert api_with_model.get(
-        "/teams/compare", params={"away": "T1", "home": "T1"}
-    ).status_code == 422
+    assert (
+        api_with_model.get("/teams/compare", params={"away": "T1", "home": "T1"}).status_code == 422
+    )
 
 
 def test_player_recent_games(api):
@@ -688,9 +692,7 @@ def test_simulation_and_player_points(api_with_models):
     assert body["margin_histogram"] and body["total_histogram"]
     assert 0 < body["summary"]["home_win_prob"] < 1
 
-    points = api_with_models.get(
-        "/predict/player/1", params={"opponent": "T4", "home": True}
-    )
+    points = api_with_models.get("/predict/player/1", params={"opponent": "T4", "home": True})
     assert points.status_code == 200
     assert points.json()["projected_points"] == 26.4
     assert points.json()["interval_80"] == [19.0, 35.0]
@@ -899,9 +901,7 @@ def test_headshot_proxy(api, monkeypatch):
     import importlib
 
     api_module = importlib.import_module("nba_insights.api.app")
-    monkeypatch.setattr(
-        api_module, "_fetch_headshot", lambda pid: b"fakepng" if pid == 1 else None
-    )
+    monkeypatch.setattr(api_module, "_fetch_headshot", lambda pid: b"fakepng" if pid == 1 else None)
     ok = api.get("/players/1/headshot")
     assert ok.status_code == 200
     assert ok.headers["content-type"] == "image/png"
@@ -932,10 +932,7 @@ def test_service_worker_precaches_every_module(api):
 def test_mobile_app_shell_served(api):
     r = api.get("/app/")
     assert r.status_code == 200
-    asset_responses = {
-        name: api.get(f"/app/{name}")
-        for name in (*PWA_STYLES, *PWA_MODULES)
-    }
+    asset_responses = {name: api.get(f"/app/{name}") for name in (*PWA_STYLES, *PWA_MODULES)}
     assert all(response.status_code == 200 for response in asset_responses.values())
     source = "\n".join([r.text, *(response.text for response in asset_responses.values())])
     assert "POSSESSION LAB" in source
@@ -945,12 +942,17 @@ def test_mobile_app_shell_served(api):
     linked = [line for line in r.text.splitlines() if 'rel="stylesheet"' in line]
     # cascade order matters: breakpoints override page rules, viz comes last
     assert [line.split('href="')[1].split('"')[0] for line in linked] == [
-        "styles/base.css", "styles/pages.css", "styles/responsive.css", "styles/viz.css"
+        "styles/base.css",
+        "styles/pages.css",
+        "styles/responsive.css",
+        "styles/viz.css",
     ]
     assert '<script type="module" src="app.js"></script>' in r.text
-    assert r.text.index('src="vendor/d3.min.js"') < r.text.index(
-        'src="vendor/plot.umd.min.js"'
-    ) < r.text.index('src="app.js"')
+    assert (
+        r.text.index('src="vendor/d3.min.js"')
+        < r.text.index('src="vendor/plot.umd.min.js"')
+        < r.text.index('src="app.js"')
+    )
     assert 'from "./core.js"' in source
     assert 'from "../visualizations.js"' in source
     # unknown hashes falling back to League pulse is a browser behaviour test:
@@ -962,9 +964,7 @@ def test_mobile_app_shell_served(api):
     assert 'data-page="more"' in desktop_nav
     assert 'id="page-more"' in source
     assert 'id="page-outlook"' in source
-    matchup = r.text.split('id="page-matchup"', 1)[1].split(
-        'id="page-more"', 1
-    )[0]
+    matchup = r.text.split('id="page-matchup"', 1)[1].split('id="page-more"', 1)[0]
     assert 'id="season-forecast"' not in matchup
     assert 'id="scenario-lab"' not in matchup
     assert 'id="pulse-context"' in source
@@ -979,7 +979,7 @@ def test_mobile_app_shell_served(api):
     assert "fonts.googleapis.com" not in source
     assert 'window.addEventListener("offline"' in source
     assert 'aria-current", "page"' in source
-    assert 'heading.focus({preventScroll:true})' in source
+    assert "heading.focus({preventScroll:true})" in source
     assert 'role="table"' in source
     assert "Shot intelligence" in source
     assert "Ask the league" in source
@@ -1106,9 +1106,7 @@ def test_game_poster_endpoint(api_with_model):
     assert html.status_code == 200
     assert "T1" in html.text and "T4" in html.text
 
-    png = api_with_model.get(
-        "/posters/game", params={"home": "T1", "away": "T4", "format": "png"}
-    )
+    png = api_with_model.get("/posters/game", params={"home": "T1", "away": "T4", "format": "png"})
     assert png.status_code == 200
     assert png.content[:8] == b"\x89PNG\r\n\x1a\n"
 

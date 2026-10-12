@@ -73,9 +73,7 @@ def build_roster_forecast_inputs(
     generated_on: str | None = None,
 ) -> RosterForecastInputs:
     """Build target roster/minutes and team strength deltas from cached sources."""
-    league_required = {
-        "PLAYER_NAME", "TEAM_ABBREVIATION", "MIN", "GP", "AGE", "PLUS_MINUS"
-    }
+    league_required = {"PLAYER_NAME", "TEAM_ABBREVIATION", "MIN", "GP", "AGE", "PLUS_MINUS"}
     contract_required = {"PLAYER_NAME", "TEAM_ABBREVIATION", target_season}
     if missing := league_required - set(league):
         raise KeyError(f"league roster input missing columns: {sorted(missing)}")
@@ -86,20 +84,22 @@ def build_roster_forecast_inputs(
     current["_KEY"] = current["PLAYER_NAME"].map(normalize_name)
     current = current.sort_values("GP", ascending=False).drop_duplicates("_KEY")
     current["CURRENT_IMPACT"] = _player_impact(current)
-    current["CURRENT_MIN_WEIGHT"] = (
-        pd.to_numeric(current["MIN"], errors="coerce").fillna(0)
-        * pd.to_numeric(current["GP"], errors="coerce").fillna(0)
-    )
+    current["CURRENT_MIN_WEIGHT"] = pd.to_numeric(current["MIN"], errors="coerce").fillna(
+        0
+    ) * pd.to_numeric(current["GP"], errors="coerce").fillna(0)
 
     target = contracts.copy()
     target["SALARY"] = pd.to_numeric(target[target_season], errors="coerce")
-    target = target[
-        target["SALARY"].gt(0) & target["TEAM_ABBREVIATION"].notna()
-    ].copy()
+    target = target[target["SALARY"].gt(0) & target["TEAM_ABBREVIATION"].notna()].copy()
     target["_KEY"] = target["PLAYER_NAME"].map(normalize_name)
     target = target.sort_values("SALARY", ascending=False).drop_duplicates("_KEY")
     lookup_columns = [
-        "_KEY", "PLAYER_NAME", "TEAM_ABBREVIATION", "AGE", "GP", "MIN",
+        "_KEY",
+        "PLAYER_NAME",
+        "TEAM_ABBREVIATION",
+        "AGE",
+        "GP",
+        "MIN",
         "CURRENT_IMPACT",
     ]
     target = target.merge(
@@ -116,28 +116,15 @@ def build_roster_forecast_inputs(
         }
     )
     target["HAS_HISTORY"] = target["NBA_PLAYER_NAME"].notna()
-    availability = np.sqrt(
-        pd.to_numeric(target["GP"], errors="coerce").fillna(0).clip(0, 82) / 82
-    )
+    availability = np.sqrt(pd.to_numeric(target["GP"], errors="coerce").fillna(0).clip(0, 82) / 82)
     returning_minutes = (
-        pd.to_numeric(target["MIN"], errors="coerce").fillna(0)
-        * (0.78 + 0.22 * availability)
+        pd.to_numeric(target["MIN"], errors="coerce").fillna(0) * (0.78 + 0.22 * availability)
     ).clip(6, 38)
-    salary_role = (
-        10 + 4 * np.log(target["SALARY"].clip(lower=1_000_000) / 1_000_000)
-    ).clip(8, 30)
-    target["PROJECTED_MIN"] = np.where(
-        target["HAS_HISTORY"], returning_minutes, salary_role
-    )
-    target["AGE_ADJUSTMENT"] = np.where(
-        target["HAS_HISTORY"], _age_adjustment(target["AGE"]), 0.0
-    )
-    target["CURRENT_IMPACT"] = pd.to_numeric(
-        target["CURRENT_IMPACT"], errors="coerce"
-    ).fillna(-1.5)
-    target["PROJECTED_IMPACT"] = (
-        target["CURRENT_IMPACT"] + target["AGE_ADJUSTMENT"]
-    ).clip(-8, 8)
+    salary_role = (10 + 4 * np.log(target["SALARY"].clip(lower=1_000_000) / 1_000_000)).clip(8, 30)
+    target["PROJECTED_MIN"] = np.where(target["HAS_HISTORY"], returning_minutes, salary_role)
+    target["AGE_ADJUSTMENT"] = np.where(target["HAS_HISTORY"], _age_adjustment(target["AGE"]), 0.0)
+    target["CURRENT_IMPACT"] = pd.to_numeric(target["CURRENT_IMPACT"], errors="coerce").fillna(-1.5)
+    target["PROJECTED_IMPACT"] = (target["CURRENT_IMPACT"] + target["AGE_ADJUSTMENT"]).clip(-8, 8)
     target["STATUS"] = np.select(
         [
             ~target["HAS_HISTORY"],
@@ -150,46 +137,48 @@ def build_roster_forecast_inputs(
 
     current_team = (
         current[current["TEAM_ABBREVIATION"].notna()]
-        .assign(
-            weighted=lambda frame: frame["CURRENT_IMPACT"]
-            * frame["CURRENT_MIN_WEIGHT"]
-        )
+        .assign(weighted=lambda frame: frame["CURRENT_IMPACT"] * frame["CURRENT_MIN_WEIGHT"])
         .groupby("TEAM_ABBREVIATION")
         .agg(weighted=("weighted", "sum"), weight=("CURRENT_MIN_WEIGHT", "sum"))
     )
-    current_team["CURRENT_IMPACT"] = current_team["weighted"] / current_team[
-        "weight"
-    ].replace(0, np.nan)
+    current_team["CURRENT_IMPACT"] = current_team["weighted"] / current_team["weight"].replace(
+        0, np.nan
+    )
 
     rows = []
     target_teams = target.set_index("_KEY")["TEAM"].to_dict()
     for team, roster in target.groupby("TEAM", sort=True):
-        roster_impact = float(
-            (roster["PROJECTED_IMPACT"] * roster["PROJECTED_MIN"]).sum() / 240
-        )
+        roster_impact = float((roster["PROJECTED_IMPACT"] * roster["PROJECTED_MIN"]).sum() / 240)
         baseline = float(current_team["CURRENT_IMPACT"].get(team, -1.5))
         delta = float(np.clip(roster_impact - baseline, -6, 6))
         returning_share = float(
             roster.loc[roster["SOURCE_TEAM"].eq(team), "PROJECTED_MIN"].sum() / 240
         )
-        history_share = float(
-            roster.loc[roster["HAS_HISTORY"], "PROJECTED_MIN"].sum() / 240
+        history_share = float(roster.loc[roster["HAS_HISTORY"], "PROJECTED_MIN"].sum() / 240)
+        additions = (
+            roster[~roster["SOURCE_TEAM"].eq(team)]
+            .nlargest(4, "PROJECTED_MIN")["PLAYER_NAME"]
+            .astype(str)
+            .tolist()
         )
-        additions = roster[~roster["SOURCE_TEAM"].eq(team)].nlargest(
-            4, "PROJECTED_MIN"
-        )["PLAYER_NAME"].astype(str).tolist()
         lost_mask = current["_KEY"].map(target_teams).ne(team)
-        lost = current[current["TEAM_ABBREVIATION"].eq(team) & lost_mask].nlargest(
-            4, "CURRENT_MIN_WEIGHT"
-        )["PLAYER_NAME"].astype(str).tolist()
-        drivers = roster.assign(
-            driver=(roster["PROJECTED_IMPACT"] - baseline).abs()
-            * roster["PROJECTED_MIN"]
-        ).nlargest(4, "driver")["PLAYER_NAME"].astype(str).tolist()
+        lost = (
+            current[current["TEAM_ABBREVIATION"].eq(team) & lost_mask]
+            .nlargest(4, "CURRENT_MIN_WEIGHT")["PLAYER_NAME"]
+            .astype(str)
+            .tolist()
+        )
+        drivers = (
+            roster.assign(
+                driver=(roster["PROJECTED_IMPACT"] - baseline).abs() * roster["PROJECTED_MIN"]
+            )
+            .nlargest(4, "driver")["PLAYER_NAME"]
+            .astype(str)
+            .tolist()
+        )
         injury_uncertainty = float(
             (
-                (1 - pd.to_numeric(roster["GP"], errors="coerce").fillna(0) / 82)
-                .clip(0, 1)
+                (1 - pd.to_numeric(roster["GP"], errors="coerce").fillna(0) / 82).clip(0, 1)
                 * roster["PROJECTED_MIN"]
             ).sum()
             / 240
@@ -222,12 +211,20 @@ def build_roster_forecast_inputs(
         )
     teams = pd.DataFrame(rows).set_index("TEAM")
     player_columns = [
-        "TEAM", "PLAYER_NAME", "SOURCE_TEAM", "STATUS", "HAS_HISTORY", "AGE", "GP", "SALARY",
-        "PROJECTED_MIN", "CURRENT_IMPACT", "AGE_ADJUSTMENT", "PROJECTED_IMPACT",
+        "TEAM",
+        "PLAYER_NAME",
+        "SOURCE_TEAM",
+        "STATUS",
+        "HAS_HISTORY",
+        "AGE",
+        "GP",
+        "SALARY",
+        "PROJECTED_MIN",
+        "CURRENT_IMPACT",
+        "AGE_ADJUSTMENT",
+        "PROJECTED_IMPACT",
     ]
-    players = target[player_columns].sort_values(
-        ["TEAM", "PROJECTED_MIN"], ascending=[True, False]
-    )
+    players = target[player_columns].sort_values(["TEAM", "PROJECTED_MIN"], ascending=[True, False])
     metadata = {
         "version": ROSTER_INPUT_VERSION,
         "target_season": target_season,

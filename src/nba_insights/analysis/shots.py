@@ -180,8 +180,10 @@ def shot_quality(shots: pd.DataFrame, league_averages: pd.DataFrame) -> pd.Serie
 
     league_efg = float("nan")
     if {"FGA", "FGM"} <= set(league_averages.columns):
-        lg_weight = league_averages["SHOT_ZONE_BASIC"].str.contains("3").map(
-            {True: _THREE_WEIGHT, False: 1.0}
+        lg_weight = (
+            league_averages["SHOT_ZONE_BASIC"]
+            .str.contains("3")
+            .map({True: _THREE_WEIGHT, False: 1.0})
         )
         lg_fga = league_averages["FGA"].sum()
         if lg_fga:

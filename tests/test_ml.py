@@ -249,9 +249,7 @@ def _availability_fixture():
         for pid, minutes in [(1, 36.0), (2, 20.0)]:
             if pid == 1 and game == "G3":
                 continue  # star sits out game 3
-            rows.append(
-                {"GAME_ID": game, "TEAM_ID": 1, "PLAYER_ID": pid, "MIN": minutes}
-            )
+            rows.append({"GAME_ID": game, "TEAM_ID": 1, "PLAYER_ID": pid, "MIN": minutes})
     return team_games, pd.DataFrame(rows)
 
 
@@ -546,9 +544,7 @@ def test_snapshot_prior_seeding_matches_training_formula():
 
     games = synthetic_team_games(60)
     priors = prior_team_form(games)  # stand-in for last season's means
-    early = pd.concat(
-        [g.head(4) for _, g in games.groupby("TEAM_ID")], ignore_index=True
-    )
+    early = pd.concat([g.head(4) for _, g in games.groupby("TEAM_ID")], ignore_index=True)
     raw = team_form_snapshot(early)
     seeded = team_form_snapshot(early, form_priors=priors)
     w, n = FORM_PRIOR_WEIGHT, 4
