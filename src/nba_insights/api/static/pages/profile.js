@@ -123,7 +123,7 @@ function shotCourt(data, mode = "hex") {
   const zoneDiff = new Map((data.zones || []).map(zone => [
     [zone.SHOT_ZONE_BASIC,zone.SHOT_ZONE_AREA,zone.SHOT_ZONE_RANGE].join("|"), Number(zone.DIFF)
   ]));
-  let marks = "";
+  let marks;
   if (mode === "hex") {
     const max = Math.max(1,...data.hexes.map(hex => Number(hex.FGA) || 0));
     marks = data.hexes.map(hex => {
