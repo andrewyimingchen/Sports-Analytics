@@ -296,11 +296,15 @@ def test_tapping_a_point_shows_its_tooltip_on_touch_phones(browser, base_url):
     page = context.new_page()
     _open(page, base_url, "players")
     page.fill("#search", "Alice")
-    page.click("#results button")
+    page.tap("#results button")
     chart = "#profile-pct-chart .plot-host svg[aria-label]"
     page.wait_for_selector(chart)
     dot = page.locator(f'{chart} g[aria-label="dot"] circle').first
     dot.scroll_into_view_if_needed()
+    # Emulated touch still tracks a mouse position; if the chart renders or
+    # scrolls under it, Plot's pointer shows a tip before any tap (the CI
+    # flake). Park it in the 16px page gutter, which no chart covers.
+    page.mouse.move(1, PHONE["height"] // 2)
     tip = page.locator(f'{chart} g[aria-label="tip"]')
     assert "percentile" not in (tip.text_content() or "")  # nothing shown before the tap
     box = dot.bounding_box()
