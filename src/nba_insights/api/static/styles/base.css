@@ -19,6 +19,17 @@
 }
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
+/* Read by assistive technology, invisible on screen (keeps the outline whole). */
+.visually-hidden { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0; }
+/* Headings below h1 moved up one level (2026-10) so the outline never skips
+   a level. Zero-specificity rules keep each promoted heading's former browser
+   default size and margins; class rules still win. The original h2s keep h2
+   defaults. */
+:where(h2:not(.spotlight-title, .profile-name, .section-title, .visually-hidden)) { font-size: 1.17em; margin-block: 1em; }
+:where(h3) { font-size: 1em; margin-block: 1.33em; }
+:where(h4) { font-size: .83em; margin-block: 1.67em; }
+
 body { margin: 0; min-width: 320px; background: var(--night); color: var(--paper);
   font-family: var(--body); -webkit-font-smoothing: antialiased; }
 button, input, select { font: inherit; }
@@ -93,7 +104,7 @@ a:not([class]) { color: var(--orange-2); }
 .desk-head span { color: var(--muted-2); font: 9px var(--mono); letter-spacing: .08em; }
 .spotlight { padding: 22px; display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 15px; }
 .spotlight .label { color: var(--orange-2); font: 10px var(--mono); text-transform: uppercase; }
-.spotlight h2 { font: 600 34px/1 var(--display); text-transform: uppercase; margin: 7px 0; }
+.spotlight .spotlight-title { font: 600 34px/1 var(--display); text-transform: uppercase; margin: 7px 0; }
 .spotlight p { color: var(--muted); font-size: 11px; margin: 0; }
 .score-ring { width: 88px; height: 88px; border: 8px solid var(--orange); border-left-color: #262c34;
   border-radius: 50%; display: grid; place-items: center; transform: rotate(28deg); }
@@ -125,7 +136,7 @@ a:not([class]) { color: var(--orange-2); }
 .cap-card:hover { border-color: #414852; transform: translateY(-3px); }
 .cap-card.large { grid-column: span 7; }.cap-card.wide { grid-column: span 5; }
 .cap-number { font: 500 10px var(--mono); color: var(--orange-2); }
-.cap-card h3 { font: 600 28px/1.05 var(--display); text-transform: uppercase; margin: auto 0 11px; }
+.cap-card h2 { font: 600 28px/1.05 var(--display); text-transform: uppercase; margin: auto 0 11px; }
 .cap-card p { color: var(--muted); font-size: 12px; line-height: 1.7; margin: 0; max-width: 410px; }
 .cap-icon { position: absolute; right: 23px; top: 22px; width: 55px; height: 55px;
   border: 1px solid var(--line); border-radius: 50%; display: grid; place-items: center; color: var(--lime); }
@@ -135,5 +146,5 @@ a:not([class]) { color: var(--orange-2); }
 .bars i::after { content: ""; position: absolute; inset: 38% 0 0; background: var(--orange); border-radius: inherit; }
 .principles { border-top: 1px solid var(--line-soft); padding: 25px 0 70px;
   display: grid; grid-template-columns: repeat(4,1fr); gap: 20px; }
-.principle b { font: 500 10px var(--mono); color: var(--lime); }.principle h4 { margin: 7px 0;
+.principle b { font: 500 10px var(--mono); color: var(--lime); }.principle h3 { margin: 7px 0;
   font: 600 14px var(--body); }.principle p { margin: 0; color: var(--muted-2); font-size: 11px; line-height: 1.6; }

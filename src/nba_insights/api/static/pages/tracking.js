@@ -35,8 +35,8 @@ async function loadTracking(){
     const source=result.source||{},fresh=source.fetched_at?new Date(source.fetched_at).toLocaleString():"timestamp unavailable";
     $("tracking-source").querySelector("span").innerHTML=`<b>${escapeHTML(source.status||'unknown')} · ${escapeHTML(source.endpoint||'official feed')}</b><br>${escapeHTML(result.count)} displayed of ${escapeHTML(source.upstream_rows??0)} upstream rows · fetched ${escapeHTML(fresh)}${source.stale?' · stale cache':''}`;
     const definitions=Object.entries(result.definitions||{}).map(([key,value])=>`<div class="context-tile"><b>${escapeHTML(key.replaceAll('_',' '))}</b><span>${escapeHTML(value)}</span></div>`).join('');
-    $("tracking-definitions").innerHTML=`<div class="subhead"><h3>${escapeHTML(result.label)} definitions</h3><span>${escapeHTML(result.scope)} · ${escapeHTML(result.season)} · ${escapeHTML(result.minimum_games)}+ GAMES</span></div><div class="context-grid">${definitions}</div><p class="analytics-note">Schema audit: ${(source.schema_audit?.available||[]).length} expected fields available${source.schema_audit?.missing?.length?` · unavailable upstream: ${source.schema_audit.missing.map(value=>escapeHTML(value)).join(', ')}`:''}.</p>`;
-    if(source.status==="unavailable"||!result.records?.length){output.innerHTML=`<div class="panel empty-state"><div><h3>${source.status==="unavailable"?'Upstream category unavailable':'No qualified rows'}</h3><p>${escapeHTML(source.detail||'Try a lower games threshold or a different category.')}</p></div></div>`;return;}
+    $("tracking-definitions").innerHTML=`<div class="subhead"><h2>${escapeHTML(result.label)} definitions</h2><span>${escapeHTML(result.scope)} · ${escapeHTML(result.season)} · ${escapeHTML(result.minimum_games)}+ GAMES</span></div><div class="context-grid">${definitions}</div><p class="analytics-note">Schema audit: ${(source.schema_audit?.available||[]).length} expected fields available${source.schema_audit?.missing?.length?` · unavailable upstream: ${source.schema_audit.missing.map(value=>escapeHTML(value)).join(', ')}`:''}.</p>`;
+    if(source.status==="unavailable"||!result.records?.length){output.innerHTML=`<div class="panel empty-state"><div><h2>${source.status==="unavailable"?'Upstream category unavailable':'No qualified rows'}</h2><p>${escapeHTML(source.detail||'Try a lower games threshold or a different category.')}</p></div></div>`;return;}
     const metrics=result.available_metrics||Object.keys(result.definitions||{}),pct=new Set(result.percentage_metrics||[]),favorites=loadFavorites(),scope=result.scope;
     const identity=row=>scope==="player"?{id:row.PLAYER_ID,name:row.PLAYER_NAME,team:row.TEAM_ABBREVIATION}:{id:row.TEAM_ID,name:row.TEAM_NAME,team:row.TEAM_ABBREVIATION};
     const template=`36px minmax(160px,1.3fr) 55px repeat(${metrics.length},minmax(76px,1fr))`;
@@ -67,7 +67,7 @@ async function loadTracking(){
           tableHTML:dataTable(`${label} and ${versus.replaceAll('_',' ')} by ${scope}`,[scope==="player"?"Player":"Team",label,versus.replaceAll('_',' ')],ranked.filter(row=>Number.isFinite(Number(row[versus]))).map(row=>[row[nameKey],trackingValue(key,row[key]),trackingValue(versus,row[versus])])),
           dataLabel:"View both measures for every row",
         });
-        else $("tracking-scatter-chart").innerHTML=numeric.length<2?'':'<div class="data-figure"><div class="figure-heading"><h4>Choose a second measure</h4><p>Pick a different "Compare against" metric to see how the two relate.</p></div></div>';
+        else $("tracking-scatter-chart").innerHTML=numeric.length<2?'':'<div class="data-figure"><div class="figure-heading"><h3>Choose a second measure</h3><p>Pick a different "Compare against" metric to see how the two relate.</p></div></div>';
       };
       $("tracking-metric").addEventListener("change",renderTrackingCharts);
       $("tracking-versus")?.addEventListener("change",renderTrackingCharts);
@@ -75,7 +75,7 @@ async function loadTracking(){
     }
     const filterQuery=new URLSearchParams({tracking_category:result.category,tracking_scope:result.scope,tracking_season:result.season,tracking_team:$("tracking-team").value,tracking_min_games:$("tracking-min-games").value||"0",tracking_query:$("tracking-query").value.trim()});history.replaceState(null,"",`${location.pathname}?${filterQuery}#tracking`);
     const seen=localStorage.getItem(TRACKING_SEEN_KEY),alerts=localStorage.getItem(ALERTS_KEY)==="enabled";if(alerts&&"Notification" in window&&seen&&source.fetched_at&&seen!==source.fetched_at&&favorites.length&&Notification.permission==="granted")new Notification("NBA tracking data refreshed",{body:`${result.label} has new cached data for your saved players and teams.`});if(source.fetched_at)localStorage.setItem(TRACKING_SEEN_KEY,source.fetched_at);
-  }catch(error){output.innerHTML=`<div class="panel empty-state"><div><h3>Tracking feed unavailable</h3><p class="error">${escapeHTML(error.message)}</p><button class="btn" data-retry="tracking">Retry tracking data</button></div></div>`;}
+  }catch(error){output.innerHTML=`<div class="panel empty-state"><div><h2>Tracking feed unavailable</h2><p class="error">${escapeHTML(error.message)}</p><button class="btn" data-retry="tracking">Retry tracking data</button></div></div>`;}
 }
 $("tracking-go").addEventListener("click",loadTracking);
 $("tracking-category").addEventListener("change",loadTracking);

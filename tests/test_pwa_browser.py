@@ -71,7 +71,7 @@ FIGURE_AUDIT = """() => [...document.querySelectorAll('figure.data-figure')]
     legend,
     colourOnly: legend.length >= 2 && shapes.size < legend.length
       && !legend.every((label) => text.includes(label)),
-    title: figure.querySelector('.figure-heading h4')?.textContent.trim() || '',
+    title: figure.querySelector('.figure-heading h3')?.textContent.trim() || '',
     takeaway: figure.querySelector('.figure-heading p')?.textContent.trim() || '',
     svgs: figure.querySelectorAll('.plot-host svg[aria-label]').length,
     unlabeled: [...figure.querySelectorAll('.plot-host svg')]
@@ -203,7 +203,7 @@ def test_tracking_charts_follow_metric_selector(page, base_url):
     options = page.eval_on_selector_all("#tracking-metric option", "els => els.map(e => e.value)")
     if len(options) > 1:
         page.select_option("#tracking-metric", options[1])
-        heading = page.text_content("#tracking-leader-chart h4")
+        heading = page.text_content("#tracking-leader-chart h3")
         assert options[1].replace("_", " ") in heading
 
 
@@ -368,8 +368,8 @@ def test_primary_navigation_updates_page_url_and_current_item(browser, base_url,
 
 def test_player_deep_link_opens_profile_and_stays_shareable(page, base_url):
     page.goto(f"{base_url}#players/1")
-    page.wait_for_selector("#profile .profile-identity h2")
-    assert page.text_content("#profile .profile-identity h2") == "Alice Hooper"
+    page.wait_for_selector("#profile .profile-identity .profile-name")
+    assert page.text_content("#profile .profile-identity .profile-name") == "Alice Hooper"
     assert page.locator("#page-players").get_attribute("class").split().count("active") == 1
     assert page.evaluate("location.hash") == "#players/1"
     # a link pasted into the open tab routes without a reload
@@ -463,10 +463,10 @@ def test_primary_flows_have_no_serious_accessibility_violations(page, base_url, 
     axe_sync = pytest.importorskip("axe_playwright_python.sync_playwright")
     PRIMARY_FLOWS[flow](page, base_url)
     violations = axe_sync.Axe().run(page).response["violations"]
-    # Moderate issues (heading levels) are tracked separately; these block.
+    # Moderate issues block too, now that heading levels never skip.
     blocking = [
         f"{v['id']} ({v['impact']}): {[node['target'] for node in v['nodes'][:3]]}"
         for v in violations
-        if v["impact"] in ("serious", "critical")
+        if v["impact"] in ("moderate", "serious", "critical")
     ]
     assert not blocking, blocking

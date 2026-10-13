@@ -60,7 +60,7 @@ async function loadExplore() {
     $("explore-x").addEventListener("change",renderExploreChart);
     $("explore-y").addEventListener("change",renderExploreChart);
     renderExploreChart();
-  } catch (error) { $("explore-output").innerHTML = `<div class="empty-state" style="min-height:390px"><div><h3>League table unavailable</h3><p class="error">${escapeHTML(error.message)}</p><button class="btn" data-retry="explore">Retry league table</button></div></div>`; }
+  } catch (error) { $("explore-output").innerHTML = `<div class="empty-state" style="min-height:390px"><div><h2>League table unavailable</h2><p class="error">${escapeHTML(error.message)}</p><button class="btn" data-retry="explore">Retry league table</button></div></div>`; }
 }
 $("explore-go").addEventListener("click", loadExplore);
 $("explore-output").addEventListener("click", event => {

@@ -40,7 +40,7 @@ export function mountChart(target, {
 
   const heading = document.createElement("div");
   heading.className = "figure-heading";
-  const titleElement = document.createElement("h4");
+  const titleElement = document.createElement("h3");
   titleElement.textContent = title;
   const takeawayElement = document.createElement("p");
   takeawayElement.textContent = takeaway;
@@ -502,7 +502,7 @@ export function splitSmallMultiples(rows, metrics) {
       const signedMetric = values.some((value) => value < 0);
       const panel = document.createElement("div");
       panel.className = "small-multiple";
-      const title = document.createElement("h5");
+      const title = document.createElement("h4");
       title.textContent = label;
       panel.append(title, Plot.plot({
         width: panelWidth,

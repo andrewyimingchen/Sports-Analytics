@@ -40,7 +40,7 @@
   .app-meta { font-size: 11px; }.analytics-note, .data-context { font-size: 11px; }
   .panel-kicker, .subhead span, .form-board-head span, .field label, .control label { font-size: 10px; }
   .profile-hero { grid-template-columns: 130px 1fr; min-height: 200px; }.player-photo { height: 180px; }
-  .profile-identity { padding: 20px 14px 20px 0; }.profile-identity h2 { font-size: 37px; }
+  .profile-identity { padding: 20px 14px 20px 0; }.profile-identity .profile-name { font-size: 37px; }
   .profile-body { padding: 17px; }.stat { padding: 13px 9px; }.stat b { font-size: 23px; }
   .profile-lower { gap: 20px; }.match-grid { padding-bottom: 50px; }.court-panel { min-height: 430px; }
   .profile-controls, .shot-layout { grid-template-columns: 1fr; }.context-grid { grid-template-columns: repeat(2,1fr); }

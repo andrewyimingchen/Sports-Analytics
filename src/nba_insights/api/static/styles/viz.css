@@ -7,7 +7,7 @@
 .data-figure { min-width: 0; margin: 0; padding: 20px; background: var(--panel);
   border: 1px solid var(--line-soft); border-radius: var(--radius); overflow: hidden; }
 .figure-heading { margin-bottom: 13px; display: grid; gap: 5px; }
-.figure-heading h4 { margin: 0; color: var(--paper); font: 600 18px var(--display); letter-spacing: -.01em; }
+.figure-heading h3 { margin: 0; color: var(--paper); font: 600 18px var(--display); letter-spacing: -.01em; }
 .figure-heading p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.55; }
 .plot-host { width: 100%; min-width: 0; overflow: hidden; }
 .plot-host svg { display: block; width: 100%; max-width: 100%; height: auto; overflow: visible;
@@ -34,7 +34,7 @@
 .viz-table tbody th { color: var(--paper); font: 500 10px var(--body); text-align: left; }
 .small-multiples { display: grid; grid-template-columns: repeat(auto-fit,minmax(260px,1fr)); gap: 14px; }
 .small-multiple { min-width: 0; }
-.small-multiple h5 { margin: 0 0 4px; color: var(--muted); font: 500 9px var(--mono); text-transform: uppercase; letter-spacing: .06em; }
+.small-multiple h4 { margin: 0 0 4px; color: var(--muted); font: 500 9px var(--mono); text-transform: uppercase; letter-spacing: .06em; }
 .small-multiple svg { display: block; width: 100%; height: auto; }
 .compare-viz-grid { margin: 22px 0 8px; }
 .team-sections > .viz-grid { margin-bottom: 18px; }

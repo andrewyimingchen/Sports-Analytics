@@ -15,7 +15,7 @@ export async function loadMeta(){
   $("more-ask").classList.toggle("hidden",!askEnabled);
   if(!askEnabled){
     $("ask-go").disabled=true;
-    $("ask-output").innerHTML='<div class="empty-state" style="min-height:330px"><div><h3>Ask AI is not configured</h3><p>This optional tool appears when the server has the Anthropic package and credential. All non-AI analytics remain available.</p></div></div>';
+    $("ask-output").innerHTML='<div class="empty-state" style="min-height:330px"><div><h2>Ask AI is not configured</h2><p>This optional tool appears when the server has the Anthropic package and credential. All non-AI analytics remain available.</p></div></div>';
   }
   updateConnectionStatus();
   return metaData;
