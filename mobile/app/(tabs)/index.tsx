@@ -101,8 +101,8 @@ export default function PulseScreen() {
                   <Text style={styles.kicker}>{shortDate(game.tipoff).toUpperCase()}</Text>
                   <Text style={styles.matchup}>{game.away} @ {game.home}</Text>
                   <View style={styles.stats}>
-                    <Stat label={`${game.home} win`} value={percent(game.home_win_prob)} accent />
                     <Stat label={`${game.away} win`} value={percent(1 - game.home_win_prob)} />
+                    <Stat label={`${game.home} win`} value={percent(game.home_win_prob)} accent />
                   </View>
                 </Card>
               ))}

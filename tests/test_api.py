@@ -1108,7 +1108,7 @@ def test_mobile_app_shell_served(api):
     service_worker = api.get("/app/sw.js")
     assert service_worker.status_code == 200
     assert "fetch(e.request)" in service_worker.text
-    assert "nba-insights-shell-v29" in service_worker.text
+    assert "nba-insights-shell-v30" in service_worker.text
     assert "nba-insights-public-data-v1" in service_worker.text
     assert '!e.request.headers.has("Authorization")' in service_worker.text
     assert '!e.request.headers.has("X-API-Key")' in service_worker.text

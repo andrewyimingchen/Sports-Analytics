@@ -289,6 +289,21 @@ def test_matchup_charts(page, base_url):
     page.click("#go")
     titles = {figure["title"] for figure in _audit(page, 2)}
     assert {"Same-sample league ranks", "Why the prediction moved"} <= titles
+    # one reading order everywhere: away on the left, home on the right
+    names = page.locator("#prediction .team-name").all_inner_texts()
+    assert names == ["T1", "T2"]
+    segments = page.eval_on_selector_all(
+        "#prediction .prob-track > div", "els => els.map(e => e.className)"
+    )
+    assert segments == ["prob-away", "prob-home"]
+    legends = page.locator("#prediction .prob-legends span").all_inner_texts()
+    assert legends[0].startswith("T1") and legends[1].startswith("T2")
+    # and the form asks for the home team first
+    fields = page.eval_on_selector_all(
+        ".match-form select, .match-form input", "els => els.map(e => e.id)"
+    )
+    assert fields.index("home") < fields.index("away")
+    assert fields.index("home-missing") < fields.index("away-missing")
 
 
 def test_tapping_a_point_shows_its_tooltip_on_touch_phones(browser, base_url):

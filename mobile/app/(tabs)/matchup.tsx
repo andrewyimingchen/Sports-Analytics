@@ -93,14 +93,14 @@ export default function MatchupScreen() {
       <BrandHeader
         eyebrow="Calibrated outcome model"
         title="Matchup lab"
-        description="Choose a road team, home team, and forecast season. The backend model handles the math."
+        description="Choose a home team, road team, and forecast season. The backend model handles the math."
       />
       {teams.loading || meta.loading ? <LoadingState label="Preparing matchup inputs…" /> : null}
       {teams.error ? <ErrorState message={teams.error} onRetry={teams.reload} /> : null}
       {teams.data ? (
         <>
-          <TeamPicker label="Away" teams={teams.data} value={away} onChange={setAwayChoice} />
           <TeamPicker label="Home" teams={teams.data} value={home} onChange={setHomeChoice} />
+          <TeamPicker label="Away" teams={teams.data} value={away} onChange={setAwayChoice} />
           {meta.data ? (
             <View style={styles.picker}>
               <Text style={styles.pickerLabel}>FORECAST SEASON</Text>
@@ -138,8 +138,8 @@ export default function MatchupScreen() {
               <Text style={styles.probabilityLabel}>{prediction.home} WIN</Text>
             </View>
             <View style={styles.statRow}>
-              <Stat label={`${prediction.home} win`} value={percent(prediction.home_win_prob)} accent />
               <Stat label={`${prediction.away} win`} value={percent(awayProbability)} />
+              <Stat label={`${prediction.home} win`} value={percent(prediction.home_win_prob)} accent />
             </View>
             <Text style={styles.basis}>
               {prediction.projection_mode.replaceAll("_", " ")} · data basis {prediction.basis_season}

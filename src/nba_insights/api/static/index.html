@@ -175,12 +175,12 @@
       <div class="app-head"><div><div class="eyebrow">Pick two teams</div><h1 class="section-title">Game predictions.</h1></div><div class="app-meta">Win probability<br>Matchup comparison</div></div>
       <div class="match-grid">
         <aside class="panel match-form">
-          <h2>Build a matchup</h2><p>Choose the visitors and home team. The model blends season-to-date form with schedule and strength context.</p>
+          <h2>Build a matchup</h2><p>Choose the home team and the visitors. The model blends season-to-date form with schedule and strength context.</p>
           <div class="field"><label for="prediction-season">Prediction season</label><div class="select-wrap"><select id="prediction-season"><option>Loading seasons…</option></select></div></div>
-          <div class="field"><label for="away">Away team</label><div class="select-wrap"><select id="away"><option>Loading teams…</option></select></div></div>
           <div class="field"><label for="home">Home team</label><div class="select-wrap"><select id="home"><option>Loading teams…</option></select></div></div>
-          <div class="field"><label for="away-missing">Away expected minutes out</label><input id="away-missing" type="number" min="0" max="240" value="0"></div>
+          <div class="field"><label for="away">Away team</label><div class="select-wrap"><select id="away"><option>Loading teams…</option></select></div></div>
           <div class="field"><label for="home-missing">Home expected minutes out</label><input id="home-missing" type="number" min="0" max="240" value="0"></div>
+          <div class="field"><label for="away-missing">Away expected minutes out</label><input id="away-missing" type="number" min="0" max="240" value="0"></div>
           <button class="predict-btn" id="go">Run prediction →</button>
           <div id="form-error" class="error hidden" role="alert"></div>
           <div class="model-note"><b>Model card / 2025–26 holdout</b><p id="prediction-basis-note">70.2% outcome accuracy and 0.589 log loss. Upcoming-season forecasts use the latest completed team form and rosters as a preseason carry-forward until new-season games exist.</p></div>
