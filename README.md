@@ -173,7 +173,7 @@ fails if it falls out of date.
 | Player season | `player-season-v1` | stable-roster holdout 2025-26 (241 players) | PTS MAE 2.68; interval covered 82.6% | none recorded |
 | Starting five / game simulator | `lineup-blend-v1` / `matchup-simulator-v1` | no holdout recorded | heuristic blend / distribution diagnostic | — |
 
-Recorded in [`models/manifest.json`](models/manifest.json) (updated 2026-10-13T04:55:10+00:00), including code revision, data cutoffs, source fingerprints, and artifact hashes.
+Recorded in [`models/manifest.json`](models/manifest.json) (updated 2026-10-13T16:41:42+00:00), including code revision, data cutoffs, source fingerprints, and artifact hashes.
 <!-- model-metrics:end -->
 
 After retraining or re-running a backtest, commit the updated manifest and
