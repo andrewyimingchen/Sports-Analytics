@@ -77,6 +77,9 @@ _LEGACY_JSON_VERSION = "v2"
 # how long a cached *empty* frame is trusted before refetching
 EMPTY_TTL = timedelta(hours=1)
 
+# Lock key for one-time database setup (never a cache key: keys have no NUL).
+_INIT_LOCK_KEY = "\x00cache-init"
+
 # POSIX record locks belong to the process and are all released when *any*
 # descriptor for the file is closed, so each lock file is opened once per
 # process and never closed.
@@ -114,7 +117,10 @@ class Cache:
         # exactly which source snapshots it read (see ml/manifest.py)
         self._accessed: set[str] = set()
         self._lock_path = self.db_path.with_name(self.db_path.name + ".lock")
-        with self._connect() as conn:
+        # Several workers may open a brand-new file at once, and switching the
+        # journal mode is not always covered by SQLite's busy handler, so the
+        # one-time setup is serialized across processes.
+        with self._process_lock(_INIT_LOCK_KEY), self._connect() as conn:
             # Persistent per database file; a no-op once set. Returns the
             # previous mode when WAL is unsupported (e.g. network filesystem).
             self.journal_mode = str(conn.execute("PRAGMA journal_mode=WAL").fetchone()[0])
