@@ -18,7 +18,7 @@ _SENSITIVE_HEADERS = {"authorization", "cookie", "x-api-key", "proxy-authorizati
 _enabled = False
 
 
-def scrub_event(event: dict[str, Any], hint: dict[str, Any] | None = None) -> dict[str, Any]:
+def scrub_event(event: Any, hint: Any = None) -> Any:
     """Drop query strings, cookies, and auth headers from a Sentry event."""
     request = event.get("request")
     if isinstance(request, dict):
@@ -54,7 +54,7 @@ def init_error_tracking() -> bool:
         release=os.environ.get("SENTRY_RELEASE"),
         send_default_pii=False,
         traces_sample_rate=float(os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "0")),
-        before_send=scrub_event,  # type: ignore[arg-type]
+        before_send=scrub_event,
     )
     _enabled = True
     logger.info("error tracking enabled")
