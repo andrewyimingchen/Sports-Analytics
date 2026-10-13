@@ -21,7 +21,7 @@ import pandas as pd
 
 from nba_insights.config import current_season
 from nba_insights.errors import EXPECTED_ERRORS
-from nba_insights.ingest import NBAClient
+from nba_insights.ingest import NBAClient, serving_client
 from nba_insights.pbp.stints import lineup_ratings, stint_table
 from nba_insights.store import Cache
 
@@ -88,7 +88,7 @@ def load_season(cache: Cache, season: str | None = None) -> pd.DataFrame | None:
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     parser = argparse.ArgumentParser(description="Build the stint-level lineup table")
-    parser.add_argument("--season", default=current_season(), help="season, e.g. 2025-26")
+    parser.add_argument("--season", help="season, e.g. 2025-26 (default: the current season)")
     parser.add_argument("--limit", type=int, default=None, help="only the first N games (debug)")
     parser.add_argument(
         "--min-coverage",
@@ -97,7 +97,10 @@ def main() -> None:
         help="fraction of games that must have cached rotations (default 0.9)",
     )
     args = parser.parse_args()
-    build_season(NBAClient(), args.season, limit=args.limit, min_coverage=args.min_coverage)
+    # the client installs the season-started check that current_season() needs
+    client = serving_client()
+    season = args.season or current_season()
+    build_season(client, season, limit=args.limit, min_coverage=args.min_coverage)
 
 
 if __name__ == "__main__":

@@ -26,7 +26,7 @@ from datetime import UTC, datetime
 import pandas as pd
 
 from nba_insights.config import MODELS_DIR, current_season, past_seasons
-from nba_insights.ingest import NBAClient
+from nba_insights.ingest import NBAClient, serving_client
 from nba_insights.ml import GameOutcomeModel, PlayerPointsModel, WinCurve
 from nba_insights.ml.elo import elo_ratings
 from nba_insights.ml.features import (
@@ -133,7 +133,7 @@ def main() -> None:
     parser.add_argument("--train-seasons", type=int, default=3)
     args = parser.parse_args()
 
-    client = NBAClient()
+    client = serving_client()
     train_seasons = past_seasons(args.train_seasons)
     test_season = current_season()
     logger.info("training on %s, evaluating on %s", train_seasons, test_season)

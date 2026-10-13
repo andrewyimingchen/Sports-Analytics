@@ -164,12 +164,13 @@ fails if it falls out of date.
 | Model | Version | Evaluation | Result | Baseline |
 |---|---|---|---|---|
 | Game outcome | `logistic-outcome-v1` | temporal holdout 2025-26 (1225 games) | 70.2% accuracy, log loss 0.589 | 55.4% / 0.687 (always pick home) |
-| Player points | `player-points-v1` | temporal holdout 2025-26 (21204 player-games) | MAE 4.58; 80% interval covered 80.4% | MAE 4.72 (10-game average) |
+| Player points | `player-points-v2-statline` | temporal holdout 2025-26 (21204 player-games) | MAE 4.58; 80% interval covered 80.4% | MAE 4.72 (10-game average) |
+| Player stat line | `player-points-v2-statline` | temporal holdout 2025-26 (same player-games) | REB 1.90, AST 1.36, STL 0.72, FG3M 0.92 MAE | REB 1.95, AST 1.39, STL 0.75, FG3M 0.92 (10-game averages) |
 | Season forecast | `season-forecast-v2-roster` | backtest 2024-25, 2025-26 (60 team-seasons) | win MAE 8.93; playoff Brier 0.246 | MAE 11.10; Brier 0.249 |
 | Player season | `player-season-v1` | stable-roster holdout 2025-26 (241 players) | PTS MAE 2.68; interval covered 82.6% | none recorded |
 | Starting five / game simulator | `lineup-blend-v1` / `matchup-simulator-v1` | no holdout recorded | heuristic blend / distribution diagnostic | — |
 
-Recorded in [`models/manifest.json`](models/manifest.json) (updated 2026-07-22T15:21:25+00:00), including code revision, data cutoffs, source fingerprints, and artifact hashes.
+Recorded in [`models/manifest.json`](models/manifest.json) (updated 2026-10-13T04:55:10+00:00), including code revision, data cutoffs, source fingerprints, and artifact hashes.
 <!-- model-metrics:end -->
 
 After retraining or re-running a backtest, commit the updated manifest and

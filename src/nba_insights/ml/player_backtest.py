@@ -15,7 +15,7 @@ from nba_insights.analysis import (
 )
 from nba_insights.analysis.salaries import normalize_name
 from nba_insights.config import MODELS_DIR
-from nba_insights.ingest import NBAClient
+from nba_insights.ingest import NBAClient, serving_client
 from nba_insights.ml.manifest import MODEL_VERSIONS, record_run, source_snapshots
 
 PLAYER_SEASON_METRICS_PATH = MODELS_DIR / "player_season_metrics.json"
@@ -73,7 +73,7 @@ def main() -> None:
     parser.add_argument("--target", default="2025-26")
     parser.add_argument("--output", type=Path, default=PLAYER_SEASON_METRICS_PATH)
     args = parser.parse_args()
-    client = NBAClient()
+    client = serving_client()
     artifact = run_player_backtest(client, args.source, args.target)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(artifact, indent=2) + "\n")

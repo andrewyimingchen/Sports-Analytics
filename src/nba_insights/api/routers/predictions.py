@@ -47,7 +47,12 @@ from nba_insights.api.shared import (
 from nba_insights.config import prediction_seasons
 from nba_insights.ingest import NBAClient
 from nba_insights.ml import blended_lineup_estimate, sim_summary, simulate_matchup
-from nba_insights.ml.features import matchup_features, player_next_game_features
+from nba_insights.ml.features import (
+    STAT_LINE,
+    matchup_features,
+    player_next_game_features,
+    stat_baseline_col,
+)
 from nba_insights.serve import league_with_ratings
 
 logger = logging.getLogger(__name__)
@@ -558,14 +563,25 @@ def predict_player_points(
         opp_form_pace=float(snapshot.loc[opponent, "form_pace"]),
         **kwargs,
     )
-    prediction = float(model.predict(features).iloc[0])
+    line = model.predict_line(features).iloc[0]
+    prediction = float(line["PTS"])
     interval = model.interval(prediction)
+    # 10-game averages: the baseline each stat's model must beat, and the
+    # only figure shown for blocks (no block model beat it on the holdout).
+    recent = {
+        stat: float(features[stat_baseline_col(stat)].iloc[0])
+        for stat in [*STAT_LINE, "BLK"]
+        if stat_baseline_col(stat) in features
+        and pd.notna(features[stat_baseline_col(stat)].iloc[0])
+    }
     return {
         "player": player["full_name"],
         "opponent": opponent,
         "home": home,
         "projected_points": prediction,
         "interval_80": list(interval) if interval else None,
+        "projected_line": {stat: float(value) for stat, value in line.items()},
+        "recent_averages": recent,
         "last_5": float(features["pts_r5"].iloc[0]),
         "last_10": float(features["pts_r10"].iloc[0]),
         "games_in_sample": len(rows),

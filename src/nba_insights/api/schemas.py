@@ -355,7 +355,13 @@ class PlayerPointsProjection(Schema):
     opponent: str
     home: bool
     projected_points: float
-    interval_80: list[float] | None
+    interval_80: list[float] | None = Field(description="Empirical 80% interval for points.")
+    projected_line: dict[str, float] = Field(
+        description="Projected PTS, REB, AST, STL, and FG3M (stats the model was fitted for)."
+    )
+    recent_averages: dict[str, float] = Field(
+        description="10-game averages per stat, including BLK, which has no model."
+    )
     last_5: float
     last_10: float
     games_in_sample: int

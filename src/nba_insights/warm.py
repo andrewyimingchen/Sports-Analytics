@@ -17,7 +17,7 @@ import logging
 import sys
 
 from nba_insights.errors import EXPECTED_ERRORS, reason_for
-from nba_insights.ingest import NBAClient
+from nba_insights.ingest import NBAClient, serving_client
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +85,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    client = NBAClient()
+    client = serving_client()
     failures = warm(client, top=args.top)
     for season in args.seasons:
         failures += warm_season(client, season)

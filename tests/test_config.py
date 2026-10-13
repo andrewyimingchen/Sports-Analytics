@@ -78,3 +78,24 @@ def test_prediction_seasons_include_upcoming_year():
     today = date(2026, 7, 21)
     assert next_season(today=today) == "2026-27"
     assert prediction_seasons(today) == ["2025-26", "2026-27"]
+
+
+def test_serving_client_keeps_the_prior_season_through_preseason(monkeypatch, tmp_path):
+    from nba_insights.ingest import client as client_module
+    from nba_insights.store import Cache
+
+    monkeypatch.setattr(config, "_today", lambda: date(2026, 10, 13))
+    monkeypatch.setattr(
+        client_module, "NBAClient", lambda **kwargs: _NoGamesClient(Cache(tmp_path / "c.db"))
+    )
+    assert current_season() == "2026-27"  # no check installed: calendar season
+    client_module.serving_client()
+    assert current_season() == "2025-26"  # the new season has no games yet
+
+
+class _NoGamesClient:
+    def __init__(self, cache):
+        self.cache = cache
+
+    def season_has_started(self, season):
+        return False
