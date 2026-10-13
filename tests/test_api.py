@@ -1108,7 +1108,7 @@ def test_mobile_app_shell_served(api):
     service_worker = api.get("/app/sw.js")
     assert service_worker.status_code == 200
     assert "fetch(e.request)" in service_worker.text
-    assert "nba-insights-shell-v28" in service_worker.text
+    assert "nba-insights-shell-v29" in service_worker.text
     assert "nba-insights-public-data-v1" in service_worker.text
     assert '!e.request.headers.has("Authorization")' in service_worker.text
     assert '!e.request.headers.has("X-API-Key")' in service_worker.text
@@ -1312,3 +1312,21 @@ def test_team_tricodes_merges_last_season_with_current():
             return pd.DataFrame({"TEAM_ID": [2, 3], "TEAM_ABBREVIATION": ["BBX", "CCC"]})
 
     assert team_tricodes(Client(), "2026-27") == {1: "AAA", 2: "BBX", 3: "CCC"}
+
+
+def test_drift_endpoint_reports_missing_then_the_latest_report(api, monkeypatch):
+    from nba_insights.api.routers import methodology as methodology_router
+
+    monkeypatch.setattr(methodology_router, "get_drift_report", lambda: None)
+    assert api.get("/methodology/drift").json() == {"status": "missing"}
+    report = {
+        "season": "2026-27",
+        "as_of": "2026-11-01",
+        "generated_at": "2026-11-02T06:00:00+00:00",
+        "recent": {"days": 28, "n_games": 120, "log_loss": 0.6},
+        "drift": {"status": "ok", "rule": "r"},
+    }
+    monkeypatch.setattr(methodology_router, "get_drift_report", lambda: report)
+    body = api.get("/methodology/drift").json()
+    assert body["status"] == "available"
+    assert body["drift"]["status"] == "ok" and body["recent"]["n_games"] == 120

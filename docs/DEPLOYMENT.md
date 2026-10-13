@@ -80,6 +80,65 @@ compares its recorded SHA-256 hashes with the mounted artifacts and reports
 `missing`. After retraining, commit the updated manifest so the deployed
 record describes the artifacts you mount.
 
+## Scheduling the nightly pipeline
+
+`python -m nba_insights.pipeline` is the scheduled job. It must run where
+stats.nba.com is reachable (usually the machine that warms the cache, not a
+cloud CI runner). Each run executes these steps:
+
+| Step | What it does | Status |
+|---|---|---|
+| `warm` | Refreshes league dashboards and the top players | `degraded` if any fetch failed |
+| `pbp` (`--pbp`) | Extends the current season's play-by-play corpus (game stories, stint lineups) | `degraded` if any game failed |
+| `retrain` | Retrains when the last training run is `--retrain-days` old (default 7): re-scores the holdout and records the run in `models/manifest.json` | `skipped` until due |
+| `drift` | Scores the shipped outcome model on the current season's completed games (pre-game features only) and writes `data/models/drift.json`, served at `/methodology/drift` | `degraded` on drift |
+
+Models are fit on completed seasons only, so retraining does not change them
+within a season; live calibration is what watches the shipped model.
+
+**Alerts.** A run exits 1 and logs `ALERT` when:
+- a step fails;
+- the drift verdict fires (recent 28-day log loss above the holdout's by more than two standard errors, once 100+ games are in);
+- a step has been degraded or failed three runs in a row.
+
+Set `POSSESSION_LAB_ALERT_WEBHOOK` to a Slack-compatible incoming-webhook URL
+to also post the alert text. Every run appends one JSON line to
+`data/pipeline.jsonl` (steps, statuses, durations, alerts).
+
+With cron (non-zero exits are mailed by most cron setups):
+
+```cron
+0 6 * * * cd /srv/Sports-Analytics && uv run python -m nba_insights.pipeline --pbp
+```
+
+Or with a systemd timer (`systemctl --user enable --now possession-lab-pipeline.timer`):
+
+```ini
+# ~/.config/systemd/user/possession-lab-pipeline.service
+[Unit]
+Description=POSSESSION LAB nightly pipeline
+
+[Service]
+Type=oneshot
+WorkingDirectory=/srv/Sports-Analytics
+Environment=POSSESSION_LAB_ALERT_WEBHOOK=https://hooks.slack.com/services/...
+ExecStart=/usr/bin/env uv run python -m nba_insights.pipeline --pbp
+
+# ~/.config/systemd/user/possession-lab-pipeline.timer
+[Unit]
+Description=Run the POSSESSION LAB pipeline nightly
+
+[Timer]
+OnCalendar=*-*-* 06:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+If the API runs on another host, sync the cache afterwards (see the warmed-cache
+workflow above) and copy `data/models/` so `/methodology/drift` stays current.
+
 ## Processes and the shared cache
 
 The supported model is **one host, one local cache file, any number of

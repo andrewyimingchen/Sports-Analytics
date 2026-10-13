@@ -442,6 +442,22 @@ class ManifestReport(Schema):
     )
 
 
+class DriftReport(Schema):
+    status: str = Field(description="available, or missing until the pipeline has run")
+    season: str | None = None
+    as_of: str | None = None
+    generated_at: str | None = None
+    season_to_date: Record | None = None
+    recent: Record | None = None
+    weekly: Records | None = None
+    calibration: Records | None = None
+    reference: Record | None = Field(default=None, description="Recorded holdout metrics.")
+    drift: Record | None = Field(
+        default=None,
+        description="ok, drift, insufficient_games, no_reference, or no_games, with the rule.",
+    )
+
+
 class Registry(Schema):
     models: dict[str, RegistryEntry]
     season_backtest: Record

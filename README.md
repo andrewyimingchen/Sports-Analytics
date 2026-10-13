@@ -338,12 +338,20 @@ of July 2026, 2025-26 returns nothing — a failure-rate breaker gives up
 cleanly and the app falls back to the season-aggregate lineup dashboard
 until the data appears).
 
-Schedule it nightly with cron (run from the repo root so it fills the same
-`data/` directory the app reads):
+In production, run the nightly pipeline instead of `warm` alone. It warms the
+cache, optionally extends the play-by-play corpus (`--pbp`), retrains weekly
+(re-scoring the holdout and recording the run in the manifest), and scores the
+shipped outcome model on the current season's completed games. That live
+calibration is served at `/methodology/drift` and alerts when recent log loss
+drifts more than two standard errors above the holdout. Run it from the repo
+root so it fills the same `data/` directory the app reads:
 
 ```cron
-0 6 * * * cd /path/to/Sports-Analytics && uv run python -m nba_insights.warm --top 20
+0 6 * * * cd /path/to/Sports-Analytics && uv run python -m nba_insights.pipeline --pbp
 ```
+
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#scheduling-the-nightly-pipeline)
+for a systemd timer, alert webhooks, and the run log.
 
 ## Deployment
 
