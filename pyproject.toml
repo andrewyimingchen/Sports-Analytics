@@ -1,8 +1,11 @@
 [project]
 name = "nba-insights"
 version = "0.1.0"
-description = "NBA player intelligence: live player profiles, form trends, shot charts, and comparisons built on nba_api"
+# Distribution name predates the POSSESSION LAB brand; see README "Names".
+description = "POSSESSION LAB: NBA analytics PWA, FastAPI backend, and models built on nba_api"
 readme = "README.md"
+license = { file = "LICENSE" }
+classifiers = ["Private :: Do Not Upload"]
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115",

@@ -1,43 +1,41 @@
 # POSSESSION LAB 🏀
 
-POSSESSION LAB is an installable progressive web app backed by FastAPI. Its
-public experience lives at `/app/`; the Streamlit surface is retained as an
-internal analytics console, not a second customer-facing product. The PWA
-includes:
+POSSESSION LAB is an installable progressive web app backed by FastAPI. The
+product lives at `/app/`; the JSON API is its backend contract. The Streamlit
+app in `app/` is an internal research and diagnostics console, not a second
+customer-facing product (see [Product surfaces](docs/PRODUCT_SURFACES.md)).
+
+The PWA's primary navigation:
 
 - **League pulse** — the landing page: per-game and net/clutch-rating leaders,
-  Elo power rankings, best/worst net ratings, and the next slate with win
-  probabilities; a season selector rewinds the leaders and team form to any
-  season back to 1996-97 (Elo and the slate stay current — they're "now"
-  widgets)
-- **Player profile** — career trajectory, form trends, shot chart (raw or
-  zone-efficiency-vs-league view, regular season or playoffs) with shot
-  quality (xeFG%: selection vs making), team on/off splits, league
-  percentile ranks incl. net rating, clutch rating, and DARKO DPM — with a
-  season picker, so retired players rank against their own era (1996-97
-  onward); the header carries draft pedigree and current salary
-- **Compare players** — side-by-side stats, percentile bars, shot quality, and
-  a downloadable share poster (the Predictions page has one per matchup too)
-- **Explore stats** — a filterable player scatterplot with selectable metrics,
-  league-average quadrants, direct labels, exact-data disclosure, and CSV export
-- **Teams** — record/ratings/Elo tiles, season margin trend, roster with
-  ratings and salaries (plus committed payroll), per-player on/off impact,
-  last ten games, and conference standings
-- **Games** — season scores and schedule with team filtering; finals open a
-  cached game story with win-probability flow, turning points, shots, lineups,
-  clutch context, advanced team stats, play-by-play, and the full player box
-- **Ask (AI)** — optional natural-language questions over the cached league
-  table, enabled with the `anthropic` extra and an API credential
-- **Predictions** — game outcome probabilities, a 10,000-run Monte Carlo game
-  simulator (margin/total distributions), player points projections with 80%
-  intervals, and five-slot starting-lineup estimates
-- **Season outlook** — a 5,000-run Monte Carlo presented through East/West win
-  interval plots and probability rankings, with exact forecast tables available
-  on demand, plus playoff, top-6, #1-seed, conference finals, Finals,
-  championship, and NBA Cup odds.
-  The upcoming season uses versioned contract rosters, projected 240-minute
-  rotations, availability and age adjustments, and explainable team deltas.
-- **Methodology** — how every model is built, judged, and what was rejected
+  Elo power rankings, team form, and the next slate with win probabilities; a
+  season selector rewinds leaders and team form to any season back to 1996-97
+- **Players** — search, then a deep profile: career trajectory, form trends,
+  shot chart with hot zones and shot quality (xeFG%), league and position
+  percentile ranks incl. net rating, clutch rating, and DARKO DPM, splits,
+  on/off impact, comparables, game log, and draft pedigree (contract detail
+  for local or API-key callers only)
+- **Games** — season scores and schedule; finals open a cached game story with
+  win-probability flow, turning points, shots, lineups, clutch context,
+  advanced team stats, play-by-play, and the full box score
+- **Matchup lab** — game outcome probabilities with ranked model drivers,
+  same-sample team comparison, a 10,000-run Monte Carlo score simulator,
+  player points projections with 80% intervals, starting-five estimates, and
+  a share poster
+- **More**, which holds:
+  - **Season outlook** — 5,000-run season forecasts (seeds, playoff, title,
+    and NBA Cup odds), next-season roster inputs and player projections, and a
+    roster/injury/trade scenario lab with paired before/after simulations
+  - **Team room** — record, ratings, four factors, roster, lineups, on/off,
+    standings, and (local only) payroll
+  - **Explore stats** — the filterable, sortable league table with CSV export
+  - **Compare** — two to four players side by side, with a share poster
+  - **Tracking + hustle** — official tracking tables with definitions and
+    cache freshness
+  - **Ask the league** — optional AI questions over the cached league table
+    (needs the `ai` extra and a server-side credential)
+  - **How models work** — methodology, model registry, backtests, and the
+    reproducibility manifest
 
 Built on the official-ish [`nba_api`](https://github.com/swar/nba_api)
 (stats.nba.com). Every response is cached locally in SQLite, so repeat views
@@ -118,7 +116,7 @@ development and retirement policy.
 
 ## Predictions (ML)
 
-Three models power the app's Predictions page. Train them once (fetches three
+Three trained models power the Matchup lab. Train them once (fetches three
 past seasons through the cache, ~a minute cold):
 
 ```bash
@@ -244,14 +242,20 @@ The same FastAPI service exposes the data as JSON:
 
 | Endpoint | Returns |
 |---|---|
+| `/meta` | seasons, prediction seasons, and which optional capabilities are enabled |
+| `/league/pulse?season=2025-26` | leaders, team form, and the next slate |
+| `/league/explore?rate=per_36&teams=LAL` | the filterable, sortable league player table |
 | `/players/search?q=jokic` | matching players with IDs |
+| `/players/{id}` | one player's identity, for deep links |
 | `/players/{id}/career` | per-game averages by season |
 | `/players/{id}/percentiles` | current-season league percentile ranks |
 | `/players/{id}/insights` | scouting take, league/position ranks, ratings, draft line |
 | `/players/{id}/shots` | attempts, zones, hex hot zones, shot diet, xeFG quality |
 | `/players/{id}/splits` | home/away, month, rest, and opponent splits |
 | `/players/{id}/on-off` | current-team on/off impact |
-| `/players/{id}/contract` | local-only career salary history and current/future contract detail |
+| `/players/{id}/games?limit=12` | recent game log |
+| `/players/{id}/similar` | current-season statistical comparables |
+| `/players/{id}/contract` | career salary history and current/future contract detail (local or API-key callers only) |
 | `/compare?names=A&names=B` | side-by-side per-game stats (2–4 players) |
 | `/players/{id}/card` | self-contained HTML share card |
 | `/posters/compare?names=A&names=B` | 1:1 share poster of a comparison (`&format=png` for an image) |
@@ -261,8 +265,7 @@ The same FastAPI service exposes the data as JSON:
 | `/teams/compare?home=LAL&away=BOS&season=2026-27` | same-sample team metrics, rotations, bench/clutch/head-to-head context, probability drivers, limitations, and share/export metadata |
 | `/tracking?category=drives&scope=player&min_games=10` | official drives/touches/passing/defense/speed/hustle rows with definitions, sample filters, schema audit, cache freshness, and share metadata |
 
-The real-feed category/schema audit is recorded in
-[`docs/TRACKING_AVAILABILITY.md`](docs/TRACKING_AVAILABILITY.md).
+| `/games?season=2025-26` | full-season schedule and results |
 | `/games/{game_id}/box-score?season=2025-26` | cached player box score grouped by team, with traditional endpoint fallback |
 | `/games/{game_id}/story?season=2025-26` | cached timeline, shots, lineups, win probability, turning points, clutch, and advanced team box |
 | `/predict/game?home=LAL&away=BOS&season=2026-27` | home-team win probability and forecast data basis |
@@ -274,12 +277,19 @@ The real-feed category/schema audit is recorded in
 | `/predict/player/{id}?opponent=BOS` | points projection with empirical 80% interval |
 | `/predict/lineup?team=LAL&player_ids=…` | five-man net and win estimate |
 | `/methodology` | evaluation protocol, artifact metrics, journey, rejected ideas |
-| `/methodology/registry` | model versions, validation status, data cutoffs, baselines, and calibration |
+| `/methodology/registry` | model versions, validation status, data cutoffs, baselines, calibration, and a manifest summary |
+| `/methodology/manifest` | the tracked reproducibility manifest, verified against the loaded artifacts |
 | `POST /ask` | optional structured natural-language league Q&A |
 | `/players/{id}/headshot` | headshot proxy (CDN blocks hotlinking) |
+| `/healthz`, `/readyz` | liveness, and readiness with model availability and failure counts |
 
-Interactive docs at `/docs`. The API reads through the same cache as the app,
-so each warms the other.
+Every JSON route declares a typed response schema; interactive docs are at
+`/docs`. Errors carry a stable `reason` code (`upstream_unavailable`,
+`data_unavailable`, `artifact_unavailable`, `provider_failed`,
+`internal_error`), and responses that had to omit an optional section list it
+under `degraded`. The tracking feed's category/schema audit is recorded in
+[`docs/TRACKING_AVAILABILITY.md`](docs/TRACKING_AVAILABILITY.md). The API reads
+through the same cache as the Streamlit console, so each warms the other.
 
 ## Warming the cache
 
@@ -298,8 +308,8 @@ is a one-time cost per season):
 uv run python -m nba_insights.warm --seasons 1996-97 1997-98 2015-16
 ```
 
-The stint-level lineup table (used by the Predictions page's starting-five
-tab) and Game Center stories are built offline from play-by-play and rotation
+The stint-level lineup table (used by the Matchup lab's starting-five
+estimate) and Games-page stories are built offline from play-by-play and rotation
 data. New v4 play-by-play caches include shot coordinates; older v3 caches
 still provide timelines and shot-type summaries with an explicit location-data
 fallback in the website:
@@ -340,32 +350,52 @@ for the workflow, options, and the provided Dockerfile.
 ## Development
 
 ```bash
-uv run pytest        # tests
-uv run ruff check .  # lint
+uv sync --all-groups          # deps, dev tools, and the browser-test group
+uv run playwright install chromium   # once, for the browser suite
+uv run pytest                 # tests (offline; browser tests skip without Playwright)
+uv run ruff check .           # lint
+uv run ruff format --check .  # formatting
+uv run mypy                   # types
+npm ci && npm run lint && npm test   # PWA lint and unit tests
+uv run streamlit run app/streamlit_app.py   # internal console only
 ```
 
-CI runs both on every push and pull request. Issue tracking uses
+CI runs the Python checks on 3.11–3.13 with a coverage floor, plus PWA lint,
+browser and accessibility tests, a container smoke test, and weekly
+dependency audits. Issue tracking uses
 [beads](https://github.com/gastownhall/beads) (`bd ready` to see open work).
 
-## Data source & legal
+## Names
 
-Game and player statistics come from `nba_api` against stats.nba.com.
-Salary/contract context is scraped at minimal volume from public reference
-pages (a single summary page, cached long-term) for **personal, educational
-use only** — those sites' terms of service discourage scraping, a tension
-the project owner has knowingly accepted for local use. Scraped data is
-never served through the public API/PWA and must not be redistributed or
-used commercially. For a commercial deployment, license the data instead
-(BALLDONTLIE's GOAT tier carries contracts, injuries, and odds;
-SportsDataIO and Sportradar are the heavier options).
+**POSSESSION LAB** is the product: the PWA title and manifest, the API title,
+and the mobile app. Several internal identifiers keep the project's original
+name on purpose, because renaming them would break existing installs or
+deployments without changing anything a user sees:
 
-One external dataset is displayed with attribution: **DARKO** daily
-plus-minus projections (DPM) by Kostya Medvedovsky and Andrew Patton, from
-[darko.app](https://darko.app) — a free public site with data export and no
-formal license published. The numbers are shown as-is for personal and
-educational use and are never used as model features; remove
-`NBAClient.darko_dpm` (one cache key) if the creators ever object, or
-license the data before any commercial use.
+| Identifier | Why it stays |
+|---|---|
+| `nba-insights` distribution and `nba_insights` import package | every module path, entry point (`python -m nba_insights.*`), and the `nba_insights.api:app` server target |
+| `NBA_INSIGHTS_DATA_DIR`, `NBA_INSIGHTS_MANIFEST` | environment variables already set in deployments and containers |
+| `nba-insights-shell-*` / `nba-insights-public-data-*` service-worker caches | renaming would orphan the caches of already-installed PWAs |
 
-Data is the property of NBA Media Ventures, LLC. This tool is for personal and
-educational use.
+New user-facing text uses POSSESSION LAB; new environment variables use the
+`POSSESSION_LAB_` prefix (see the API safeguards above).
+
+## License and data terms
+
+**Code.** Copyright (c) 2025-2026 Andrew Chen. All rights reserved; see
+[`LICENSE`](LICENSE). No open-source license is granted, and the package is
+marked `Private :: Do Not Upload`.
+
+**Data.** Third-party data keeps its own terms. This project is for personal
+and educational use, and commercial use needs licensed data:
+
+| Source | Used for | Terms in this project |
+|---|---|---|
+| stats.nba.com via [`nba_api`](https://github.com/swar/nba_api) | all game, player, team, tracking, and play-by-play data | Property of NBA Media Ventures, LLC. Cached locally at rate-limited volume; personal and educational use only |
+| [DARKO](https://darko.app) DPM (Kostya Medvedovsky & Andrew Patton) | displayed alongside player ratings, with attribution | Free public site with no published license. Shown as-is and never used as a model feature; remove `NBAClient.darko_dpm` (one cache key) if the creators object, and license it before any commercial use |
+| Basketball-Reference contract pages | salary and contract context | Scraped at minimal volume (single pages, long TTLs, always through the cache), knowingly accepting the site's terms-of-service tension for local use. Served only to direct-local or API-key callers, never to anonymous remote users, and never redistributed or used commercially |
+
+For a commercial deployment, license the data instead: BALLDONTLIE's GOAT
+tier carries contracts, injuries, and odds; SportsDataIO and Sportradar are
+the heavier options.

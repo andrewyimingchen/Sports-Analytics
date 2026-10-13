@@ -16,17 +16,29 @@ On a machine that can reach stats.nba.com (a residential connection works):
 
 ```bash
 uv sync
-uv run python -m nba_insights.ml.train   # fetches + caches 4 seasons, trains models
-uv run streamlit run app/streamlit_app.py  # click through pages you care about
+uv run python -m nba_insights.warm --top 20          # league dashboards + top players
+uv run python -m nba_insights.ml.train               # fetches + caches 4 seasons, trains models
+uv run python -m nba_insights.ml.backtest --seasons 2024-25 2025-26   # season-forecast registry
+uv run python -m nba_insights.pbp.backfill --seasons 2025-26          # optional: game stories
 ```
 
-Then copy `data/` (cache + `models/*.joblib`) to the deployment target. The
-app serves everything from cache and degrades gracefully when refresh
-fetches fail: current-season entries are served stale rather than erroring.
+Then copy `data/` (cache + `models/`) to the deployment target, and commit
+the updated `models/manifest.json` so the deployed record matches the
+artifacts. The app serves everything from cache and degrades gracefully when
+refresh fetches fail: current-season entries are served stale, and the
+response's `degraded` list says which sections are missing and why.
 
-During the season, re-warm on a schedule from the same machine (a nightly
-cron running a small script that touches `team_games()`, `player_games()`,
-`league_player_stats()`, `schedule()`) and sync `data/cache.sqlite3` up.
+During the season, re-warm nightly from the same machine (the README's cron
+line runs `nba_insights.warm`) and sync the cache up. In WAL mode a plain
+file copy can miss entries still in `cache.sqlite3-wal`, so ship a
+consistent snapshot instead:
+
+```bash
+sqlite3 data/cache.sqlite3 ".backup data/cache-snapshot.sqlite3"
+```
+
+then replace the target's cache with the snapshot while its server is
+stopped (see [Processes and the shared cache](#processes-and-the-shared-cache)).
 
 ## Options
 
@@ -34,9 +46,9 @@ cron running a small script that touches `team_games()`, `player_games()`,
 |---|---|
 | **Self-host on a residential IP** (home server, Tailscale/Cloudflare Tunnel for access) | Best fit: the app can fetch for itself; zero cache choreography |
 | **VPS / container platform + warmed cache volume** | Works; data is as fresh as your last cache sync (offseason: perfectly fine) |
-| **Streamlit Community Cloud** | Expect first-fetch failures (blocked IPs) and an ephemeral filesystem — the cache resets on every reboot. Not recommended without the warmed-cache sync |
+| **Free PaaS with an ephemeral filesystem** | Expect first-fetch failures (blocked IPs) and a cache that resets on every reboot. Not recommended without a persistent volume and the warmed-cache sync |
 
-Run the official product directly with:
+The official product is the FastAPI-served PWA. Run it directly with:
 
 ```bash
 uv run uvicorn nba_insights.api:app --host 0.0.0.0 --port 8000

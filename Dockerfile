@@ -15,7 +15,7 @@ COPY --from=uv /uv /usr/local/bin/uv
 WORKDIR /app
 
 # Resolve the locked runtime first so source edits preserve the dependency layer.
-COPY pyproject.toml uv.lock README.md ./
+COPY pyproject.toml uv.lock README.md LICENSE ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 COPY src ./src

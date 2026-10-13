@@ -1,0 +1,25 @@
+Copyright (c) 2025-2026 Andrew Chen. All rights reserved.
+
+The source code, documentation, and other original material in this
+repository are proprietary. No license is granted to use, copy, modify,
+merge, publish, distribute, sublicense, or sell any part of it, except
+as permitted by applicable law or by prior written permission of the
+copyright holder. Viewing the repository on GitHub does not grant any
+such license. Contributions submitted to this repository are accepted
+only on the understanding that they may be used under these terms.
+
+Third-party material is not covered by this notice and remains subject
+to its own terms:
+
+- NBA statistics retrieved through nba_api from stats.nba.com are the
+  property of NBA Media Ventures, LLC.
+- DARKO daily plus-minus projections are the work of Kostya Medvedovsky
+  and Andrew Patton (darko.app) and are displayed with attribution.
+- Salary and contract data scraped from public reference pages is used
+  locally for personal, educational purposes only and is not
+  redistributed.
+- Vendored libraries under src/nba_insights/api/static/vendor/ and all
+  Python and JavaScript dependencies keep their own licenses.
+
+See the "License and data terms" section of README.md for how these
+sources may and may not be used.
