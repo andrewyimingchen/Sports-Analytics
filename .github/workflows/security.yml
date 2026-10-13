@@ -13,6 +13,7 @@ on:
       - mobile/package.json
       - mobile/package-lock.json
       - .github/workflows/security.yml
+      - .github/scripts/npm-audit-report.mjs
 
 jobs:
   python:
@@ -23,7 +24,7 @@ jobs:
       - name: Export locked dependencies
         run: uv export --frozen --all-extras --all-groups --no-hashes --no-emit-project > requirements-audit.txt
       - name: Audit Python dependencies
-        run: uvx pip-audit --requirement requirements-audit.txt --progress-spinner off
+        run: uvx pip-audit==2.10.1 --requirement requirements-audit.txt --progress-spinner off
 
   pwa-tooling:
     runs-on: ubuntu-latest
@@ -45,14 +46,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      # Reported, not blocking: Expo's CLI/Metro advisories have no
-      # non-breaking fix yet (Sports-Analytics-1xp.7.1). Findings raise a
-      # warning annotation; make this step fail once triage is done.
-      - name: Audit mobile dependencies (non-blocking)
+      # Findings are reported, not blocking: Expo's CLI/Metro advisories have
+      # no non-breaking fix yet (Sports-Analytics-1xp.7.1). A failed audit
+      # (registry outage, missing lockfile, CLI error) still fails the job.
+      - name: Audit mobile dependencies (findings non-blocking)
         run: |
-          if npm audit --audit-level=high > audit.txt; then
-            echo "No high-severity mobile advisories."
-          else
-            echo "::warning title=Mobile npm audit::$(grep -E 'vulnerabilit' audit.txt | tail -1) - see Sports-Analytics-1xp.7.1"
+          set +e
+          npm audit --audit-level=high --json > audit.json 2> audit.err
+          set -e
+          if ! node ../.github/scripts/npm-audit-report.mjs audit.json audit-summary.txt Sports-Analytics-1xp.7.1; then
+            cat audit.err >&2
+            exit 1
           fi
-          { echo "### Mobile npm audit"; echo '```'; tail -20 audit.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          { echo "### Mobile npm audit"; cat audit-summary.txt; } >> "$GITHUB_STEP_SUMMARY"
