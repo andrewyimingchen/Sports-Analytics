@@ -121,7 +121,23 @@ def code_identity() -> dict[str, Any]:
         dirty = bool(status.strip())
     except (OSError, subprocess.CalledProcessError):
         pass
-    return {"package_version": package, "git_commit": commit, "git_dirty": dirty}
+    return {
+        "package_version": package,
+        "git_commit": commit,
+        "git_dirty": dirty,
+        # pickled artifacts are only guaranteed to load in the versions that wrote them
+        "libraries": {name: _version_or_none(name) for name in _MODEL_LIBRARIES},
+    }
+
+
+_MODEL_LIBRARIES = ("scikit-learn", "pandas", "numpy", "joblib")
+
+
+def _version_or_none(distribution: str) -> str | None:
+    try:
+        return version(distribution)
+    except PackageNotFoundError:
+        return None
 
 
 def artifact_records(names: list[str], models_dir: Path = MODELS_DIR) -> dict[str, Any]:
