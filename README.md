@@ -101,7 +101,8 @@ functions over DataFrames — fully testable without a connection.
 
 The PWA is the official product surface; Streamlit has no public feature-parity
 obligation. See [`docs/PRODUCT_SURFACES.md`](docs/PRODUCT_SURFACES.md) for the
-development and retirement policy.
+development and retirement policy, and [`docs/PRODUCT_ROADMAP.md`](docs/PRODUCT_ROADMAP.md)
+for what stands between this repository and a product.
 
 ### Known upstream quirks handled
 
