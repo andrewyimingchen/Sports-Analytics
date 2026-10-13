@@ -4,7 +4,7 @@
 # local data into its build context; see .dockerignore and docs/DEPLOYMENT.md.
 
 FROM ghcr.io/astral-sh/uv:0.9.5 AS uv
-FROM python:3.12-slim-bookworm
+FROM python:3.14-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
