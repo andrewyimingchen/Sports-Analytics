@@ -7,11 +7,6 @@
     "scheme": "possessionlab",
     "userInterfaceStyle": "dark",
     "icon": "./assets/icon.png",
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#0A0C0F"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.possessionlab.mobile",
@@ -25,7 +20,6 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0A0C0F"
       },
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": true
     },
     "web": {
@@ -47,7 +41,8 @@
           "image": "./assets/splash.png",
           "imageWidth": 180
         }
-      ]
+      ],
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true
