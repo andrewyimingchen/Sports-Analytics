@@ -43,6 +43,7 @@ from nba_insights.errors import (
     ProviderError,
     UpstreamError,
 )
+from nba_insights.observability import capture_exception, init_error_tracking
 
 __all__ = [
     "app",
@@ -53,6 +54,8 @@ __all__ = [
     "healthcheck",
     "readiness",
 ]
+
+init_error_tracking()  # optional Sentry; no-op unless SENTRY_DSN is set
 
 app = FastAPI(
     title="POSSESSION LAB API",
@@ -100,6 +103,7 @@ async def unexpected_failure(request: Request, error: Exception) -> JSONResponse
     # Path only: query strings can carry names, and headers carry API keys.
     FAILURES.record(NBAInsightsError.reason)
     logger.error("%s %s raised unexpectedly", request.method, request.url.path, exc_info=error)
+    capture_exception(error)
     return JSONResponse(
         {"detail": "internal server error", "reason": NBAInsightsError.reason},
         status_code=500,

@@ -9,7 +9,7 @@ from pathlib import Path
 from fastapi import APIRouter
 from fastapi.responses import RedirectResponse
 
-from nba_insights.api.deps import model_availability
+from nba_insights.api.deps import model_availability, pipeline_freshness
 from nba_insights.api.schemas import Health, Meta, Readiness
 from nba_insights.config import current_season, prediction_seasons, seasons_since
 from nba_insights.errors import FAILURES
@@ -38,6 +38,7 @@ def readiness() -> dict:
         "pwa_shell": (STATIC_DIR / "index.html").exists(),
         "optional_models": model_availability(),
         "failures": FAILURES.snapshot(),
+        "data_freshness": pipeline_freshness(),
     }
 
 

@@ -13,8 +13,8 @@ jobs:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
       - name: Install dependencies
-        # mypy targets 3.11 via pyproject; the interpreter version does not matter
-        run: uv sync --frozen --python 3.12
+        # mypy targets 3.11 via pyproject; extras so optional integrations are type-checked
+        run: uv sync --frozen --python 3.12 --all-extras
       - name: Format
         run: uv run --frozen ruff format --check .
       - name: Lint
