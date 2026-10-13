@@ -22,6 +22,7 @@ import argparse
 import json
 import logging
 import os
+import sqlite3
 import sys
 import time
 from collections.abc import Callable
@@ -43,6 +44,7 @@ from nba_insights.ml.train import (
     build_matchups,
     run_training,
 )
+from nba_insights.ops import backup
 from nba_insights.pbp.backfill import backfill_season
 from nba_insights.warm import warm
 
@@ -52,6 +54,12 @@ RUN_LOG_PATH = DATA_DIR / "pipeline.jsonl"
 DRIFT_PATH = MODELS_DIR / "drift.json"
 RETRAIN_DAYS = 7
 WEBHOOK_ENV = "POSSESSION_LAB_ALERT_WEBHOOK"
+
+
+# Expected failures a step records (and alerts on) instead of crashing the run:
+# the categorized data/upstream errors plus filesystem and SQLite errors from
+# writing reports and backups.
+_STEP_ERRORS: tuple[type[BaseException], ...] = (*EXPECTED_ERRORS, OSError, sqlite3.Error)
 
 
 @dataclass
@@ -75,7 +83,7 @@ class Run:
         started = time.monotonic()
         try:
             step.status, step.detail = action()
-        except EXPECTED_ERRORS as error:
+        except _STEP_ERRORS as error:
             step.status, step.detail = "failed", f"{reason_for(error)}: {error}"
             logger.error("pipeline step %s failed", name, exc_info=True)
         step.seconds = round(time.monotonic() - started, 1)
@@ -112,6 +120,7 @@ def run_pipeline(
     retrain_days: int = RETRAIN_DAYS,
     now: datetime | None = None,
     drift_path: Path = DRIFT_PATH,
+    backup_dest: Path | None = None,
 ) -> Run:
     now = now or datetime.now(UTC)
     run = Run(started_at=now.isoformat(timespec="seconds"))
@@ -162,6 +171,14 @@ def run_pipeline(
         return "ok", verdict["status"]
 
     run.record("drift", do_drift)
+
+    if backup_dest is not None:
+
+        def do_backup() -> tuple[str, str]:
+            record = backup(backup_dest)
+            return "ok", f"{record['path']} ({len(record['files'])} files)"
+
+        run.record("backup", do_backup)
     run.finished_at = datetime.now(UTC).isoformat(timespec="seconds")
     return run
 
@@ -244,13 +261,21 @@ def main() -> None:
         default=RETRAIN_DAYS,
         help="retrain when the last training run is this many days old (0: every run)",
     )
+    parser.add_argument(
+        "--backup", type=Path, metavar="DIR", help="also write a verified backup to DIR"
+    )
     args = parser.parse_args()
 
     client = serving_client()
     # the rotation endpoint serves empty responses when hit faster than ~3s
     pbp_client = serving_client(delay=3.0) if args.pbp else None
     run = run_pipeline(
-        client, top=args.top, pbp=args.pbp, pbp_client=pbp_client, retrain_days=args.retrain_days
+        client,
+        top=args.top,
+        pbp=args.pbp,
+        pbp_client=pbp_client,
+        retrain_days=args.retrain_days,
+        backup_dest=args.backup,
     )
     add_persistence_alerts(run, recent_runs())
     append_run_log(run)

@@ -159,3 +159,13 @@ def test_recent_runs_skips_unreadable_lines(tmp_path):
     log.write_text('{"steps": []}\nnot json\n{"steps": [1]}\n')
     assert pipeline.recent_runs(log, n=3) == [{"steps": []}, {"steps": [1]}]
     assert pipeline.recent_runs(tmp_path / "missing.jsonl") == []
+
+
+def test_backup_step_runs_when_a_destination_is_given(stubbed, monkeypatch):
+    calls, _, tmp_path = stubbed
+    monkeypatch.setattr(
+        pipeline, "backup", lambda dest: calls.append("backup") or {"path": str(dest), "files": {}}
+    )
+    run = _run(tmp_path, backup_dest=tmp_path / "backups")
+    assert calls[-1] == "backup"
+    assert run.steps[-1].name == "backup" and run.steps[-1].status == "ok"

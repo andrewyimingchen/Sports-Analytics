@@ -16,10 +16,10 @@ WORKDIR /app
 
 # Resolve the locked runtime first so source edits preserve the dependency layer.
 COPY pyproject.toml uv.lock README.md LICENSE ./
-RUN uv sync --frozen --no-dev --no-install-project
+RUN uv sync --frozen --no-dev --extra monitoring --no-install-project
 
 COPY src ./src
-RUN uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev --extra monitoring
 # Tracked provenance record; /methodology/manifest verifies the mounted artifacts against it.
 COPY models ./models
 

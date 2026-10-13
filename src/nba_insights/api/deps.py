@@ -8,13 +8,14 @@ loading model artifacts themselves.
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from functools import lru_cache
 from typing import Annotated, Any
 
 from fastapi import Depends
 
 from nba_insights.analysis import ROSTER_INPUT_VERSION
-from nba_insights.config import MANIFEST_PATH, MODELS_DIR, set_season_started_check
+from nba_insights.config import DATA_DIR, MANIFEST_PATH, MODELS_DIR, set_season_started_check
 from nba_insights.errors import ArtifactUnavailableError
 from nba_insights.ingest import NBAClient
 from nba_insights.ml import GameOutcomeModel, PlayerPointsModel, WinCurve
@@ -193,3 +194,32 @@ def get_drift_report() -> dict[str, Any] | None:
         return json.loads((MODELS_DIR / "drift.json").read_text())
     except (OSError, ValueError):
         return None
+
+
+PIPELINE_STALE_HOURS = 36.0
+
+
+def pipeline_freshness(now: datetime | None = None) -> dict[str, Any]:
+    """When the nightly pipeline last finished, and whether that is stale.
+
+    Read from the tail of data/pipeline.jsonl per request; an uptime monitor
+    (``python -m nba_insights.ops check``) alerts on ``stale``.
+    """
+    path = DATA_DIR / "pipeline.jsonl"
+    try:
+        last = json.loads(path.read_text().splitlines()[-1])
+    except (OSError, ValueError, IndexError):
+        return {"last_pipeline_run": None, "hours_since_pipeline": None, "stale": True}
+    finished = last.get("finished_at") or last.get("started_at")
+    try:
+        hours = (
+            (now or datetime.now(UTC)) - datetime.fromisoformat(finished)
+        ).total_seconds() / 3600
+    except (TypeError, ValueError):
+        return {"last_pipeline_run": finished, "hours_since_pipeline": None, "stale": True}
+    return {
+        "last_pipeline_run": finished,
+        "hours_since_pipeline": round(hours, 1),
+        "stale": hours > PIPELINE_STALE_HOURS,
+        "last_run_alerts": len(last.get("alerts") or []),
+    }

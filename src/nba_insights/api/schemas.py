@@ -72,6 +72,12 @@ class Readiness(Schema):
     failures: dict[str, int] = Field(
         description="Failures by reason code since this process started."
     )
+    data_freshness: Record = Field(
+        description=(
+            "When the nightly pipeline last finished (hours_since_pipeline) and whether "
+            "that is stale (over 36 hours); readiness itself does not fail on staleness."
+        )
+    )
 
 
 class Degradation(Schema):

@@ -139,6 +139,45 @@ WantedBy=timers.target
 If the API runs on another host, sync the cache afterwards (see the warmed-cache
 workflow above) and copy `data/models/` so `/methodology/drift` stays current.
 
+## Monitoring and backups
+
+**Error tracking (optional).** Set `SENTRY_DSN` and the API reports
+unexpected 500s (`internal_error`) to Sentry; the production image includes
+the `monitoring` extra (`uv sync --extra monitoring` elsewhere). Events carry
+no personal data: query strings, cookies, and `X-API-Key`/`Authorization`
+headers are stripped. Optional: `SENTRY_ENVIRONMENT`, `SENTRY_RELEASE`,
+`SENTRY_TRACES_SAMPLE_RATE` (default 0, errors only).
+
+**Uptime and freshness.** `/healthz` is liveness. `/readyz` adds model
+availability, failure counts by reason, and `data_freshness`: when the
+nightly pipeline last finished and whether that is `stale` (over 36 hours;
+readiness itself stays `ready`). Point any uptime monitor at `/readyz`, or
+run the bundled check from a different machine:
+
+```bash
+uv run python -m nba_insights.ops check https://lab.example.com --max-stale-hours 36
+```
+
+It exits 1 (and posts to `POSSESSION_LAB_ALERT_WEBHOOK` when set) if the
+service is unreachable, not ready, or its data is stale.
+
+**Backups.** Add `--backup DIR` to the nightly pipeline, or run it alone:
+
+```bash
+uv run python -m nba_insights.ops backup --dest /backups/possession-lab --keep 14
+```
+
+Each backup is a timestamped directory with an online SQLite copy of the
+cache (consistent while the API and pipeline run, unlike a file copy in WAL
+mode, and checked with `PRAGMA quick_check`), the model artifacts,
+`models/manifest.json`, the pipeline run log, and `backup.json` with SHA-256
+hashes. Only complete backups are kept; the newest `--keep` survive.
+
+To restore: stop every process using the cache, copy the backup's
+`cache.sqlite3` to `data/` (delete any leftover `cache.sqlite3-wal` and
+`-shm` first), copy `models/` to `data/models/`, start the API, and confirm
+`/methodology/manifest` reports `verified`.
+
 ## Processes and the shared cache
 
 The supported model is **one host, one local cache file, any number of
