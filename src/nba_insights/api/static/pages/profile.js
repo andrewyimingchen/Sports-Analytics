@@ -67,19 +67,19 @@ async function loadProfile(id, name) {
     profile.innerHTML = `
       <div class="profile-hero">
         <img class="player-photo" src="/players/${id}/headshot" alt="${escapeHTML(name)}" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'player-fallback',textContent:'${escapeHTML(initials)}'}))">
-        <div class="profile-identity"><div class="season">${escapeHTML(latest.SEASON_ID)} / Latest season</div><h2>${escapeHTML(name)}</h2><p>${fmt(latest.GP,0)} games logged · Per-game production</p></div>
+        <div class="profile-identity"><div class="season">${escapeHTML(latest.SEASON_ID)} / Latest season</div><h2 class="profile-name">${escapeHTML(name)}</h2><p>${fmt(latest.GP,0)} games logged · Per-game production</p></div>
       </div>
       <div class="profile-body">
         <div class="stat-grid">${stats.map(([label,value]) => `<div class="stat"><b>${value}</b><span>${label}${["PTS","AST","REB"].includes(label) ? " / game" : ""}</span></div>`).join("")}</div>
         <div class="profile-lower">
           <div id="profile-trend-chart"></div>
-          <div id="profile-pct-chart">${pctEntries.length ? "" : '<div class="subhead"><h3>League standing</h3><span>NOT AVAILABLE</span></div><p class="search-hint">Current-season percentiles are available for active players with a qualifying sample.</p>'}</div>
+          <div id="profile-pct-chart">${pctEntries.length ? "" : '<div class="subhead"><h2>League standing</h2><span>NOT AVAILABLE</span></div><p class="search-hint">Current-season percentiles are available for active players with a qualifying sample.</p>'}</div>
         </div>
         <div class="insight-stack">
-          <div><div class="subhead"><h3>Recent form</h3><span>LAST ${recentGames.length} GAMES</span></div>
+          <div><div class="subhead"><h2>Recent form</h2><span>LAST ${recentGames.length} GAMES</span></div>
             ${recentGames.length ? `<div class="game-strip">${recentGames.map(game => `<div class="game-chip ${game.WL === "W" ? "win" : "loss"}"><div class="game-date">${escapeHTML(game.DATE)}</div><b>${escapeHTML(game.PTS)} PTS</b><span>${escapeHTML(game.MATCHUP)} · ${escapeHTML(game.WL)}</span></div>`).join("")}</div>` : '<p class="search-hint">Recent game data is unavailable for this season.</p>'}
           </div>
-          <div><div class="subhead"><h3>Similar players</h3><span>STYLE MATCH</span></div>
+          <div><div class="subhead"><h2>Similar players</h2><span>STYLE MATCH</span></div>
             ${similar.length ? `<div class="comp-list">${similar.map(player => `<div class="comp-item"><button class="entity-link" data-player-id="${Number(player.PLAYER_ID)}" data-player-name="${escapeHTML(player.PLAYER_NAME)}"><b>${escapeHTML(player.PLAYER_NAME)}</b><small>${escapeHTML(player.TEAM_ABBREVIATION)} · ${fmt(player.PTS)} PTS</small></button><span class="comp-score">${fmt(player.SIMILARITY,0)}%</span></div>`).join("")}</div>` : '<p class="search-hint">Statistical comps require an active-season sample.</p>'}
           </div>
         </div>
@@ -113,7 +113,7 @@ async function loadProfile(id, name) {
     $("profile-season").addEventListener("change", refreshDeep);
     $("profile-season-type").addEventListener("change", refreshDeep);
     await refreshDeep();
-  } catch (error) { profile.innerHTML = `<div class="empty-state"><div><h3>Profile unavailable</h3><p class="error">${escapeHTML(error.message)}</p></div></div>`; }
+  } catch (error) { profile.innerHTML = `<div class="empty-state"><div><h2>Profile unavailable</h2><p class="error">${escapeHTML(error.message)}</p></div></div>`; }
 }
 
 // Exact values behind every chart, as a real table for screen readers.
@@ -176,7 +176,7 @@ async function loadProfileDeep(id, name, season, seasonType) {
   const ratings = insights?.ratings || {}, positionPercentiles = Object.fromEntries(Object.entries(insights?.position_percentiles || {}).filter(([,value]) => Number.isFinite(Number(value))));
   const quality = shots?.quality || {}, breakdown = shots?.breakdown || [];
   target.innerHTML = `
-    <section class="deep-panel"><div class="subhead"><h3>Scouting context</h3><span>${escapeHTML(insights?.season || season)} · ${escapeHTML(insights?.position_group || "League")}</span></div>
+    <section class="deep-panel"><div class="subhead"><h2>Scouting context</h2><span>${escapeHTML(insights?.season || season)} · ${escapeHTML(insights?.position_group || "League")}</span></div>
       ${insights?.scouting_take ? `<div class="scouting-card">${escapeHTML(insights.scouting_take)}</div>` : '<p class="analytics-note">Scouting context is unavailable for this sample.</p>'}
       <div class="context-grid">
         <div class="context-tile"><b>${ratings.NET_RATING == null ? "—" : `${Number(ratings.NET_RATING)>=0?"+":""}${fmt(ratings.NET_RATING)}`}</b><span>Net rating</span></div>
@@ -185,20 +185,20 @@ async function loadProfileDeep(id, name, season, seasonType) {
         <div class="context-tile"><b>${escapeHTML(insights?.draft || "Undrafted")}</b><span>Draft pedigree</span></div>
       </div>${Object.keys(positionPercentiles).length ? '<div id="position-pct-chart" style="margin-top:20px"></div>' : ""}
     </section>
-    <section class="deep-panel"><div class="subhead"><h3>On / off impact</h3><span>${escapeHTML(onOff ? "CURRENT TEAM" : "UNAVAILABLE")}</span></div>
+    <section class="deep-panel"><div class="subhead"><h2>On / off impact</h2><span>${escapeHTML(onOff ? "CURRENT TEAM" : "UNAVAILABLE")}</span></div>
       ${onOff ? `<div class="context-grid"><div class="context-tile"><b>${fmt(onOff.NET_ON)}</b><span>Team net · on</span></div><div class="context-tile"><b>${fmt(onOff.NET_OFF)}</b><span>Team net · off</span></div><div class="context-tile"><b>${Number(onOff.NET_DIFF)>=0?"+":""}${fmt(onOff.NET_DIFF)}</b><span>On/off swing</span></div><div class="context-tile"><b>${fmt(onOff.MIN_ON,0)}</b><span>Minutes on</span></div></div>` : '<p class="analytics-note">On/off data is available for active players with a current team row.</p>'}
     </section>
-    <section class="deep-panel"><div class="subhead"><h3>Shot intelligence</h3><span>${escapeHTML(seasonType)} · ${shots?.attempts?.length || 0} attempts</span></div>
+    <section class="deep-panel"><div class="subhead"><h2>Shot intelligence</h2><span>${escapeHTML(seasonType)} · ${shots?.attempts?.length || 0} attempts</span></div>
       <div class="profile-controls"><label>Chart view<select id="shot-mode"><option value="hex">Hot zones</option><option value="zone">Zone vs league</option><option value="raw">Makes / misses</option></select></label></div>
       <div class="shot-layout"><div><div id="shot-viz">${shotCourt(shots,"hex")}</div><div class="shot-key"><span><i style="background:#c9f65b"></i>Above / made</span><span><i style="background:#ff6b6b"></i>Below league</span><span><i style="background:#6f7884"></i>Neutral / missed</span></div></div>
       <div><div class="context-grid" style="grid-template-columns:1fr 1fr"><div class="context-tile"><b>${quality.XEFG==null?"—":fmt(Number(quality.XEFG)*100)+"%"}</b><span>Expected eFG%</span></div><div class="context-tile"><b>${quality.EFG==null?"—":fmt(Number(quality.EFG)*100)+"%"}</b><span>Actual eFG%</span></div><div class="context-tile"><b>${quality.MAKING==null?"—":`${Number(quality.MAKING)>=0?"+":""}${fmt(Number(quality.MAKING)*100)}`}</b><span>Shot making</span></div><div class="context-tile"><b>${quality.LEAGUE_EFG==null?"—":fmt(Number(quality.LEAGUE_EFG)*100)+"%"}</b><span>League eFG%</span></div></div>
       <div style="margin-top:14px">${breakdown.map(zone => `<div class="zone-row"><b>${escapeHTML(zone.ZONE)}</b><span>${fmt(Number(zone.SHARE)*100)}%</span><span>${fmt(Number(zone.FG_PCT)*100)}%</span><span class="${Number(zone.DIFF)>=0?"positive":"negative-text"}">${zone.DIFF==null?"—":`${Number(zone.DIFF)>=0?"+":""}${fmt(Number(zone.DIFF)*100)}`}</span></div>`).join("")}</div></div></div>
       <p class="analytics-note">Hot-zone size is shot volume; color is accuracy versus the league expectation for those locations.</p>
     </section>
-    <section class="deep-panel"><div class="subhead"><h3>Situational splits</h3><span>${escapeHTML(season)}</span></div>
+    <section class="deep-panel"><div class="subhead"><h2>Situational splits</h2><span>${escapeHTML(season)}</span></div>
       <div class="profile-controls"><label>Split by<select id="split-mode"><option value="home_away">Home / away</option><option value="month">Month</option><option value="rest">Rest</option><option value="opponent">Opponent</option></select></label></div><div id="split-viz"></div>
     </section>
-    <section class="deep-panel"><div class="subhead"><h3>Contract & salary</h3><span>LOCAL-ONLY DATA</span></div>
+    <section class="deep-panel"><div class="subhead"><h2>Contract & salary</h2><span>LOCAL-ONLY DATA</span></div>
       ${contract ? `<div class="context-grid"><div class="context-tile"><b>${money(Object.values(contract.salaries)[0])}</b><span>Current salary</span></div><div class="context-tile"><b>${money(Object.values(contract.salaries).reduce((sum,value)=>sum+Number(value),0))}</b><span>Committed total</span></div><div class="context-tile"><b>${money(contract.guaranteed)}</b><span>Guaranteed</span></div></div><div style="margin-top:13px">${Object.entries(contract.salaries).map(([year,value]) => `<div class="contract-row"><b>${escapeHTML(year)}</b><span>${money(value)}</span><span></span><span></span></div>`).join("")}</div><p class="analytics-note">Scraped weekly for personal use and served only to the local machine.</p>` : '<p class="analytics-note">No listed contract, or this request is not coming from the local machine.</p>'}
     </section>`;
   $("shot-mode")?.addEventListener("change", event => { $("shot-viz").innerHTML = shotCourt(shots,event.target.value); });
@@ -238,6 +238,6 @@ registerDeepLink("players", async param => {
     const player = await api(`/players/${id}`);
     await openPlayerProfile(id, player.full_name);
   } catch (error) {
-    $("profile").innerHTML = `<div class="empty-state"><div><h3>Player not found</h3><p class="error">${escapeHTML(error.message)}</p><p>Search by name instead.</p></div></div>`;
+    $("profile").innerHTML = `<div class="empty-state"><div><h2>Player not found</h2><p class="error">${escapeHTML(error.message)}</p><p>Search by name instead.</p></div></div>`;
   }
 });
