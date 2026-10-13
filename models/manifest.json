@@ -141,16 +141,16 @@
     "train": {
       "artifacts": {
         "metrics.json": {
-          "bytes": 587,
-          "sha256": "1b702f403fa2fa3f3d904f7105db2079e197004c8477112f36a4129e2b6b01e6"
+          "bytes": 1117,
+          "sha256": "cc0ab9ac7304ebd5613dc47c5c8513a2865bd7ca546ac68b45d3ca024acaca4d"
         },
         "outcome.joblib": {
           "bytes": 2321,
           "sha256": "30596bc603e9693017dfef423ad31f7c68f55cbeb3cbc081e36b7dff5fcaeb6b"
         },
         "points.joblib": {
-          "bytes": 2548,
-          "sha256": "273575f9461b71a9f3a0d5199e4eda62af7f6e634767f6438039b1335767307b"
+          "bytes": 6277,
+          "sha256": "b1433508cb5e255d3bb87a2d6397787b54184bbfa69a26ea78e8f72250d8cf1c"
         },
         "win_curve.joblib": {
           "bytes": 32,
@@ -158,17 +158,25 @@
         }
       },
       "code": {
-        "git_commit": null,
-        "git_dirty": null,
-        "package_version": null
+        "git_commit": "dc77d25d77d3f6b223d844c37951f794d1008219",
+        "git_dirty": false,
+        "package_version": "0.1.0"
       },
-      "command": "backfill python -m nba_insights.ml.train",
+      "command": "python /home/andre/workspace/Sports-Analytics/src/nba_insights/ml/train.py",
       "configuration": {
-        "outcome_C": 0.25,
+        "elo_warmup_seasons": 2,
+        "outcome_C_grid": [
+          0.05,
+          0.1,
+          0.25,
+          0.5,
+          1.0
+        ],
         "train_seasons": 3
       },
       "data": {
         "dev_season": "2024-25",
+        "holdout_cutoff": "2026-04-12",
         "holdout_season": "2025-26",
         "train_seasons": [
           "2022-23",
@@ -177,8 +185,7 @@
         ]
       },
       "feature_schema": {
-        "code_fingerprint": "4e7a7c6e23097bf0",
-        "matches_code": true,
+        "fingerprint": "81269414893b4be1",
         "outcome": [
           "form_win_pct_diff",
           "form_pts_diff",
@@ -196,6 +203,20 @@
           "missing_min_diff",
           "elo_diff"
         ],
+        "points": [
+          "pts_r5",
+          "pts_r10",
+          "min_r5",
+          "fga_r5",
+          "home",
+          "rest_days",
+          "opp_form_net",
+          "opp_form_drtg",
+          "opp_form_pace",
+          "rate_ewm",
+          "min_ewm",
+          "own_missing_min"
+        ],
         "points_minutes": [
           "min_r5",
           "min_ewm",
@@ -212,7 +233,53 @@
           "opp_form_net",
           "own_missing_min"
         ],
-        "source": "read from saved artifacts"
+        "stat_line_rates": {
+          "AST": [
+            "ast_rate_ewm",
+            "fga_r5",
+            "home",
+            "opp_form_drtg",
+            "opp_form_pace",
+            "opp_form_net",
+            "own_missing_min"
+          ],
+          "FG3M": [
+            "fg3m_rate_ewm",
+            "fga_r5",
+            "home",
+            "opp_form_drtg",
+            "opp_form_pace",
+            "opp_form_net",
+            "own_missing_min"
+          ],
+          "PTS": [
+            "rate_ewm",
+            "fga_r5",
+            "home",
+            "opp_form_drtg",
+            "opp_form_pace",
+            "opp_form_net",
+            "own_missing_min"
+          ],
+          "REB": [
+            "reb_rate_ewm",
+            "fga_r5",
+            "home",
+            "opp_form_drtg",
+            "opp_form_pace",
+            "opp_form_net",
+            "own_missing_min"
+          ],
+          "STL": [
+            "stl_rate_ewm",
+            "fga_r5",
+            "home",
+            "opp_form_drtg",
+            "opp_form_pace",
+            "opp_form_net",
+            "own_missing_min"
+          ]
+        }
       },
       "metrics": {
         "outcome": {
@@ -226,6 +293,28 @@
         "points": {
           "baseline_mae": 4.7162186379928315,
           "interval_coverage": 0.803763440860215,
+          "line": {
+            "AST": {
+              "baseline_mae": 1.3865874363327673,
+              "mae": 1.3626066171614908
+            },
+            "FG3M": {
+              "baseline_mae": 0.9181428032446706,
+              "mae": 0.9166167709756697
+            },
+            "PTS": {
+              "baseline_mae": 4.7162186379928315,
+              "mae": 4.580501817931055
+            },
+            "REB": {
+              "baseline_mae": 1.9478305980003772,
+              "mae": 1.9021576176653758
+            },
+            "STL": {
+              "baseline_mae": 0.7480946991133749,
+              "mae": 0.7245332278024283
+            }
+          },
           "mae": 4.580501817931055,
           "n_games": 21204
         },
@@ -234,15 +323,90 @@
       "models": {
         "lineup": "lineup-blend-v1",
         "outcome": "logistic-outcome-v1",
-        "player_points": "player-points-v1"
+        "player_points": "player-points-v2-statline"
       },
-      "recorded_at": "2026-07-16T13:53:17+00:00",
+      "recorded_at": "2026-10-13T04:55:10+00:00",
       "sources": {
-        "reason": "artifact produced before manifest tracking; rerun the command to record sources",
-        "status": "not_recorded"
+        "count": 12,
+        "fingerprint": "513d9f56bab8bd64",
+        "snapshots": [
+          {
+            "fetched_at": "2026-07-14T22:34:34.340263+00:00",
+            "fingerprint": "01c904a7d47647de",
+            "key": "game_finder/P/2021-22",
+            "rows": 26039
+          },
+          {
+            "fetched_at": "2026-07-14T20:37:42.314800+00:00",
+            "fingerprint": "aa459c842111542b",
+            "key": "game_finder/P/2022-23",
+            "rows": 25895
+          },
+          {
+            "fetched_at": "2026-07-14T20:37:46.620691+00:00",
+            "fingerprint": "39df4ed04ca533e4",
+            "key": "game_finder/P/2023-24",
+            "rows": 26401
+          },
+          {
+            "fetched_at": "2026-07-14T20:37:48.254548+00:00",
+            "fingerprint": "8368a8d5ffb1d93f",
+            "key": "game_finder/P/2024-25",
+            "rows": 26306
+          },
+          {
+            "fetched_at": "2026-07-23T20:43:28.263777+00:00",
+            "fingerprint": "9497690905d81fba",
+            "key": "game_finder/P/2025-26",
+            "rows": 26651
+          },
+          {
+            "fetched_at": "2026-07-15T01:18:32.067573+00:00",
+            "fingerprint": "cdde468c85583c33",
+            "key": "game_finder/T/2020-21",
+            "rows": 2160
+          },
+          {
+            "fetched_at": "2026-07-15T01:18:32.630280+00:00",
+            "fingerprint": "e5ff28b30150e332",
+            "key": "game_finder/T/2021-22",
+            "rows": 2460
+          },
+          {
+            "fetched_at": "2026-07-14T20:37:40.021853+00:00",
+            "fingerprint": "f0b5bdd4294def90",
+            "key": "game_finder/T/2022-23",
+            "rows": 2460
+          },
+          {
+            "fetched_at": "2026-07-14T20:37:40.272785+00:00",
+            "fingerprint": "7ceb5a520b67c809",
+            "key": "game_finder/T/2023-24",
+            "rows": 2460
+          },
+          {
+            "fetched_at": "2026-07-14T20:37:40.820055+00:00",
+            "fingerprint": "53d7f0151e4d6e09",
+            "key": "game_finder/T/2024-25",
+            "rows": 2460
+          },
+          {
+            "fetched_at": "2026-10-12T22:51:31.236616+00:00",
+            "fingerprint": "37d1537319c86547",
+            "key": "game_finder/T/2025-26",
+            "rows": 2460
+          },
+          {
+            "fetched_at": "2026-10-13T04:49:44.710049+00:00",
+            "fingerprint": "100d815f6124a35a",
+            "key": "game_finder/T/2026-27",
+            "rows": 0
+          }
+        ],
+        "status": "recorded"
       }
     }
   },
   "schema_version": "model-manifest-v1",
-  "updated_at": "2026-07-22T15:21:25+00:00"
+  "updated_at": "2026-10-13T04:55:10+00:00"
 }
