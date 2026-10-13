@@ -32,7 +32,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 24
       - name: Audit PWA tooling
         run: npm audit --audit-level=high
 
@@ -45,7 +45,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 24
       # Findings are reported, not blocking. After the 2026-10 non-breaking
       # fix (no criticals; 33 left), the remainder sit in Expo SDK 56's
       # CLI/Metro toolchain and need an SDK upgrade, not npm's "fix" (a
