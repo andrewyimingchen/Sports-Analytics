@@ -13,6 +13,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from nba_insights.config import current_season
+from nba_insights.errors import EXPECTED_ERRORS
 from nba_insights.ml.features import OUTCOME_FEATURES
 from nba_insights.ml.performance import MIN_FEATURES, RATE_FEATURES
 from nba_insights.ml.train import build_elo, build_matchups
@@ -246,7 +247,7 @@ features, the classifier is not the bottleneck.
                 "65% of the time — this is what log loss optimizes for, and why "
                 "the predictions can be read as honest probabilities."
             )
-        except Exception as e:
+        except EXPECTED_ERRORS as e:
             st.caption(f"Calibration analysis unavailable: {e}")
 
     st.divider()

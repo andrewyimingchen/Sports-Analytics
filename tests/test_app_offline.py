@@ -73,6 +73,24 @@ def build_fixture_cache(db_path: Path, gp: int = 55, empty_league: bool = False)
             game_prefix=f"S{n}G",
         )
         cache.put(f"game_finder/T/{season}", games)
+    # Offseason schedule: one finished game, so the next-slate widget finds
+    # no upcoming games instead of fetching.
+    cache.put(
+        f"schedule/{cur}",
+        pd.DataFrame(
+            {
+                "gameId": ["0042500407"],
+                "gameDate": ["06/20/2026 00:00:00"],
+                "gameDateTimeEst": ["2026-06-20T20:30:00Z"],
+                "gameStatus": [3],
+                "gameStatusText": ["Final"],
+                "homeTeam_teamTricode": ["T1"],
+                "awayTeam_teamTricode": ["T2"],
+                "homeTeam_score": [101],
+                "awayTeam_score": [99],
+            }
+        ),
+    )
 
 
 @pytest.fixture
@@ -88,8 +106,10 @@ def offline_app(tmp_path, monkeypatch):
         build_fixture_cache(tmp_path / "cache.sqlite3", **cache_kwargs)
         monkeypatch.setattr(client_mod, "CACHE_DB", tmp_path / "cache.sqlite3")
 
-        def no_network(self, fetch):
-            raise AssertionError("app hit the network despite a full fixture cache")
+        def no_network(self, fetch, key=""):
+            # AssertionError is not an expected failure category, so the
+            # console cannot swallow it as "unavailable"
+            raise AssertionError(f"app hit the network for {key!r} despite a full fixture cache")
 
         monkeypatch.setattr(client_mod.NBAClient, "_call", no_network)
         # leader tiles fetch headshots from the NBA CDN; stub them offline
