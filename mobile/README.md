@@ -66,3 +66,20 @@ npx eas-cli build --platform android --profile production
 Internal installable builds use the `preview` profile. Store submissions use
 `npx eas-cli submit --platform ios` or `--platform android` after the listing,
 screenshots, privacy URLs, and signing accounts are ready.
+
+**Xcode 27 / iOS 27.** The app is on Expo SDK 57. Apps built with the iOS 27
+SDK must use the UIKit scene-based lifecycle or they will not launch on
+iOS 27. If your EAS image or local toolchain builds with Xcode 27 before the
+app moves to SDK 58, opt in first (`expo@57.0.23`+ is already required):
+
+```bash
+npx expo install expo-build-properties
+```
+
+```json
+["expo-build-properties", { "ios": { "enableSceneSupport": true } }]
+```
+
+Add that entry to `plugins` in `app.json`, then verify an iOS build launches.
+The setting becomes a no-op on SDK 58 and should be removed then. See
+[Expo's guide](https://github.com/expo/fyi/blob/main/ios-scene-lifecycle.md#staying-on-sdk-57-with-xcode-27).
