@@ -35,6 +35,10 @@ updates:
       - dependency-name: typescript
       - dependency-name: "@types/react"
       - dependency-name: eslint-config-expo
+      # eslint-config-expo's bundled eslint-plugin-react breaks on ESLint 10
+      # (context.getFilename was removed); keep 9.x until Expo's config moves.
+      - dependency-name: eslint
+        update-types: [version-update:semver-major]
   - package-ecosystem: github-actions
     directory: /
     schedule:
