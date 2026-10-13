@@ -60,6 +60,7 @@ from nba_insights.config import (
     seasons_since,
     set_season_started_check,
 )
+from nba_insights.errors import EXPECTED_ERRORS
 from nba_insights.ingest import NBAClient
 from nba_insights.ml import (
     GameOutcomeModel,
@@ -197,7 +198,7 @@ def prediction_snapshot(_client: NBAClient) -> pd.DataFrame:
     games = _client.team_games()
     try:
         priors = prior_team_form(_client.team_games(past_seasons(1)[0]))
-    except Exception:
+    except EXPECTED_ERRORS:
         logger.warning("prior-season form unavailable; serving unseeded snapshot", exc_info=True)
         priors = None
     return team_form_snapshot(games, form_priors=priors)
@@ -212,7 +213,7 @@ def contracts_table(_client: NBAClient) -> pd.DataFrame | None:
     """
     try:
         return _client.player_contracts()
-    except Exception:
+    except EXPECTED_ERRORS:
         logger.warning("contracts unavailable", exc_info=True)
         return None
 
@@ -981,7 +982,7 @@ def shot_quality_tiles(
         sq = shot_quality(
             shots, client.shot_league_averages(season=season, season_type=season_type)
         )
-    except Exception:
+    except EXPECTED_ERRORS:
         logger.warning("shot quality unavailable", exc_info=True)
         return
     if not sq["FGA"] or pd.isna(sq["EFG"]):
@@ -1013,7 +1014,7 @@ def on_off_tiles(client: NBAClient, player: dict, totals: pd.DataFrame) -> None:
             return
         table = team_on_off(client.team_player_on_off(team_id))
         row = table[table["PLAYER_ID"] == player["id"]]
-    except Exception:
+    except EXPECTED_ERRORS:
         logger.warning("on/off splits unavailable for profile", exc_info=True)
         return
     if row.empty:
@@ -1053,7 +1054,7 @@ def contract_section(client: NBAClient, player: dict, contracts: pd.DataFrame | 
     if pd.notna(slug):
         try:
             history = client.player_salary_history(str(slug))
-        except Exception:
+        except EXPECTED_ERRORS:
             logger.warning("career salary history unavailable for profile", exc_info=True)
 
     chart = history[["SEASON", "SALARY"]].copy()
@@ -1138,7 +1139,7 @@ def splits_section(log: pd.DataFrame) -> None:
     )
     try:
         table = player_splits(log, _SPLIT_CHOICES[choice])
-    except Exception as e:
+    except EXPECTED_ERRORS as e:
         st.caption(f"Splits unavailable: {e}")
         return
     if table.empty:
@@ -1171,7 +1172,7 @@ def clutch_shooting_section(client: NBAClient, player: dict, season: str, season
     try:
         clutch = client.league_player_clutch_base(season=season, season_type=season_type)
         line = clutch_shooting_line(clutch, player["id"])
-    except Exception:
+    except EXPECTED_ERRORS:
         logger.warning("clutch shooting unavailable", exc_info=True)
         return
     if not line:
@@ -1236,7 +1237,7 @@ def season_detail(client: NBAClient, player: dict, seasons: list[str]) -> None:
                 )
             splits_section(log)
             clutch_shooting_section(client, player, season, season_type)
-    except Exception as e:
+    except EXPECTED_ERRORS as e:
         st.error(f"Could not load game log: {e}")
 
     st.subheader("Shooting")
@@ -1292,9 +1293,9 @@ def season_detail(client: NBAClient, player: dict, seasons: list[str]) -> None:
                         "each range; color is FG% vs league (blue above, red "
                         "below); labels show FG% and points per shot."
                     )
-            except Exception:
+            except EXPECTED_ERRORS:
                 logger.warning("shot breakdown unavailable", exc_info=True)
-    except Exception as e:
+    except EXPECTED_ERRORS as e:
         st.error(f"Could not load shot chart: {e}")
 
 
@@ -1325,7 +1326,7 @@ def leader_suggestions(client: NBAClient, *keys: str) -> None:
     """Clickable current-scoring-leader chips that fill the search box(es)."""
     try:
         leaders = league_leaders(client.league_player_stats(), "PTS", top=5)
-    except Exception:
+    except EXPECTED_ERRORS:
         return
     names = list(leaders["PLAYER_NAME"])
     if len(keys) == 1:
@@ -1376,12 +1377,12 @@ def profile_page(client: NBAClient) -> None:
             ranks = raw_ranks.rename(STAT_LABELS)
         except KeyError:
             ranks = None  # not enough games for league ranks this season
-        except Exception:
+        except EXPECTED_ERRORS:
             logger.warning("league ratings unavailable for profile", exc_info=True)
     draft_note = None
     try:
         draft_note = player_draft_line(client.draft_history(), player["id"])
-    except Exception:
+    except EXPECTED_ERRORS:
         logger.warning("draft history unavailable for profile", exc_info=True)
     salary_note = None
     contracts = contracts_table(client)
@@ -1391,7 +1392,7 @@ def profile_page(client: NBAClient) -> None:
             salary = row["SALARY"].iloc[0] if "SALARY" in row.columns else None
             if pd.notna(salary):
                 salary_note = f"${salary / 1e6:.1f}M in {salary_seasons(contracts)[0]}"
-        except Exception:
+        except EXPECTED_ERRORS:
             logger.warning("salary lookup failed for profile", exc_info=True)
     profile_header(player, totals, per_game, ratings, draft_note, salary_note)
     # narrative take first (the headline), then the percentile pills reinforce it
@@ -1421,7 +1422,7 @@ def comps_section(client: NBAClient, player: dict) -> None:
         comps = similar_players(league, player["full_name"], n=8)
     except KeyError:
         return  # not in this season's pool (retired / too few minutes)
-    except Exception:
+    except EXPECTED_ERRORS:
         logger.warning("player comps unavailable", exc_info=True)
         return
     if comps.empty:
@@ -1483,7 +1484,7 @@ def percentile_section(client: NBAClient, player: dict, seasons: list[str]) -> N
     except KeyError:
         st.caption(f"Not enough games in {season} for percentile ranks.")
         return
-    except Exception as e:
+    except EXPECTED_ERRORS as e:
         st.caption(f"Percentiles unavailable: {e}")
         return
     st.plotly_chart(percentile_chart(ranks, title=title), width="stretch", key="profile_pct")
@@ -1568,7 +1569,7 @@ def compare_page(client: NBAClient) -> None:
             if s in table.index
         ]
         table = table.loc[row_order]
-    except Exception as e:
+    except EXPECTED_ERRORS as e:
         st.error(f"Could not load career comparison: {e}")
         return
     st.subheader("Career averages")
@@ -1621,7 +1622,7 @@ def compare_page(client: NBAClient) -> None:
     except KeyError:
         st.caption("League percentiles need every player active this season — skipped.")
         ranks = None
-    except Exception as e:
+    except EXPECTED_ERRORS as e:
         st.caption(f"League percentiles unavailable: {e}")
         ranks = None
     if ranks is not None:
@@ -1691,7 +1692,7 @@ def compare_page(client: NBAClient) -> None:
             "player's shot locations; shot making is actual minus expected. "
             "Current-season shots; per-season shot quality lives on each player's profile."
         )
-    except Exception as e:
+    except EXPECTED_ERRORS as e:
         st.caption(f"Shot quality unavailable: {e}")
 
 
@@ -1713,7 +1714,7 @@ def _load_metrics() -> dict:
     metrics.json existed."""
     try:
         return json.loads(METRICS_PATH.read_text())
-    except Exception:
+    except (OSError, ValueError):  # not trained yet, or unreadable JSON
         return {}
 
 
@@ -1790,7 +1791,7 @@ def slate_section(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> No
     absence."""
     try:
         slate = upcoming_games(client.schedule())
-    except Exception:
+    except EXPECTED_ERRORS:
         logger.warning("schedule unavailable for the slate", exc_info=True)
         slate = pd.DataFrame()
     if slate.empty:
@@ -1803,7 +1804,7 @@ def slate_section(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> No
     rest = None
     try:
         rest = team_rest_features(client.team_games(), tipoff=slate["tipoff"].iloc[0])
-    except Exception:
+    except EXPECTED_ERRORS:
         logger.warning("rest features unavailable; slate assumes neutral rest", exc_info=True)
     rows = []
     for _, g in slate.iterrows():
@@ -1943,7 +1944,7 @@ def simulate_tab(client: NBAClient, models: dict, snapshot: pd.DataFrame) -> Non
         )
         model_p = float(models["outcome"].predict_proba(x).iloc[0])
         st.caption(f"For comparison, the outcome model gives {home} {model_p:.0%}.")
-    except Exception:
+    except EXPECTED_ERRORS:
         logger.warning("outcome-model comparison unavailable in simulate tab", exc_info=True)
 
     with st.expander("Total points distribution"):
@@ -2042,7 +2043,7 @@ def stint_lineup_table(_client: NBAClient) -> pd.DataFrame | None:
     """
     try:
         return load_stint_lineups(_client.cache)
-    except Exception:
+    except EXPECTED_ERRORS:
         logger.warning("stint lineup table unavailable", exc_info=True)
         return None
 
@@ -2073,7 +2074,7 @@ def lineup_tab(client: NBAClient, models: dict) -> None:
     else:
         try:
             lineups = client.lineups()
-        except Exception:
+        except EXPECTED_ERRORS:
             lineups = pd.DataFrame(columns=["GROUP_ID", "MIN", "NET_RATING"])
     net, minutes = blended_lineup_estimate(lineups, league, five, ids)
     prob = models["curve"].win_probability(net)
@@ -2218,7 +2219,7 @@ def season_outlook_page(client: NBAClient) -> None:
     )
     try:
         proj = _season_projection(client)
-    except Exception as e:
+    except EXPECTED_ERRORS as e:
         st.error(f"Could not build the season projection: {e}")
         logger.warning("season projection unavailable", exc_info=True)
         return
@@ -2231,7 +2232,7 @@ def season_outlook_page(client: NBAClient) -> None:
             .drop_duplicates("TEAM_ID")
             .set_index("TEAM_ABBREVIATION")["TEAM_ID"]
         )
-    except Exception:
+    except EXPECTED_ERRORS:
         id_to_tri = pd.Series(dtype="int64")
 
     tabs = st.tabs(["Regular season", "Postseason"])
@@ -2299,7 +2300,7 @@ def predictions_page(client: NBAClient) -> None:
         return
     try:
         snapshot = prediction_snapshot(client)
-    except Exception:
+    except EXPECTED_ERRORS:
         logger.warning("team form snapshot unavailable", exc_info=True)
         snapshot = pd.DataFrame()
     if snapshot.empty:  # season hasn't started: fall back to last season's form
@@ -2307,7 +2308,7 @@ def predictions_page(client: NBAClient) -> None:
         st.caption("Season hasn't started — using last season's form (Elo already regressed).")
     try:
         snapshot["elo"] = league_elo().reindex(snapshot.index)
-    except Exception:
+    except EXPECTED_ERRORS:
         # matchup_features degrades to a neutral elo_diff
         logger.warning("Elo unavailable; predictions use a neutral elo_diff", exc_info=True)
         st.caption("Elo ratings unavailable — predictions fall back to a neutral Elo edge.")
@@ -2336,7 +2337,7 @@ def four_factors_panel(games: pd.DataFrame, team: str) -> None:
     """
     try:
         ff = four_factors_table(games)
-    except Exception:
+    except EXPECTED_ERRORS:
         logger.warning("four factors unavailable", exc_info=True)
         return
     if team not in ff.index:
@@ -2389,7 +2390,7 @@ def team_detail(client: NBAClient, games: pd.DataFrame, snapshot: pd.DataFrame) 
     tiles[2].metric("ORtg / DRtg", f"{form['form_ortg']:.0f} / {form['form_drtg']:.0f}")
     try:
         tiles[3].metric("Elo", f"{league_elo()[team]:.0f}")
-    except Exception:
+    except EXPECTED_ERRORS:
         logger.warning("Elo unavailable for team tile", exc_info=True)
         tiles[3].metric("Elo", "—", help="Elo ratings unavailable right now.")
 
@@ -2405,7 +2406,7 @@ def team_detail(client: NBAClient, games: pd.DataFrame, snapshot: pd.DataFrame) 
         )
         if take:
             scouting_callout(take, accent=color)
-    except Exception:
+    except EXPECTED_ERRORS:
         logger.warning("team scouting take unavailable", exc_info=True)
 
     st.plotly_chart(
@@ -2438,7 +2439,7 @@ def team_detail(client: NBAClient, games: pd.DataFrame, snapshot: pd.DataFrame) 
                         f"Committed payroll, {salary_seasons(contracts)[0]}: "
                         f"${payroll[team] / 1e6:.0f}M"
                     )
-            except Exception:
+            except EXPECTED_ERRORS:
                 logger.warning("salary columns unavailable for roster", exc_info=True)
         # full width now, so the 9 columns breathe instead of scrolling
         keep = [
@@ -2479,7 +2480,7 @@ def team_detail(client: NBAClient, games: pd.DataFrame, snapshot: pd.DataFrame) 
         )
         if event.selection.rows:
             open_profile(str(roster.iloc[event.selection.rows[0]]["PLAYER_NAME"]))
-    except Exception as e:
+    except EXPECTED_ERRORS as e:
         st.error(f"Could not load roster: {e}")
 
     st.subheader("Last 10 games")
@@ -2593,13 +2594,13 @@ def team_detail(client: NBAClient, games: pd.DataFrame, snapshot: pd.DataFrame) 
                 f"{team}'s most-used five-man lineups this season (net/off/def rating, "
                 "possessions). Filter by a player to see only the units they play in."
             )
-    except Exception as e:
+    except EXPECTED_ERRORS as e:
         st.caption(f"Lineup data unavailable: {e}")
 
     st.subheader("On/off impact")
     try:
         onoff = team_on_off(client.team_player_on_off(int(log["TEAM_ID"].iloc[0])))
-    except Exception as e:
+    except EXPECTED_ERRORS as e:
         st.caption(f"On/off splits unavailable: {e}")
         return
     onoff = onoff[onoff["MIN_ON"] >= 100]
@@ -2636,7 +2637,7 @@ def teams_page(client: NBAClient) -> None:
     try:
         games = client.team_games()
         snapshot = team_form_snapshot(games)
-    except Exception as e:
+    except EXPECTED_ERRORS as e:
         st.error(f"Could not load team data: {e}")
         return
     if snapshot.empty:
@@ -2649,7 +2650,7 @@ def teams_page(client: NBAClient) -> None:
     st.subheader("Standings")
     try:
         standings = client.standings()
-    except Exception as e:
+    except EXPECTED_ERRORS as e:
         st.caption(f"Standings unavailable: {e}")
         return
     # TeamID -> tricode, so a standings-row click can open that team above
@@ -2704,7 +2705,7 @@ def games_page(client: NBAClient) -> None:
     try:
         with st.spinner("Loading the schedule (first view fetches live)…"):
             board = scoreboard(client.schedule(None if is_current else season))
-    except Exception as e:
+    except EXPECTED_ERRORS as e:
         st.error(f"Could not load the schedule: {e}")
         return
     if board.empty:
@@ -2770,7 +2771,7 @@ def games_page(client: NBAClient) -> None:
     )
     try:
         box = box_score_table(client.box_score(str(selected["GAME_ID"])))
-    except Exception as e:
+    except EXPECTED_ERRORS as e:
         st.error(f"Could not load the box score: {e}")
         return
     if box.empty:
@@ -2836,7 +2837,7 @@ def explore_page(client: NBAClient) -> None:
     try:
         with st.spinner("Loading the league table (first view fetches live)…"):
             league = league_with_ratings(client, None if is_current else season)
-    except Exception as e:
+    except EXPECTED_ERRORS as e:
         st.error(f"Could not load league stats: {e}")
         return
     if league.empty:
@@ -3010,7 +3011,7 @@ def ask_page(client: NBAClient) -> None:
         st.warning(
             "No Anthropic credential found. Set `ANTHROPIC_API_KEY` or run `ant auth login`."
         )
-    except Exception as e:
+    except anthropic.APIError as e:  # connection, rate-limit, and server errors
         st.error(f"Could not answer: {e}")
     st.caption(
         f"Answered by {model}. Numbers are pulled from the cached stats.nba.com league "
@@ -3033,7 +3034,7 @@ def home_page(client: NBAClient) -> None:
     try:
         with st.spinner("Loading the league dashboard (first view fetches live)…"):
             league = league_with_ratings(client, None if is_current else season)
-    except Exception as e:
+    except EXPECTED_ERRORS as e:
         st.error(f"Could not load league stats: {e}")
         return
 
@@ -3109,7 +3110,7 @@ def home_page(client: NBAClient) -> None:
 
     try:
         snapshot = team_form_snapshot(client.team_games(None if is_current else season))
-    except Exception:
+    except EXPECTED_ERRORS:
         logger.warning("team form unavailable on home page", exc_info=True)
         snapshot = pd.DataFrame()
     if not snapshot.empty:
@@ -3124,7 +3125,7 @@ def home_page(client: NBAClient) -> None:
                         "strong opponent or winning big — and loses them for a defeat. "
                         "Warmed over the two prior seasons, so it carries momentum in."
                     )
-                except Exception as e:
+                except EXPECTED_ERRORS as e:
                     st.caption(f"Elo rankings unavailable: {e}")
             with right:
                 st.plotly_chart(net_rating_chart(snapshot), width="stretch", key="home_net")
@@ -3153,12 +3154,12 @@ def home_page(client: NBAClient) -> None:
     if models is not None and not snapshot.empty and is_current:
         try:
             slate_snapshot = prediction_snapshot(client)  # prior-seeded, like training
-        except Exception:
+        except EXPECTED_ERRORS:
             logger.warning("seeded snapshot unavailable; slate uses raw form", exc_info=True)
             slate_snapshot = snapshot
         try:
             slate_snapshot["elo"] = league_elo().reindex(slate_snapshot.index)
-        except Exception:
+        except EXPECTED_ERRORS:
             logger.warning("Elo unavailable for the slate", exc_info=True)
         slate_section(client, models, slate_snapshot)
 
@@ -3167,7 +3168,7 @@ def draft_page(client: NBAClient) -> None:
     """Draft classes with combine measurements, back to the first draft."""
     try:
         history = client.draft_history()
-    except Exception as e:
+    except EXPECTED_ERRORS as e:
         st.error(f"Could not load draft history: {e}")
         return
     years = sorted(history["SEASON"].astype(str).unique(), reverse=True)
@@ -3176,7 +3177,7 @@ def draft_page(client: NBAClient) -> None:
     combine = None
     try:
         combine = client.draft_combine(year)
-    except Exception:
+    except EXPECTED_ERRORS:
         logger.warning("combine data unavailable for %s", year, exc_info=True)
     try:
         table = draft_class(history, combine, year)
