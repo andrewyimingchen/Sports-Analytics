@@ -19,7 +19,7 @@ documented JSON contracts.
 
 ## Run locally
 
-Use Node.js 20 or newer. Start the API from the repository root:
+Use Node.js 24 LTS, the version CI uses (Node 20 reached end of life in April 2026, and Expo SDK 58 will require 22.13 or newer). Start the API from the repository root:
 
 ```bash
 uv run uvicorn nba_insights.api:app --host 0.0.0.0 --port 8000
