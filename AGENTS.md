@@ -1,53 +1,8 @@
-# Agent Instructions
+# Project Instructions for AI Agents
 
-This project uses **bd** (beads) for issue tracking. Run `bd prime` for full workflow context.
+This file provides instructions and context for AI coding agents working on this project.
 
-> **Architecture in one line:** Issues live in a local Dolt database
-> (`.beads/dolt/`); cross-machine sync uses `bd dolt push/pull` (a
-> git-compatible protocol), stored under `refs/dolt/data` on your git
-> remote — separate from `refs/heads/*` where your code lives.
-> `.beads/issues.jsonl` is a passive export, not the wire protocol.
->
-> See [SYNC_CONCEPTS.md](https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md)
-> for the one-screen overview and anti-patterns (don't treat JSONL as the
-> source of truth; don't `bd import` during normal operation; don't
-> reach for third-party Dolt hosting before trying the default).
-
-## Quick Reference
-
-```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --claim  # Claim work atomically
-bd close <id>         # Complete work
-bd dolt push          # Push beads data to remote
-```
-
-## Non-Interactive Shell Commands
-
-**ALWAYS use non-interactive flags** with file operations to avoid hanging on confirmation prompts.
-
-Shell commands like `cp`, `mv`, and `rm` may be aliased to include `-i` (interactive) mode on some systems, causing the agent to hang indefinitely waiting for y/n input.
-
-**Use these forms instead:**
-```bash
-# Force overwrite without prompting
-cp -f source dest           # NOT: cp source dest
-mv -f source dest           # NOT: mv source dest
-rm -f file                  # NOT: rm file
-
-# For recursive operations
-rm -rf directory            # NOT: rm -r directory
-cp -rf source dest          # NOT: cp -r source dest
-```
-
-**Other commands that may prompt:**
-- `scp` - use `-o BatchMode=yes` for non-interactive
-- `ssh` - use `-o BatchMode=yes` to fail instead of prompting
-- `apt-get` - use `-y` flag
-- `brew` - use `HOMEBREW_NO_AUTO_UPDATE=1` env var
-
-<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:970c3bf2 -->
+<!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:6cd5cc61 -->
 ## Beads Issue Tracker
 
 This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
@@ -91,7 +46,6 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 
    # Team-maintainer opt-in only, unless current instructions forbid it:
    git pull --rebase
-   bd dolt push
    git push
    git status
    ```
@@ -102,6 +56,70 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 - Do not commit or push without clear authority from the active profile or the current user request.
 - If a required sync or push is blocked, stop and report the exact command and error.
 <!-- END BEADS INTEGRATION -->
+
+
+## Build & Test
+
+```bash
+uv sync --all-groups                         # deps, dev tools, browser-test group
+uv run pytest                                # tests (no network needed)
+uv run ruff check .                          # lint
+uv run uvicorn nba_insights.api:app --port 8000   # the product (PWA at /app/)
+uv run streamlit run app/streamlit_app.py    # internal console only
+scripts/preflight.sh                         # every CI gate; run before handoff
+```
+
+For the session-close "run quality gates" step, use `scripts/preflight.sh`
+(`--quick` skips the browser suite). `bd preflight` in bd 1.1.0 only checks
+Beads' own Go repository (go test, golangci-lint, version.go, Nix), so it
+does not apply to this project.
+
+## Architecture Overview
+
+`src/nba_insights/` is a layered package: `ingest/` (NBAClient — the only code
+that touches the network; rate-limited nba_api wrapper), `store/` (SQLite
+DataFrame cache with per-endpoint TTLs; empty responses never cached), and
+`analysis/` (pure pandas functions — no I/O). The FastAPI-served PWA (`api/`) is
+the product; `app/streamlit_app.py` is an internal research console.
+See README.md for details.
+
+## Conventions & Patterns
+
+- Analysis functions are pure: DataFrames in, DataFrames out, raise KeyError on
+  missing players/columns. Keep them network-free so tests stay offline.
+- All remote fetches go through `Cache.get_or_fetch`; never call nba_api
+  endpoints directly from the app layer.
+- Column names follow stats.nba.com conventions (PTS, GP, SEASON_ID, ...).
+- Scraping public reference pages (e.g. Basketball-Reference contracts) is
+  permitted by owner decision (2026-07-16), accepting the ToS tension, under
+  these guardrails: minimal volume (single pages, long TTLs, always through
+  `Cache.get_or_fetch`), personal/educational use only, and scraped data must
+  never be exposed through the public API/PWA or redistributed. Licensed
+  providers (e.g. BALLDONTLIE) remain the path for anything commercial.
+
+## Non-Interactive Shell Commands
+
+**ALWAYS use non-interactive flags** with file operations to avoid hanging on confirmation prompts.
+
+Shell commands like `cp`, `mv`, and `rm` may be aliased to include `-i` (interactive) mode on some systems, causing the agent to hang indefinitely waiting for y/n input.
+
+**Use these forms instead:**
+```bash
+# Force overwrite without prompting
+cp -f source dest           # NOT: cp source dest
+mv -f source dest           # NOT: mv source dest
+rm -f file                  # NOT: rm file
+
+# For recursive operations
+rm -rf directory            # NOT: rm -r directory
+cp -rf source dest          # NOT: cp -r source dest
+```
+
+**Other commands that may prompt:**
+- `scp` - use `-o BatchMode=yes` for non-interactive
+- `ssh` - use `-o BatchMode=yes` to fail instead of prompting
+- `apt-get` - use `-y` flag
+- `brew` - use `HOMEBREW_NO_AUTO_UPDATE=1` env var
 
 <!-- BEGIN BEADS CODEX SETUP: generated by bd setup codex -->
 ## Beads Issue Tracker
