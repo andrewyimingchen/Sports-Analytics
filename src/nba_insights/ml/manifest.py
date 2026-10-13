@@ -29,8 +29,8 @@ import pandas as pd
 
 from nba_insights.analysis import PLAYER_FORECAST_VERSION
 from nba_insights.config import MANIFEST_PATH, MODELS_DIR
-from nba_insights.ml.features import OUTCOME_FEATURES, POINTS_FEATURES
-from nba_insights.ml.performance import MIN_FEATURES, RATE_FEATURES
+from nba_insights.ml.features import OUTCOME_FEATURES, POINTS_FEATURES, STAT_LINE
+from nba_insights.ml.performance import MIN_FEATURES, rate_features
 from nba_insights.store import Cache
 
 SCHEMA_VERSION = "model-manifest-v1"
@@ -38,7 +38,7 @@ SCHEMA_VERSION = "model-manifest-v1"
 # One place for the version labels the registry, manifest, and README share.
 MODEL_VERSIONS = {
     "outcome": "logistic-outcome-v1",
-    "player_points": "player-points-v1",
+    "player_points": "player-points-v2-statline",
     "lineup": "lineup-blend-v1",
     "score_simulator": "matchup-simulator-v1",
     "season_forecast": "season-forecast-v2-roster",
@@ -67,7 +67,8 @@ def feature_schema() -> dict[str, Any]:
         "outcome": list(OUTCOME_FEATURES),
         "points": list(POINTS_FEATURES),
         "points_minutes": list(MIN_FEATURES),
-        "points_rate": list(RATE_FEATURES),
+        "points_rate": rate_features("PTS"),
+        "stat_line_rates": {stat: rate_features(stat) for stat in STAT_LINE},
     }
     payload = json.dumps(schema, sort_keys=True).encode()
     return {"fingerprint": _sha256(payload)[:16], **schema}
@@ -80,10 +81,11 @@ def artifact_feature_schema(models_dir: Path = MODELS_DIR) -> dict[str, Any]:
     try:
         outcome = joblib.load(models_dir / "outcome.joblib")
         points = joblib.load(models_dir / "points.joblib")
+        rates = points.get("rates") or {"PTS": points["rate"]}  # legacy points-only
         saved = {
             "outcome": list(outcome.feature_names_in_),
             "points_minutes": list(points["minutes"].feature_names_in_),
-            "points_rate": list(points["rate"].feature_names_in_),
+            "points_rate": list(rates["PTS"].feature_names_in_),
         }
     except (OSError, KeyError, AttributeError, TypeError):
         return {"status": "not_recorded", "reason": "saved pipelines expose no feature names"}
@@ -97,7 +99,8 @@ def artifact_feature_schema(models_dir: Path = MODELS_DIR) -> dict[str, Any]:
 
 
 def code_identity() -> dict[str, Any]:
-    """Package version and, when run from a checkout, the git commit and dirtiness."""
+    """Package version and, when run from a checkout, the git commit and whether
+    the model-affecting sources (src/, pyproject.toml, uv.lock) are dirty."""
     try:
         package = version("nba-insights")
     except PackageNotFoundError:
@@ -107,8 +110,10 @@ def code_identity() -> dict[str, Any]:
         commit = subprocess.run(
             ["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True
         ).stdout.strip()
+        # Dirty means the code or locked dependencies differ from the commit;
+        # the manifest itself and the beads export do not affect the models.
         status = subprocess.run(
-            ["git", "status", "--porcelain", "--untracked-files=no"],
+            ["git", "status", "--porcelain", "--", "src", "pyproject.toml", "uv.lock"],
             capture_output=True,
             text=True,
             check=True,
@@ -277,6 +282,17 @@ def render_readme_table(manifest: dict[str, Any] | None) -> str:
             f"{_pct(points.get('interval_coverage'))} | MAE {_num(points.get('baseline_mae'), 2)}"
             " (10-game average) |"
         )
+        line = points.get("line") or {}
+        others = [stat for stat in ("REB", "AST", "STL", "FG3M") if stat in line]
+        if others:
+            rows.append(
+                f"| Player stat line | `{train['models'].get('player_points')}` | temporal "
+                f"holdout {holdout} (same player-games) | "
+                + ", ".join(f"{stat} {_num(line[stat].get('mae'), 2)}" for stat in others)
+                + " MAE | "
+                + ", ".join(f"{stat} {_num(line[stat].get('baseline_mae'), 2)}" for stat in others)
+                + " (10-game averages) |"
+            )
     else:
         rows.append("| Game outcome / player points | — | not recorded | — | — |")
     season = runs.get("season_backtest")

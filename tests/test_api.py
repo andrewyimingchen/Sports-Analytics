@@ -471,8 +471,14 @@ def api_with_model(api):
 
 
 class FakePointsModel:
+    def predict_line(self, features):
+        return pd.DataFrame(
+            {"PTS": [26.4], "REB": [7.1], "AST": [5.2], "STL": [1.1], "FG3M": [2.4]},
+            index=features.index,
+        )
+
     def predict(self, features):
-        return pd.Series([26.4])
+        return self.predict_line(features)["PTS"]
 
     def interval(self, prediction):
         return (19.0, 35.0)
@@ -718,6 +724,16 @@ def test_simulation_and_player_points(api_with_models):
     assert points.status_code == 200
     assert points.json()["projected_points"] == 26.4
     assert points.json()["interval_80"] == [19.0, 35.0]
+    assert points.json()["projected_line"] == {
+        "PTS": 26.4,
+        "REB": 7.1,
+        "AST": 5.2,
+        "STL": 1.1,
+        "FG3M": 2.4,
+    }
+    # the fixture log carries PTS only, so only its average is reported
+    assert set(points.json()["recent_averages"]) <= {"PTS", "REB", "AST", "STL", "FG3M", "BLK"}
+    assert "PTS" in points.json()["recent_averages"]
 
 
 def test_season_prediction_tables(api, monkeypatch):
@@ -1092,7 +1108,7 @@ def test_mobile_app_shell_served(api):
     service_worker = api.get("/app/sw.js")
     assert service_worker.status_code == 200
     assert "fetch(e.request)" in service_worker.text
-    assert "nba-insights-shell-v25" in service_worker.text
+    assert "nba-insights-shell-v26" in service_worker.text
     assert "nba-insights-public-data-v1" in service_worker.text
     assert '!e.request.headers.has("Authorization")' in service_worker.text
     assert '!e.request.headers.has("X-API-Key")' in service_worker.text

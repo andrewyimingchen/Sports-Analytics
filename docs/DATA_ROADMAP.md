@@ -192,3 +192,34 @@ symmetric band. Training-residual quantiles are a mild underestimate of
 held-out spread in principle; with a 2-parameter-per-feature ridge on 21k
 rows the optimism is negligible, and the method stays strictly train-only
 per the evaluation protocol.
+
+## Status update (2026-10-13): full stat line (recovered)
+
+First built on 2026-07-15 (`feature/statline`, PR #11), but that PR merged
+into a branch that had already landed, so it never reached `main`. Ported
+onto the current points model, keeping the round-5 projection intervals for
+points. The two-stage structure (shared minutes stage × per-stat per-minute
+rate stage) covers the box line. Re-measured on the standard holdout
+(2025-26, 21,204 player-games) against each player's own 10-game average;
+points and the other models reproduced exactly:
+
+| Stat | Model MAE | Baseline MAE | Verdict |
+|------|-----------|--------------|---------|
+| PTS  | 4.581     | 4.716        | shipped (unchanged; 80% interval coverage 80.4%) |
+| REB  | 1.902     | 1.948        | shipped |
+| AST  | 1.363     | 1.387        | shipped |
+| STL  | 0.725     | 0.748        | shipped |
+| FG3M | 0.917     | 0.918        | shipped (flat, not worse) |
+| BLK  | 0.532     | 0.522        | **rejected** (July measurement) |
+
+- **BLK — rejected.** Every variant lost to the 10-game average: the full
+  rate-stage feature set (0.532), rate-only (0.532), rate + minutes context
+  (0.531), rate + opponent pace (0.534), and single-stage ridge on the
+  average itself (0.532–0.541). Blocks are too rare and concentrated among
+  rim protectors for squared-error regression to beat the form average under
+  MAE. The API and PWA show the 10-game average for blocks, labeled as such.
+- Rate stages share one feature template (the stat's own per-minute EWMA,
+  halflife 10, plus shot volume, venue, opponent form, and teammate
+  absences); the minutes stage is fit once and shared. Legacy points-only
+  artifacts still load. The model version is `player-points-v2-statline`,
+  and per-stat holdout metrics are recorded in `models/manifest.json`.

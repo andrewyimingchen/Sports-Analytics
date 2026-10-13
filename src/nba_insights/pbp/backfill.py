@@ -17,7 +17,7 @@ import logging
 
 from nba_insights.config import current_season
 from nba_insights.errors import EXPECTED_ERRORS
-from nba_insights.ingest import NBAClient
+from nba_insights.ingest import NBAClient, serving_client
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +84,7 @@ def backfill_season(client: NBAClient, season: str, limit: int | None = None) ->
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     parser = argparse.ArgumentParser(description="Backfill play-by-play logs")
-    parser.add_argument("--seasons", nargs="+", default=[current_season()])
+    parser.add_argument("--seasons", nargs="+", help="default: the current season")
     parser.add_argument("--limit", type=int, default=None, help="games per season (for testing)")
     parser.add_argument(
         "--delay",
@@ -96,8 +96,10 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    client = NBAClient(delay=args.delay)
-    total_failures = sum(backfill_season(client, s, args.limit) for s in args.seasons)
+    # the client installs the season-started check that current_season() needs
+    client = serving_client(delay=args.delay)
+    seasons = args.seasons or [current_season()]
+    total_failures = sum(backfill_season(client, s, args.limit) for s in seasons)
     if total_failures:
         raise SystemExit(f"{total_failures} games failed")
 

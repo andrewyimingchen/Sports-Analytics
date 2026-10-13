@@ -20,7 +20,7 @@ import pandas as pd
 
 from nba_insights.analysis import evaluate_season_forecasts, scoreboard, season_forecast
 from nba_insights.config import MODELS_DIR
-from nba_insights.ingest import NBAClient
+from nba_insights.ingest import NBAClient, serving_client
 from nba_insights.ml.elo import current_elo
 from nba_insights.ml.features import team_form_snapshot
 from nba_insights.ml.manifest import MODEL_VERSIONS, record_run, source_snapshots
@@ -144,7 +144,7 @@ def main() -> None:
     parser.add_argument("--n-sims", type=int, default=5_000)
     parser.add_argument("--output", type=Path, default=SEASON_FORECAST_METRICS_PATH)
     args = parser.parse_args()
-    client = NBAClient()
+    client = serving_client()
     artifact = run_backtest(client, args.seasons, n_sims=args.n_sims)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(artifact, indent=2) + "\n")

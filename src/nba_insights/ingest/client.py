@@ -13,6 +13,7 @@ import threading
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import pandas as pd
 import requests
@@ -40,7 +41,12 @@ from nba_api.stats.endpoints import (
 )
 from nba_api.stats.static import players
 
-from nba_insights.config import CACHE_DB, calendar_season, current_season
+from nba_insights.config import (
+    CACHE_DB,
+    calendar_season,
+    current_season,
+    set_season_started_check,
+)
 from nba_insights.errors import UpstreamError
 from nba_insights.ingest.darko import fetch_darko
 from nba_insights.ingest.salaries import fetch_career_salaries, fetch_contracts
@@ -588,3 +594,16 @@ class NBAClient:
         raise UpstreamError(
             f"fetch {key or '<unkeyed>'} failed after {self.retries} attempts"
         ) from last_error
+
+
+def serving_client(**kwargs: Any) -> NBAClient:
+    """An NBAClient for an app or CLI entry point.
+
+    Installs the season-started check, so ``current_season()`` keeps the
+    prior season until the new one has regular-season games (the preseason
+    rollover). Every entry point that relies on the default season needs it;
+    library code and tests construct ``NBAClient`` directly.
+    """
+    client = NBAClient(**kwargs)
+    set_season_started_check(client.season_has_started)
+    return client

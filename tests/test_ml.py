@@ -80,28 +80,40 @@ def synthetic_team_games(
     return pd.DataFrame(rows)
 
 
-def synthetic_player_games(n_games: int = 40, seed: int = 3) -> pd.DataFrame:
+def synthetic_player_games(
+    n_games: int = 40, seed: int = 3, full_line: bool = False
+) -> pd.DataFrame:
+    """Player 1 is a high-usage scorer; player 2 a role player who rebounds."""
     rng = np.random.default_rng(seed)
     rows = []
-    for pid, base in [(1, 25.0), (2, 12.0)]:
+    for pid, base, reb in [(1, 25.0, 4.0), (2, 12.0, 10.0)]:
         date = pd.Timestamp("2024-11-01")
         for g in range(n_games):
             pts = max(0, rng.normal(base, 5))
-            rows.append(
-                {
-                    "PLAYER_ID": pid,
-                    "PLAYER_NAME": f"Player {pid}",
-                    "TEAM_ID": pid,
-                    "GAME_ID": f"G{g:04d}",
-                    "GAME_DATE": date.strftime("%Y-%m-%d"),
-                    "MATCHUP": f"T{pid} vs. OPP" if g % 2 else f"T{pid} @ OPP",
-                    "WL": "W",
-                    "MIN": 34 + rng.normal(0, 3),
-                    "PTS": pts,
-                    "FGA": pts * 0.8,
-                    "PLUS_MINUS": 0.0,
-                }
-            )
+            row = {
+                "PLAYER_ID": pid,
+                "PLAYER_NAME": f"Player {pid}",
+                "TEAM_ID": pid,
+                "GAME_ID": f"G{g:04d}",
+                "GAME_DATE": date.strftime("%Y-%m-%d"),
+                "MATCHUP": f"T{pid} vs. OPP" if g % 2 else f"T{pid} @ OPP",
+                "WL": "W",
+                "MIN": 34 + rng.normal(0, 3),
+                "PTS": pts,
+                "FGA": pts * 0.8,
+                "PLUS_MINUS": 0.0,
+            }
+            if full_line:  # drawn only here, so points-only data is unchanged
+                row.update(
+                    {
+                        "REB": max(0, rng.normal(reb, 2)),
+                        "AST": max(0, rng.normal(base / 4, 1.5)),
+                        "STL": max(0, rng.normal(1.0, 0.8)),
+                        "BLK": max(0, rng.normal(0.6, 0.6)),
+                        "FG3M": max(0, rng.normal(base / 10, 1.0)),
+                    }
+                )
+            rows.append(row)
             date += pd.Timedelta(days=2)
     return pd.DataFrame(rows)
 
@@ -213,7 +225,7 @@ def test_points_model_learns_player_level(tmp_path):
     lo, hi = loaded.interval(20.0)
     assert 0 <= lo < 20.0 < hi
     assert loaded.interval(0.5)[0] == 0.0
-    assert PlayerPointsModel(loaded.minutes, loaded.rate).interval(20.0) is None
+    assert PlayerPointsModel(loaded.minutes, {"PTS": loaded.rate}).interval(20.0) is None
 
 
 def test_win_curve_monotonic_and_bounded(tmp_path):
@@ -519,7 +531,7 @@ def test_points_interval_binned_by_projection_level():
         max(0.0, hi_proj + top_hi),
     )
     # legacy pooled-tuple artifacts still work
-    legacy = PlayerPointsModel(model.minutes, model.rate, resid_quantiles=(-5.0, 6.0))
+    legacy = PlayerPointsModel(model.minutes, {"PTS": model.rate}, resid_quantiles=(-5.0, 6.0))
     assert legacy.interval(20.0) == (15.0, 26.0)
     # the nominal 80% band's coverage is measured, near nominal in-sample
     cov = model.evaluate(feats)["interval_coverage"]
@@ -569,3 +581,67 @@ def test_team_rest_features_flags():
     assert (rested["b2b"] == 0).all()
     assert (rested["three_in_four"] == 0).all()
     assert (rested["rest_days"] == 3).all()
+
+
+# -- stat line -----------------------------------------------------------------
+
+
+def test_stat_line_model_predicts_all_stats(tmp_path):
+    feats = player_game_features(synthetic_player_games(60, full_line=True))
+    model = PlayerPointsModel().fit(feats)
+    line = model.predict_line(feats)
+    assert list(line.columns) == ["PTS", "REB", "AST", "STL", "FG3M"]
+    assert "BLK" not in line.columns  # rejected: lost to its 10-game average on holdout
+
+    # levels are learned per player: the scorer outscores, the rebounder rebounds
+    scorer = line[feats["PLAYER_ID"] == 1].mean()
+    role = line[feats["PLAYER_ID"] == 2].mean()
+    assert scorer["PTS"] > role["PTS"] + 5
+    assert role["REB"] > scorer["REB"] + 2
+
+    metrics = model.evaluate(feats)
+    assert set(metrics["line"]) == set(line.columns)
+    assert metrics["mae"] == metrics["line"]["PTS"]["mae"]
+    assert "interval_coverage" in metrics  # points keep their interval
+
+    path = tmp_path / "line.joblib"
+    model.save(path)
+    reloaded = PlayerPointsModel.load(path)
+    pd.testing.assert_frame_equal(reloaded.predict_line(feats), line)
+    assert reloaded.interval(20.0) == model.interval(20.0)
+
+
+def test_stat_line_rates_are_pregame_only():
+    pg = synthetic_player_games(full_line=True)
+    feats = player_game_features(pg)
+    one = feats[feats["PLAYER_ID"] == 2].reset_index(drop=True)
+    merged = pg[pg["PLAYER_ID"] == 2].reset_index(drop=True)
+    # reb_r10 at row i is the mean of the 10 REB values before that game
+    i = 15
+    game_id = one["GAME_ID"].iloc[i]
+    pos = merged.index[merged["GAME_ID"] == game_id][0]
+    expected = merged["REB"].iloc[pos - 10 : pos].mean()
+    assert one["reb_r10"].iloc[i] == pytest.approx(expected)
+
+
+def test_points_only_frames_and_legacy_artifacts_stay_points_only(tmp_path):
+    import joblib
+
+    feats = player_game_features(synthetic_player_games(60))
+    model = PlayerPointsModel().fit(feats)
+    assert list(model.rates) == ["PTS"]
+    path = tmp_path / "legacy.joblib"
+    joblib.dump({"minutes": model.minutes, "rate": model.rates["PTS"]}, path)
+    legacy = PlayerPointsModel.load(path)
+    assert legacy.predict(feats).equals(model.predict(feats))
+    assert list(legacy.predict_line(feats).columns) == ["PTS"]
+
+
+def test_next_game_features_carry_the_line_and_block_average():
+    pg = synthetic_player_games(30, full_line=True)
+    rows = pg[pg["PLAYER_ID"] == 2]
+    features = player_next_game_features(rows, home=True, opp_form_net=0.0)
+    for column in ("reb_rate_ewm", "ast_rate_ewm", "stl_rate_ewm", "fg3m_rate_ewm"):
+        assert column in features
+    assert features["blk_r10"].iloc[0] == pytest.approx(rows["BLK"].tail(10).mean())
+    assert "blk_rate_ewm" not in features  # no block model, only its average
