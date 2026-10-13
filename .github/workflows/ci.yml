@@ -6,6 +6,22 @@ on:
   pull_request:
 
 jobs:
+  static:
+    name: static checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Install dependencies
+        # mypy targets 3.11 via pyproject; the interpreter version does not matter
+        run: uv sync --frozen --python 3.12
+      - name: Format
+        run: uv run --frozen ruff format --check .
+      - name: Lint
+        run: uv run --frozen ruff check .
+      - name: Type check
+        run: uv run --frozen mypy
+
   check:
     name: check (Python ${{ matrix.python }})
     runs-on: ubuntu-latest
@@ -19,22 +35,18 @@ jobs:
       - uses: astral-sh/setup-uv@v5
       - name: Install dependencies
         run: uv sync --frozen --python ${{ matrix.python }}
-      - name: Format
-        run: uv run --frozen ruff format --check .
-      - name: Lint
-        run: uv run --frozen ruff check .
-      - name: Type check
-        run: uv run --frozen mypy
       - name: Test with coverage
         run: uv run --frozen pytest -q --cov --cov-report=term --cov-report=xml
       - name: Coverage summary
-        if: always() && matrix.python == '3.12'
+        if: always()
         run: |
+          # fails the step (instead of printing "No data") if tests never ran
+          report=$(uv run --frozen coverage report)
           {
             echo "### Coverage (Python ${{ matrix.python }})"
             echo
             echo '```'
-            uv run --frozen coverage report --skip-covered | tail -25
+            echo "$report" | tail -25
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 

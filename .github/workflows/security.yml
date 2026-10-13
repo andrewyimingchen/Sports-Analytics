@@ -56,7 +56,7 @@ jobs:
           set +e
           npm audit --audit-level=high --json > audit.json 2> audit.err
           set -e
-          if ! node ../.github/scripts/npm-audit-report.mjs audit.json audit-summary.txt Sports-Analytics-1xp.7.1; then
+          if ! node ../.github/scripts/npm-audit-report.mjs audit.json audit-summary.txt Sports-Analytics-1xp.18; then
             cat audit.err >&2
             exit 1
           fi
