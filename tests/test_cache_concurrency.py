@@ -49,7 +49,7 @@ def test_concurrent_writers_on_separate_instances_never_see_locked(tmp_path):
 
 
 _CHILD = """
-import sys, time
+import os, sys, time
 from pathlib import Path
 import pandas as pd
 from nba_insights.store import Cache
@@ -67,6 +67,10 @@ def fetcher():
     return pd.DataFrame({"PTS": [1, 2, 3]})
 
 assert len(cache.get_or_fetch("league/2025-26", fetcher)) == 3
+# Skip interpreter teardown: pyarrow's C++ thread pool can abort at exit
+# ("terminate called without an active exception"), unrelated to the cache.
+sys.stdout.flush()
+os._exit(0)
 """
 
 
@@ -87,6 +91,46 @@ def test_a_miss_is_fetched_once_across_processes(tmp_path):
     (tmp_path / "go").touch()
     assert [worker.wait(timeout=60) for worker in workers] == [0, 0, 0, 0]
     assert (tmp_path / "fetches.txt").read_text() == "x"
+
+
+_OPEN_CHILD = """
+import os, sys, time
+from pathlib import Path
+from nba_insights.store import Cache
+
+workdir, worker = Path(sys.argv[1]), sys.argv[2]
+(workdir / f"ready-{worker}").touch()
+while not (workdir / "go").exists():
+    time.sleep(0.001)
+try:
+    Cache(workdir / "fresh.sqlite3")
+except Exception as error:
+    print(type(error).__name__, error, flush=True)
+    os._exit(3)
+os._exit(0)
+"""
+
+
+@posix_only
+def test_workers_opening_a_fresh_cache_together_do_not_see_locked(tmp_path):
+    # Switching a new file to WAL is not always covered by SQLite's busy
+    # handler; unserialized, about 1 in 40 such opens failed "database is locked".
+    workers = [
+        subprocess.Popen(
+            [sys.executable, "-c", _OPEN_CHILD, str(tmp_path), str(n)],
+            stdout=subprocess.PIPE,
+            text=True,
+        )
+        for n in range(12)
+    ]
+    deadline = time.monotonic() + 60
+    while len(list(tmp_path.glob("ready-*"))) < len(workers):
+        assert time.monotonic() < deadline, "workers did not start"
+        time.sleep(0.01)
+    (tmp_path / "go").touch()
+    outcomes = [(worker.wait(timeout=60), worker.stdout.read().strip()) for worker in workers]
+    assert outcomes == [(0, "")] * len(workers)
+    assert Cache(tmp_path / "fresh.sqlite3").journal_mode == "wal"
 
 
 def test_nested_fetch_in_one_process_does_not_deadlock(tmp_path):
