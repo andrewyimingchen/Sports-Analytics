@@ -1257,3 +1257,58 @@ def test_ask_provider_failures_are_categorized(api, monkeypatch):
     _fake_anthropic(monkeypatch, error=lambda module: module.AuthenticationError("bad key"))
     rejected = api.post("/ask", json={"question": "Who leads in assists?"})
     assert rejected.status_code == 503
+
+
+def test_opening_week_team_comparison_uses_last_season_sample(api_with_model):
+    from nba_insights.config import previous_season
+
+    current = prediction_seasons()[0]
+    client = FakeNBAClient()
+
+    def team_games(season=None):
+        games = synthetic_team_games(40)
+        if season in (None, current):  # T4 has not played this season yet
+            return games[games["TEAM_ABBREVIATION"] != "T4"]
+        return games
+
+    client.team_games = team_games
+    app.dependency_overrides[get_client] = lambda: client
+    assert "T4" in api_with_model.get("/teams").json()  # listed before its first game
+    response = api_with_model.get("/teams/compare", params={"home": "T1", "away": "T4"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["sample"]["season"] == previous_season(current)
+    assert any("has not played" in note for note in body["limitations"])
+    assert (
+        api_with_model.get("/predict/game", params={"home": "T1", "away": "T4"}).status_code == 200
+    )
+
+
+def test_player_without_games_this_season_falls_back_to_last_season(api, monkeypatch):
+    from nba_insights.config import previous_season
+
+    current = prediction_seasons()[0]
+    full = FakeNBAClient().league_player_stats()
+
+    def league(client, season=None):
+        return full.iloc[0:0] if season in (None, current) else full
+
+    monkeypatch.setattr(players_router, "league_with_ratings", league)
+    for path in ("/players/1/percentiles", "/players/1/insights", "/players/1/similar"):
+        response = api.get(path)
+        assert response.status_code == 200, path
+        assert response.json()["season"] == previous_season(current), path
+    explicit = api.get("/players/1/insights", params={"season": current})
+    assert explicit.status_code == 404  # an explicit season is honored, no fallback
+
+
+def test_team_tricodes_merges_last_season_with_current():
+    from nba_insights.api.shared import team_tricodes
+
+    class Client:
+        def team_games(self, season):
+            if season == "2025-26":
+                return pd.DataFrame({"TEAM_ID": [1, 2], "TEAM_ABBREVIATION": ["AAA", "BBB"]})
+            return pd.DataFrame({"TEAM_ID": [2, 3], "TEAM_ABBREVIATION": ["BBX", "CCC"]})
+
+    assert team_tricodes(Client(), "2026-27") == {1: "AAA", 2: "BBX", 3: "CCC"}

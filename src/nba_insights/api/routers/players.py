@@ -36,7 +36,8 @@ from nba_insights.api.deps import Client
 from nba_insights.api.schemas import errors
 from nba_insights.api.security import is_local_request, require_private_access
 from nba_insights.api.shared import Degradations, find_player, finite_records
-from nba_insights.config import current_season
+from nba_insights.config import current_season, previous_season
+from nba_insights.ingest import NBAClient
 from nba_insights.serve import fetch_headshot, league_with_ratings
 
 router = APIRouter(tags=["players"])
@@ -85,6 +86,25 @@ def player_career(player_id: int, client: Client) -> list[dict]:
     return career_per_game(totals).to_dict(orient="records")
 
 
+def _player_league(
+    client: NBAClient, player_name: str, season: str | None
+) -> tuple[str, pd.DataFrame]:
+    """The league table a player's context comes from, and its season.
+
+    An explicit *season* is honored as is. By default this is the current
+    season, or last season while the player has no games yet this season
+    (opening week, injury absences), so profiles stay populated; responses
+    report the season actually used.
+    """
+    if season:
+        return season, league_with_ratings(client, None if season == current_season() else season)
+    league = league_with_ratings(client)
+    if "PLAYER_NAME" in league and (league["PLAYER_NAME"] == player_name).any():
+        return current_season(), league
+    last = previous_season(current_season())
+    return last, league_with_ratings(client, last)
+
+
 @router.get(
     "/players/{player_id}/percentiles", response_model=schemas.Percentiles, responses=errors(404)
 )
@@ -95,14 +115,14 @@ def player_percentiles(player_id: int, client: Client) -> dict:
     stat set (incl. net and clutch rating) as the Streamlit app.
     """
     player = find_player(client, player_id)
-    league = league_with_ratings(client)
+    selected, league = _player_league(client, player["full_name"], None)
     try:
         ranks = percentile_ranks(league, player["full_name"])
     except KeyError as e:
         raise HTTPException(404, str(e)) from e
     return {
         "player": player["full_name"],
-        "season": current_season(),
+        "season": selected,
         # dropna: a player missing from a rating table must not emit NaN
         # (invalid JSON), just omit the stat
         "percentiles": ranks.dropna().to_dict(),
@@ -115,8 +135,7 @@ def player_percentiles(player_id: int, client: Client) -> dict:
 def player_insights(player_id: int, client: Client, season: str | None = None) -> dict:
     """League/position context, scouting take, ratings, and draft pedigree."""
     player = find_player(client, player_id)
-    selected = season or current_season()
-    league = league_with_ratings(client, None if selected == current_season() else selected)
+    selected, league = _player_league(client, player["full_name"], season)
     try:
         ranks = percentile_ranks(league, player["full_name"])
     except KeyError as error:
@@ -300,13 +319,14 @@ def player_similar(
 ) -> dict:
     """Current-season statistical comparables from Streamlit's profile page."""
     player = find_player(client, player_id)
+    selected, league = _player_league(client, player["full_name"], None)
     try:
-        comps = similar_players(league_with_ratings(client), player["full_name"], n=limit)
+        comps = similar_players(league, player["full_name"], n=limit)
     except KeyError as error:
         raise HTTPException(404, str(error)) from error
     return {
         "player": player["full_name"],
-        "season": current_season(),
+        "season": selected,
         "similar": finite_records(comps),
     }
 

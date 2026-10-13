@@ -25,7 +25,7 @@ from datetime import UTC, datetime
 
 import pandas as pd
 
-from nba_insights.config import MODELS_DIR, current_season, past_seasons
+from nba_insights.config import MODELS_DIR, current_season, previous_season
 from nba_insights.ingest import NBAClient, serving_client
 from nba_insights.ml import GameOutcomeModel, PlayerPointsModel, WinCurve
 from nba_insights.ml.elo import elo_ratings
@@ -38,12 +38,6 @@ from nba_insights.ml.features import (
 )
 from nba_insights.ml.manifest import MODEL_VERSIONS, record_run, source_snapshots
 
-
-def _prev_season(season: str) -> str:
-    start = int(season[:4])
-    return f"{start - 1}-{start % 100:02d}"
-
-
 logger = logging.getLogger(__name__)
 
 OUTCOME_PATH = MODELS_DIR / "outcome.joblib"
@@ -52,6 +46,36 @@ WIN_CURVE_PATH = MODELS_DIR / "win_curve.joblib"
 METRICS_PATH = MODELS_DIR / "metrics.json"
 
 C_GRID = [0.05, 0.1, 0.25, 0.5, 1.0]
+
+# The current season becomes the temporal holdout once it has this many
+# games (about a quarter of a season, early December). Before that the
+# holdout is the last completed season: an opening-week holdout has too few
+# games to evaluate on (player features need prior games, so it can be
+# empty) and its metrics would be noise.
+MIN_HOLDOUT_GAMES = 300
+
+
+def seasons_before(season: str, n: int) -> list[str]:
+    """The *n* seasons immediately before *season*, oldest first."""
+    start = int(season[:4])
+    return [f"{y}-{(y + 1) % 100:02d}" for y in range(start - n, start)]
+
+
+def holdout_season(client: NBAClient, min_games: int = MIN_HOLDOUT_GAMES) -> str:
+    """The current season once it has *min_games* games, else the last completed one."""
+    season = current_season()
+    games = client.team_games(season)
+    played = games["GAME_ID"].nunique() if "GAME_ID" in games else 0
+    if played >= min_games:
+        return season
+    logger.info(
+        "%s has %d of %d games needed for a holdout; evaluating on %s instead",
+        season,
+        played,
+        min_games,
+        previous_season(season),
+    )
+    return previous_season(season)
 
 
 def tune_outcome_c(matchups: pd.DataFrame, dev_season_start: str) -> float:
@@ -99,9 +123,9 @@ def build_matchups(client: NBAClient, seasons: list[str], elo: pd.DataFrame) -> 
                 client.team_games(s),
                 window=None,
                 player_games=client.player_games(s),
-                prior_rates=prior_minute_rates(client.player_games(_prev_season(s))),
+                prior_rates=prior_minute_rates(client.player_games(previous_season(s))),
                 elo=elo,
-                form_priors=prior_team_form(client.team_games(_prev_season(s))),
+                form_priors=prior_team_form(client.team_games(previous_season(s))),
             )
         )
         for s in seasons
@@ -119,7 +143,7 @@ def build_player_frames(client: NBAClient, seasons: list[str]) -> pd.DataFrame:
                 client.team_games(s),
                 window=None,
                 player_games=client.player_games(s),
-                prior_rates=prior_minute_rates(client.player_games(_prev_season(s))),
+                prior_rates=prior_minute_rates(client.player_games(previous_season(s))),
             ),
         )
         for s in seasons
@@ -131,11 +155,17 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     parser = argparse.ArgumentParser(description="Train POSSESSION LAB models")
     parser.add_argument("--train-seasons", type=int, default=3)
+    parser.add_argument(
+        "--min-holdout-games",
+        type=int,
+        default=MIN_HOLDOUT_GAMES,
+        help="games the current season needs before it becomes the holdout",
+    )
     args = parser.parse_args()
 
     client = serving_client()
-    train_seasons = past_seasons(args.train_seasons)
-    test_season = current_season()
+    test_season = holdout_season(client, min_games=args.min_holdout_games)
+    train_seasons = seasons_before(test_season, args.train_seasons)
     logger.info("training on %s, evaluating on %s", train_seasons, test_season)
 
     logger.info("building game matchup frames…")
@@ -196,6 +226,7 @@ def main() -> None:
         "train",
         configuration={
             "train_seasons": args.train_seasons,
+            "min_holdout_games": args.min_holdout_games,
             "outcome_C_grid": C_GRID,
             "elo_warmup_seasons": ELO_WARMUP_SEASONS,
         },

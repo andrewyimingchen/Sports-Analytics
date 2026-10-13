@@ -567,6 +567,44 @@ def test_snapshot_prior_seeding_matches_training_formula():
     assert not seeded_missing["form_net"].isna().any()
 
 
+def test_snapshot_includes_teams_that_have_not_played_yet():
+    from nba_insights.ml.features import prior_team_form
+
+    games = synthetic_team_games(60)
+    priors = prior_team_form(games)  # stand-in for last season's means
+    # opening week: T4 has not played yet
+    early = pd.concat(
+        [g.head(2) for tid, g in games.groupby("TEAM_ID") if tid != 4], ignore_index=True
+    )
+    codes = {1: "T1", 2: "T2", 3: "T3", 4: "T4"}
+    without = team_form_snapshot(early, form_priors=priors)
+    assert "T4" not in without.index
+    seeded = team_form_snapshot(early, form_priors=priors, team_codes=codes)
+    assert set(seeded.index) == {"T1", "T2", "T3", "T4"}
+    # zero games of evidence: exactly the prior
+    assert seeded.loc["T4", "form_net"] == pytest.approx(priors.loc[4, "PLUS_MINUS"])
+    assert pd.isna(seeded.loc["T4", "last_game_date"])
+    # teams that played are unchanged by listing the others
+    pd.testing.assert_frame_equal(seeded.drop(index="T4"), without, check_dtype=False)
+
+
+def test_holdout_waits_for_enough_current_season_games(monkeypatch):
+    from nba_insights.ml import train
+
+    monkeypatch.setattr(train, "current_season", lambda: "2026-27")
+
+    class Client:
+        def __init__(self, n):
+            self.n = n
+
+        def team_games(self, season):
+            return pd.DataFrame({"GAME_ID": [f"G{i}" for i in range(self.n)]})
+
+    assert train.holdout_season(Client(14)) == "2025-26"
+    assert train.holdout_season(Client(train.MIN_HOLDOUT_GAMES)) == "2026-27"
+    assert train.seasons_before("2025-26", 3) == ["2022-23", "2023-24", "2024-25"]
+
+
 def test_team_rest_features_flags():
     from nba_insights.ml.features import team_rest_features
 

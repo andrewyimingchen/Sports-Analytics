@@ -32,7 +32,7 @@ from nba_insights.api.shared import (
     today,
     validate_matchup,
 )
-from nba_insights.config import current_season
+from nba_insights.config import current_season, previous_season
 from nba_insights.errors import DATA_ERRORS, DataUnavailableError
 from nba_insights.ml.features import matchup_features
 from nba_insights.serve import league_with_ratings
@@ -228,14 +228,21 @@ def team_comparison(
     prediction_snapshot = snapshot_for_day(day, client)
     validate_matchup(prediction_snapshot, home, away)
 
+    # The comparison needs games from both teams; until both have played this
+    # season (opening week), compare them on last season's sample instead.
+    sample = basis
     games = client.team_games(basis)
-    league = league_with_ratings(client, basis)
-    degraded = Degradations("team_comparison", home=home, away=away, season=basis)
+    played = set(games["TEAM_ABBREVIATION"]) if "TEAM_ABBREVIATION" in games else set()
+    if not {home, away} <= played:
+        sample = previous_season(basis)
+        games = client.team_games(sample)
+    league = league_with_ratings(client, sample)
+    degraded = Degradations("team_comparison", home=home, away=away, season=sample)
     lineups = clutch = pd.DataFrame()
     with degraded.section("lineups"):
-        lineups = client.lineups(basis)
+        lineups = client.lineups(sample)
     with degraded.section("clutch"):
-        clutch = client.league_player_clutch(basis)
+        clutch = client.league_player_clutch(sample)
 
     try:
         comparison = compare_teams(
@@ -243,6 +250,7 @@ def team_comparison(
         )
     except DATA_ERRORS as exc:
         raise DataUnavailableError("team comparison inputs are incomplete") from exc
+    comparison["sample"] = {"season": sample, **comparison.get("sample", {})}
 
     features = matchup_features(
         prediction_snapshot,
@@ -287,6 +295,11 @@ def team_comparison(
                 "when their upstream samples are unavailable."
             ),
             f"{selected} uses {basis} team form as a {mode.replace('_', ' ')} basis.",
+            *(
+                [f"A team has not played in {basis} yet, so the comparison uses {sample}."]
+                if sample != basis
+                else []
+            ),
         ],
         "share_url": f"/app/?{query}#matchup",
         "export_filename": f"{away}-at-{home}-{selected}-comparison.json",

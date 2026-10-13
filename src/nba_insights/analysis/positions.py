@@ -14,7 +14,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from nba_insights.analysis.percentiles import percentile_ranks
+from nba_insights.analysis.percentiles import percentile_ranks, qualifying_games
 
 GROUPS = ["Guard", "Wing", "Big"]
 
@@ -67,7 +67,7 @@ def positional_percentile_ranks(
     league: pd.DataFrame,
     player_name: str,
     stats: list[str] | None = None,
-    min_games: int = 10,
+    min_games: int | None = None,
     min_minutes: float = 15.0,
 ) -> tuple[pd.Series, str]:
     """Percentile ranks of a player against their *position group* only.
@@ -85,4 +85,6 @@ def positional_percentile_ranks(
         raise KeyError(f"player {player_name!r} not found")
     group = positions.loc[match[0]]
     peers = league[positions == group]
+    if min_games is None:  # the league-wide bar, not the position group's
+        min_games = qualifying_games(league)
     return percentile_ranks(peers, player_name, stats=stats, min_games=min_games), group

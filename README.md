@@ -145,9 +145,11 @@ an output beats its baseline; the registry exposes that comparison directly.
 | Game simulator | Monte Carlo over pace and ratings (10,000 sims: shared possessions, per-100 scoring vs opponent defense, home court, minutes out, overtime); parameters fitted on the training seasons. The logistic model keeps the headline probability; the simulator supplies margin/total distributions |
 
 Evaluation is a temporal holdout: trained on the three seasons before the
-current one, scored on the current season, with hyperparameters tuned on a
-dev season (the most recent training season) so the holdout is only touched
-once. Artifacts live in `data/models/` (never committed).
+holdout season and scored on it, with hyperparameters tuned on a dev season
+(the most recent training season) so the holdout is only touched once. The
+holdout is the current season once it has 300 games (about early December);
+before that it is the last completed season, so opening-week retrains
+reproduce the previous models instead of evaluating on a handful of games. Artifacts live in `data/models/` (never committed).
 
 ### Recorded results
 

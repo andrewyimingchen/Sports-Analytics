@@ -41,6 +41,7 @@ from nba_insights.api.shared import (
     finite_records,
     prediction_context,
     snapshot_for_day,
+    team_tricodes,
     today,
     validate_matchup,
 )
@@ -176,24 +177,19 @@ def _season_forecast_table(
 
 
 def _forecast_conferences(client: NBAClient, basis: str) -> dict[str, str]:
-    """Map team tricodes to conferences from the same forecast basis season."""
+    """Map team tricodes to conferences from the forecast basis season's standings.
+
+    Team ids come from :func:`team_tricodes`, which includes teams that
+    have not played yet early in a season.
+    """
     standings = client.standings(basis)
-    games = client.team_games(basis)
-    required_standings = {"TeamID", "Conference"}
-    required_games = {"TEAM_ID", "TEAM_ABBREVIATION"}
-    if not required_standings <= set(standings) or not required_games <= set(games):
+    if not {"TeamID", "Conference"} <= set(standings):
         raise HTTPException(503, "conference mapping is unavailable for the forecast")
-    team_ids = (
-        games[["TEAM_ID", "TEAM_ABBREVIATION"]]
-        .dropna()
-        .drop_duplicates("TEAM_ID", keep="last")
-        .set_index("TEAM_ID")["TEAM_ABBREVIATION"]
-        .to_dict()
-    )
+    team_ids = team_tricodes(client, basis)
     return {
-        str(team_ids.get(row.TeamID)): str(row.Conference)
+        str(team_ids[int(row.TeamID)]): str(row.Conference)
         for row in standings[["TeamID", "Conference"]].itertuples(index=False)
-        if row.TeamID in team_ids
+        if int(row.TeamID) in team_ids
     }
 
 
