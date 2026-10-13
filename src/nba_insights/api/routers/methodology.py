@@ -6,6 +6,7 @@ from fastapi import APIRouter
 
 from nba_insights.api import schemas
 from nba_insights.api.deps import (
+    get_drift_report,
     get_manifest_report,
     get_model_metrics,
     get_model_registry,
@@ -91,3 +92,14 @@ def methodology_registry() -> dict:
 def methodology_manifest() -> dict:
     """Reproducibility record for the served artifacts, verified against their hashes."""
     return get_manifest_report()
+
+
+@router.get(
+    "/methodology/drift", response_model=schemas.DriftReport, response_model_exclude_unset=True
+)
+def methodology_drift() -> dict:
+    """Live calibration of the outcome model on the current season (nightly pipeline)."""
+    report = get_drift_report()
+    if report is None:
+        return {"status": "missing"}
+    return {"status": "available", **report}

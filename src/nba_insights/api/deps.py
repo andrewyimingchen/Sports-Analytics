@@ -14,7 +14,7 @@ from typing import Annotated, Any
 from fastapi import Depends
 
 from nba_insights.analysis import ROSTER_INPUT_VERSION
-from nba_insights.config import MANIFEST_PATH, set_season_started_check
+from nba_insights.config import MANIFEST_PATH, MODELS_DIR, set_season_started_check
 from nba_insights.errors import ArtifactUnavailableError
 from nba_insights.ingest import NBAClient
 from nba_insights.ml import GameOutcomeModel, PlayerPointsModel, WinCurve
@@ -182,3 +182,14 @@ def get_manifest_report() -> dict[str, Any]:
         "verification": verification,
         "manifest": manifest,
     }
+
+
+def get_drift_report() -> dict[str, Any] | None:
+    """Latest live-calibration report written by the nightly pipeline, if any.
+
+    Read per request so a new nightly report shows up without a restart.
+    """
+    try:
+        return json.loads((MODELS_DIR / "drift.json").read_text())
+    except (OSError, ValueError):
+        return None

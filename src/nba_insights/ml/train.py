@@ -162,10 +162,25 @@ def main() -> None:
         help="games the current season needs before it becomes the holdout",
     )
     args = parser.parse_args()
+    run_training(
+        serving_client(),
+        n_train_seasons=args.train_seasons,
+        min_holdout_games=args.min_holdout_games,
+    )
 
-    client = serving_client()
-    test_season = holdout_season(client, min_games=args.min_holdout_games)
-    train_seasons = seasons_before(test_season, args.train_seasons)
+
+def run_training(
+    client: NBAClient,
+    n_train_seasons: int = 3,
+    min_holdout_games: int = MIN_HOLDOUT_GAMES,
+) -> dict:
+    """Train, evaluate on the temporal holdout, save artifacts, and record the run.
+
+    Returns the recorded metrics (also written to metrics.json and the
+    manifest). Used by the CLI and the nightly pipeline.
+    """
+    test_season = holdout_season(client, min_games=min_holdout_games)
+    train_seasons = seasons_before(test_season, n_train_seasons)
     logger.info("training on %s, evaluating on %s", train_seasons, test_season)
 
     logger.info("building game matchup frames…")
@@ -225,8 +240,8 @@ def main() -> None:
     record_run(
         "train",
         configuration={
-            "train_seasons": args.train_seasons,
-            "min_holdout_games": args.min_holdout_games,
+            "train_seasons": n_train_seasons,
+            "min_holdout_games": min_holdout_games,
             "outcome_C_grid": C_GRID,
             "elo_warmup_seasons": ELO_WARMUP_SEASONS,
         },
@@ -237,6 +252,7 @@ def main() -> None:
         recorded_at=trained_at,
     )
     logger.info("models and metrics saved to %s; manifest updated", MODELS_DIR)
+    return metrics
 
 
 if __name__ == "__main__":
