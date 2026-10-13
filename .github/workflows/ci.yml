@@ -66,6 +66,19 @@ jobs:
       - name: Browser tests (charts, keyboard, phone layout, offline)
         run: uv run pytest -q tests/test_pwa_browser.py
 
+  visual:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Chart pixel baselines (pinned Playwright container)
+        run: scripts/visual-baselines.sh
+      - name: Upload visual diffs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-diffs
+          path: test-results/visual/
+
   container:
     runs-on: ubuntu-latest
     steps:

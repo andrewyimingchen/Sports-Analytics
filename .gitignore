@@ -36,3 +36,6 @@ Thumbs.db
 
 # PWA lint/test tooling
 node_modules/
+
+# Visual-baseline comparison output (scripts/visual-baselines.sh)
+test-results/
