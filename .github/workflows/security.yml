@@ -46,9 +46,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      # Findings are reported, not blocking: Expo's CLI/Metro advisories have
-      # no non-breaking fix yet (Sports-Analytics-1xp.7.1). A failed audit
-      # (registry outage, missing lockfile, CLI error) still fails the job.
+      # Findings are reported, not blocking. After the 2026-10 non-breaking
+      # fix (no criticals; 33 left), the remainder sit in Expo SDK 56's
+      # CLI/Metro toolchain and need an SDK upgrade, not npm's "fix" (a
+      # downgrade to Expo 44). A failed audit (registry outage, missing
+      # lockfile, CLI error) still fails the job.
       - name: Audit mobile dependencies (findings non-blocking)
         run: |
           set +e
