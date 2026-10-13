@@ -350,8 +350,9 @@ for the workflow, options, and the provided Dockerfile.
 ## Development
 
 ```bash
-uv sync                       # install deps + the editable package
-uv run pytest                 # tests (offline; the browser suite needs `uv run playwright install chromium`)
+uv sync --all-groups          # deps, dev tools, and the browser-test group
+uv run playwright install chromium   # once, for the browser suite
+uv run pytest                 # tests (offline; browser tests skip without Playwright)
 uv run ruff check .           # lint
 uv run ruff format --check .  # formatting
 uv run mypy                   # types
