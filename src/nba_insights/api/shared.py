@@ -11,7 +11,12 @@ from typing import Any
 import pandas as pd
 from fastapi import HTTPException
 
-from nba_insights.config import current_season, past_seasons, prediction_seasons
+from nba_insights.config import (
+    current_season,
+    past_seasons,
+    prediction_seasons,
+    previous_season,
+)
 from nba_insights.errors import EXPECTED_ERRORS, FAILURES, reason_for
 from nba_insights.ingest import NBAClient
 from nba_insights.ml import GameOutcomeModel
@@ -24,6 +29,27 @@ logger = logging.getLogger(__name__)
 def today() -> str:
     """UTC calendar day, the cache key for daily snapshots and forecasts."""
     return pd.Timestamp.now("UTC").date().isoformat()
+
+
+def team_tricodes(client: NBAClient, season: str | None = None) -> dict[int, str]:
+    """TEAM_ID -> tricode for every team in *season* (default: current).
+
+    Early in a season not every team has played, so last season's games
+    fill in the rest; current-season rows win where both exist (relocations
+    and renames). Returns {} if neither season's games are available.
+    """
+    season = season or current_season()
+    codes: dict[int, str] = {}
+    for source in (previous_season(season), season):
+        try:
+            games = client.team_games(source)
+        except EXPECTED_ERRORS:
+            logger.warning("team list unavailable for %s", source, exc_info=True)
+            continue
+        if {"TEAM_ID", "TEAM_ABBREVIATION"} <= set(games.columns):
+            pairs = games[["TEAM_ID", "TEAM_ABBREVIATION"]].dropna()
+            codes.update(zip(pairs["TEAM_ID"].astype(int), pairs["TEAM_ABBREVIATION"], strict=True))
+    return codes
 
 
 @lru_cache(maxsize=2)
@@ -39,7 +65,9 @@ def snapshot_for_day(day: str, client: NBAClient) -> pd.DataFrame:
         FAILURES.record(reason_for(error))
         logger.warning("prior-season form unavailable; serving unseeded snapshot", exc_info=True)
         priors = None
-    snapshot = team_form_snapshot(client.team_games(), form_priors=priors)
+    snapshot = team_form_snapshot(
+        client.team_games(), form_priors=priors, team_codes=team_tricodes(client)
+    )
     try:
         games = pd.concat(
             [client.team_games(s) for s in [*past_seasons(2), current_season()]],

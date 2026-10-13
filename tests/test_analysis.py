@@ -395,3 +395,18 @@ def test_attach_ratings_tolerates_missing_tables(league_stats):
     assert "NET_RATING" not in out.columns
     with pytest.raises(KeyError, match="PLAYER_ID"):
         attach_ratings(league_stats)
+
+
+def test_percentile_bar_eases_early_in_a_season():
+    from nba_insights.analysis.percentiles import qualifying_games
+
+    opening_week = pd.DataFrame(
+        {"PLAYER_NAME": ["A", "B", "C"], "GP": [1, 2, 3], "PTS": [10.0, 20.0, 30.0]}
+    )
+    assert qualifying_games(opening_week) == 1  # half of 3 games, at least 1
+    ranks = percentile_ranks(opening_week, "A")  # 1 game still ranks in week one
+    assert ranks["PTS"] == pytest.approx(100 / 3, abs=0.1)
+    mid_season = opening_week.assign(GP=[30, 40, 50])
+    assert qualifying_games(mid_season) == 10  # the usual bar from 20 games on
+    with pytest.raises(KeyError):
+        percentile_ranks(opening_week, "A", min_games=10)  # explicit bar still wins

@@ -13,6 +13,8 @@ frame plus the opponent's row joined on GAME_ID — no extra endpoints.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 import pandas as pd
 
 REST_CAP = 10  # days; longer breaks (injury, all-star) aren't "more rested"
@@ -314,6 +316,7 @@ def team_form_snapshot(
     window: int | None = None,
     form_priors: pd.DataFrame | None = None,
     prior_weight: float = FORM_PRIOR_WEIGHT,
+    team_codes: Mapping[int, str] | None = None,
 ) -> pd.DataFrame:
     """Current form per team (season-to-date, or the most recent *window* games).
 
@@ -328,6 +331,12 @@ def team_form_snapshot(
     counting as *prior_weight* pseudo-games — the same seeding the outcome
     model is trained with, so early-season serving features match the
     training distribution instead of being raw small-sample means.
+
+    *team_codes* (TEAM_ID -> tricode) lists every team that should appear.
+    Early in a season some teams have not played yet; with priors they get
+    their prior-season form (zero games of evidence) instead of vanishing,
+    so the team list, matchups, and forecasts cover the whole league from
+    opening night.
     """
     df = _with_derived_stats(_prepare(team_games))
     df = df.sort_values(["TEAM_ID", "GAME_DATE"])
@@ -341,11 +350,18 @@ def team_form_snapshot(
     if form_priors is not None and window is None:
         n = grouped.size()
         team_ids = grouped["TEAM_ID"].last()
+        if team_codes:
+            unplayed = {code: tid for tid, code in team_codes.items() if code not in snap.index}
+            if unplayed:
+                snap = snap.reindex(snap.index.union(list(unplayed)))
+                n = n.reindex(snap.index).fillna(0)
+                team_ids = team_ids.reindex(snap.index).fillna(pd.Series(unplayed))
         league_prior = form_priors.mean()
-        priors = form_priors.reindex(team_ids.to_numpy()).fillna(league_prior)
+        priors = form_priors.reindex(team_ids.astype(int).to_numpy()).fillna(league_prior)
         priors.index = team_ids.index
         for form, source in _FORM_SOURCES.items():
-            snap[form] = (priors[source] * prior_weight + snap[form] * n) / (prior_weight + n)
+            observed = snap[form].fillna(0) * n
+            snap[form] = (priors[source] * prior_weight + observed) / (prior_weight + n)
     return snap
 
 
