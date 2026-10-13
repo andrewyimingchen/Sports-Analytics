@@ -28,8 +28,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # pyproject declares requires-python >= 3.11
-        python: ["3.11", "3.12", "3.13"]
+        # pyproject declares requires-python >= 3.11; 3.14 is the production image's
+        python: ["3.11", "3.12", "3.13", "3.14"]
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7

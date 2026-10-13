@@ -128,7 +128,10 @@ def test_workers_opening_a_fresh_cache_together_do_not_see_locked(tmp_path):
         assert time.monotonic() < deadline, "workers did not start"
         time.sleep(0.01)
     (tmp_path / "go").touch()
-    outcomes = [(worker.wait(timeout=60), worker.stdout.read().strip()) for worker in workers]
+    outcomes = []
+    for worker in workers:
+        output, _ = worker.communicate(timeout=60)  # also closes the pipe
+        outcomes.append((worker.returncode, output.strip()))
     assert outcomes == [(0, "")] * len(workers)
     assert Cache(tmp_path / "fresh.sqlite3").journal_mode == "wal"
 
