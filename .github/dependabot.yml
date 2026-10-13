@@ -11,11 +11,30 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    groups:
+      eslint:
+        patterns: [eslint, "@eslint/*", globals]
   - package-ecosystem: npm
     directory: /mobile
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    # Expo pins these per SDK (`npx expo install --check`); bumping them alone
+    # breaks compatibility. They move together in SDK upgrades via
+    # `npx expo install expo@^<sdk> --fix` (see mobile/README.md).
+    ignore:
+      - dependency-name: expo
+      - dependency-name: "expo-*"
+      - dependency-name: "@expo/*"
+      - dependency-name: react
+      - dependency-name: react-dom
+      - dependency-name: "react-native"
+      - dependency-name: "react-native-*"
+      - dependency-name: "@react-native/*"
+      - dependency-name: "@react-native-async-storage/*"
+      - dependency-name: typescript
+      - dependency-name: "@types/react"
+      - dependency-name: eslint-config-expo
   - package-ecosystem: github-actions
     directory: /
     schedule:

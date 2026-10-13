@@ -19,8 +19,8 @@ jobs:
   python:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
       - name: Export locked dependencies
         run: uv export --frozen --all-extras --all-groups --no-hashes --no-emit-project > requirements-audit.txt
       - name: Audit Python dependencies
@@ -29,8 +29,8 @@ jobs:
   pwa-tooling:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
       - name: Audit PWA tooling
@@ -42,8 +42,8 @@ jobs:
       run:
         working-directory: mobile
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
       # Findings are reported, not blocking. After the 2026-10 non-breaking
