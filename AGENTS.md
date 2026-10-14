@@ -97,6 +97,30 @@ See README.md for details.
   never be exposed through the public API/PWA or redistributed. Licensed
   providers (e.g. BALLDONTLIE) remain the path for anything commercial.
 
+## Codex Harness
+
+Read by the global Claude+Codex harness: the `codex-review` skill
+(`~/.claude/skills/codex-review`) and `codex-worker` (`~/.local/bin`), via
+`codex-harness-config`. Keep one `- Key:` line per setting, with
+the value in backticks.
+
+- Base: `main`
+- Setup: `uv sync --all-groups --frozen`
+- Check: `scripts/preflight.sh --quick`
+- Review focus:
+  - Network access outside `ingest/` (NBAClient), or remote fetches that bypass `Cache.get_or_fetch`
+  - I/O or network calls inside `analysis/` functions, which must stay pure and offline-testable
+  - Empty or error responses being cached, or wrong per-endpoint TTLs in `store/`
+  - Scraped data (e.g. Basketball-Reference) reaching the public API/PWA
+  - Column names that break stats.nba.com conventions (PTS, GP, SEASON_ID, ...)
+  - PWA/service-worker changes that serve stale data without saying so in the UI
+
+Workflow: Claude plans and integrates; Codex reviews and takes clearly specified
+tickets. Run `codex-review` before opening any PR. Only label a beads issue
+`agent:codex` when it has acceptance criteria and needs no product decisions;
+`codex-worker .` claims those in isolated worktrees and labels the results
+`codex:review` (green) or `codex:failed`.
+
 ## Non-Interactive Shell Commands
 
 **ALWAYS use non-interactive flags** with file operations to avoid hanging on confirmation prompts.
