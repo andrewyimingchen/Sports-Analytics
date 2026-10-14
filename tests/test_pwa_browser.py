@@ -306,6 +306,22 @@ def test_matchup_charts(page, base_url):
     assert fields.index("home-missing") < fields.index("away-missing")
 
 
+def test_partial_data_is_announced_where_it_happens(page, base_url):
+    # the fixture's draft-history source is down, and its pulse has no slate
+    _open(page, base_url, "players")
+    page.fill("#search", "Alice")
+    page.click("#results button")
+    notice = page.locator("#profile-deep .degraded-note")
+    notice.first.wait_for()
+    text = notice.first.inner_text()
+    assert "Partial data" in text and "Draft pedigree" in text
+    assert notice.first.get_attribute("role") == "status"
+    _open(page, base_url, "pulse")
+    page.wait_for_selector("#pulse-content .leader-grid")
+    pulse_notes = page.locator("#pulse-content .degraded-note").all_inner_texts()
+    assert any("Next games" in note for note in pulse_notes)
+
+
 def test_tapping_a_point_shows_its_tooltip_on_touch_phones(browser, base_url):
     context = browser.new_context(viewport=PHONE, has_touch=True, is_mobile=True)
     page = context.new_page()

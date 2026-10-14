@@ -1,5 +1,6 @@
 // League pulse: leaders, team form, landscape, next games.
 import { $, api, escapeHTML, fmt } from "../core.js";
+import { degradedNotice } from "../render.js";
 import { loadMeta } from "../meta.js";
 import { registerPage, registerRetry } from "../router.js";
 import { openPlayerProfile } from "./profile.js";
@@ -36,7 +37,7 @@ async function loadPulse() {
     const cutoff=teams.map(team=>team.last_game_date).filter(Boolean).sort().at(-1);
     const cutoffLabel=cutoff?new Date(cutoff).toLocaleDateString(undefined,{year:"numeric",month:"short",day:"numeric"}):"date unavailable";
     $("pulse-context").innerHTML=`<span><b>${escapeHTML(pulseData.season)}</b> season</span><span><b>${escapeHTML(pulseData.minimum_games)}</b> games minimum</span><span>Team form through <b>${escapeHTML(cutoffLabel)}</b></span>`;
-    $("pulse-content").innerHTML = `${slate}<div class="leader-grid">${cards}</div><section class="form-board"><div class="form-board-head"><h2>Team form index</h2><span>NET · WIN% · ELO</span></div><div class="team-form-list">${formRows}</div></section>${landscape}`;
+    $("pulse-content").innerHTML = `${degradedNotice(pulseData.degraded)}${slate}<div class="leader-grid">${cards}</div><section class="form-board"><div class="form-board-head"><h2>Team form index</h2><span>NET · WIN% · ELO</span></div><div class="team-form-list">${formRows}</div></section>${landscape}`;
   } catch (error) { $("pulse-content").innerHTML = `<div class="panel empty-state"><div><h2>League pulse unavailable</h2><p class="error">${escapeHTML(error.message)}</p><button class="btn" data-retry="pulse">Retry league data</button></div></div>`; }
 }
 $("pulse-season").addEventListener("change",()=>{pulseLoaded=false;$("pulse-content").innerHTML='<div class="panel empty-state"><div class="loading">LOADING HISTORICAL PULSE…</div></div>';loadPulse();});
