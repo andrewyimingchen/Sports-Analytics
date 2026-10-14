@@ -1,0 +1,13 @@
+# Runs the pipeline daily at 06:00 local time, after the night's games have
+# settled on stats.nba.com. Persistent catches up a run missed while the
+# machine (or WSL) was off.
+[Unit]
+Description=Run the POSSESSION LAB pipeline nightly
+
+[Timer]
+OnCalendar=*-*-* 06:00
+Persistent=true
+RandomizedDelaySec=10min
+
+[Install]
+WantedBy=timers.target
