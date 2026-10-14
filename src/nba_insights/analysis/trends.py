@@ -31,9 +31,12 @@ def career_per_game(season_totals: pd.DataFrame, stats: list[str] | None = None)
     """Convert career season *totals* into per-game averages by season.
 
     Returns one row per season with SEASON_ID, GP, and each requested stat
-    divided by games played. Seasons with 0 GP are dropped. When a player was
-    traded mid-season stats.nba.com emits one row per team plus a TOT row;
-    duplicate seasons are collapsed by keeping the row with the most games.
+    divided by games played, plus season shooting percentages (FG_PCT,
+    FG3_PCT, FT_PCT: makes over attempts, NaN without attempts) when the
+    totals carry their makes and attempts. Seasons with 0 GP are dropped.
+    When a player was traded mid-season stats.nba.com emits one row per team
+    plus a TOT row; duplicate seasons are collapsed by keeping the row with
+    the most games.
     """
     stats = stats or [s for s in PER_GAME_STATS if s in season_totals.columns]
     missing = [s for s in stats if s not in season_totals.columns]
@@ -50,6 +53,10 @@ def career_per_game(season_totals: pd.DataFrame, stats: list[str] | None = None)
     out = df[["SEASON_ID", "GP"]].copy()
     for stat in stats:
         out[stat] = (df[stat] / df["GP"]).round(1)
+    for pct, (made, attempted) in _CAREER_PCT.items():
+        if made in df.columns and attempted in df.columns:
+            attempts = df[attempted].where(df[attempted] > 0)
+            out[pct] = (df[made] / attempts).round(3)
     return out
 
 
