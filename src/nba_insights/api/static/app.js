@@ -1,6 +1,6 @@
 // PWA entry point. Each page module registers its loader with the router on
 // import; this file loads them, starts navigation, and installs the worker.
-import { updateConnectionStatus } from "./meta.js";
+import { loadMeta, updateConnectionStatus } from "./meta.js";
 import { startRouter } from "./router.js";
 import "./pages/ask.js";
 import "./pages/compare.js";
@@ -16,5 +16,7 @@ import "./pages/tracking.js";
 
 startRouter();
 updateConnectionStatus();
+// Every page shares the header badge, but only some pages need /meta itself.
+loadMeta().catch(()=>{});
 
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").then(registration=>registration.update());

@@ -412,6 +412,16 @@ def test_player_deep_link_opens_profile_and_stays_shareable(page, base_url):
     page.wait_for_function("location.hash === '#players/1'")
 
 
+@pytest.mark.parametrize("route", ["players/1", "teams", "methodology", "compare"])
+def test_status_badge_settles_on_pages_that_do_not_need_meta(page, base_url, route):
+    # these pages never call loadMeta themselves; the badge must not stay on "Loading"
+    page.goto(f"{base_url}#{route}")
+    # (the badge is hidden on phones, so wait on its text rather than visibility)
+    page.wait_for_function(
+        "document.getElementById('app-status').textContent.includes('data available')"
+    )
+
+
 def test_unknown_hash_falls_back_to_league_pulse(page, base_url):
     page.goto(f"{base_url}#not-a-page/7")
     assert page.locator("#page-pulse").get_attribute("class").split().count("active") == 1
