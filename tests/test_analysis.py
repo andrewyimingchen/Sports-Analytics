@@ -410,3 +410,22 @@ def test_percentile_bar_eases_early_in_a_season():
     assert qualifying_games(mid_season) == 10  # the usual bar from 20 games on
     with pytest.raises(KeyError):
         percentile_ranks(opening_week, "A", min_games=10)  # explicit bar still wins
+
+
+def test_career_per_game_adds_season_shooting_percentages():
+    totals = pd.DataFrame(
+        {
+            "SEASON_ID": ["2024-25", "2025-26"],
+            "GP": [70, 65],
+            "PTS": [2071, 1799],
+            "FGM": [786, 644],
+            "FGA": [1364, 1132],
+            "FG3M": [80, 0],
+            "FG3A": [192, 0],
+        }
+    )
+    out = career_per_game(totals, ["PTS"])
+    assert list(out["FG_PCT"]) == [0.576, 0.569]
+    assert out["FG3_PCT"].iloc[0] == 0.417
+    assert pd.isna(out["FG3_PCT"].iloc[1])  # no attempts: unknown, not 0%
+    assert "FT_PCT" not in out  # FTM/FTA absent from these totals

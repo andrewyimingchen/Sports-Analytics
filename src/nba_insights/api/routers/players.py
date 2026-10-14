@@ -83,7 +83,7 @@ def player_career(player_id: int, client: Client) -> list[dict]:
     totals = client.career_stats(player_id)
     if totals.empty:
         raise HTTPException(404, f"no career data for player {player_id}")
-    return career_per_game(totals).to_dict(orient="records")
+    return finite_records(career_per_game(totals))
 
 
 def _player_league(

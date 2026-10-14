@@ -33,6 +33,10 @@ class FakeNBAClient:
                 "PTS": [2000, 1500],
                 "AST": [400, 250],
                 "REB": [600, 400],
+                "FGM": [720, 500],
+                "FGA": [1500, 1000],
+                "FG3M": [150, 0],
+                "FG3A": [400, 0],
             }
         )
         self.league = pd.DataFrame(
@@ -374,6 +378,8 @@ def test_career_per_game(api):
     assert r.status_code == 200
     seasons = r.json()
     assert seasons[0]["PTS"] == 25.0 and seasons[1]["PTS"] == 30.0
+    # the profile's FG% / 3P% tiles read these; no attempts serializes as null
+    assert seasons[1]["FG_PCT"] == 0.5 and seasons[1]["FG3_PCT"] is None
 
 
 def test_career_unknown_player_404(api):
