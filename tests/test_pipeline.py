@@ -5,10 +5,12 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 
+import pandas as pd
 import pytest
 
 from nba_insights import pipeline
 from nba_insights.errors import UpstreamError
+from nba_insights.pbp.backfill import backfill_season
 
 NOW = datetime(2026, 11, 2, 6, 0, tzinfo=UTC)
 
@@ -18,7 +20,9 @@ def stubbed(monkeypatch, tmp_path):
     calls: list[str] = []
     monkeypatch.setattr(pipeline, "warm", lambda client, top: calls.append("warm") or 0)
     monkeypatch.setattr(
-        pipeline, "backfill_season", lambda client, season: calls.append("pbp") or 0
+        pipeline,
+        "backfill_season",
+        lambda client, season, *, since=None: calls.append("pbp") or 0,
     )
     monkeypatch.setattr(
         pipeline,
@@ -72,6 +76,45 @@ def test_retrain_runs_when_due_and_pbp_when_asked(stubbed):
     assert calls == ["warm", "pbp", "retrain", "drift"]
     retrain = next(s for s in run.steps if s.name == "retrain")
     assert retrain.status == "ok" and "0.590" in retrain.detail
+    pbp = next(s for s in run.steps if s.name == "pbp")
+    assert pbp.detail == "0 failed games (last 14 days)"
+
+
+@pytest.mark.parametrize(
+    ("game_date", "expected_status", "expected_calls"),
+    [
+        ("2026-10-18", "ok", []),
+        ("2026-10-20", "degraded", ["001", "001"]),
+    ],
+)
+def test_pbp_window_skips_old_failures_but_reports_recent_ones(
+    stubbed, monkeypatch, game_date, expected_status, expected_calls
+):
+    _, _, tmp_path = stubbed
+
+    class Client:
+        def __init__(self):
+            self.calls = []
+
+        def team_games(self, season):
+            return pd.DataFrame({"GAME_ID": ["001"], "GAME_DATE": [game_date]})
+
+        def play_by_play(self, game_id):
+            self.calls.append(game_id)
+            raise UpstreamError("unavailable")
+
+        def game_rotation(self, game_id):
+            self.calls.append(game_id)
+            raise UpstreamError("unavailable")
+
+    client = Client()
+    monkeypatch.setattr(pipeline, "backfill_season", backfill_season)
+    run = _run(tmp_path, pbp=True, pbp_client=client)
+
+    pbp = next(step for step in run.steps if step.name == "pbp")
+    assert pbp.status == expected_status
+    assert pbp.detail.endswith("failed games (last 14 days)")
+    assert client.calls == expected_calls
 
 
 def test_failed_steps_and_drift_raise_alerts_without_stopping_the_run(stubbed, monkeypatch):
