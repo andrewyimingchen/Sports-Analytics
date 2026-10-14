@@ -53,6 +53,7 @@ logger = logging.getLogger(__name__)
 RUN_LOG_PATH = DATA_DIR / "pipeline.jsonl"
 DRIFT_PATH = MODELS_DIR / "drift.json"
 RETRAIN_DAYS = 7
+PBP_WINDOW_DAYS = 14
 WEBHOOK_ENV = "POSSESSION_LAB_ALERT_WEBHOOK"
 
 
@@ -134,8 +135,15 @@ def run_pipeline(
     if pbp:
 
         def do_pbp() -> tuple[str, str]:
-            failures = backfill_season(pbp_client or client, current_season())
-            return ("degraded" if failures else "ok", f"{failures} failed games")
+            failures = backfill_season(
+                pbp_client or client,
+                current_season(),
+                since=now.date() - timedelta(days=PBP_WINDOW_DAYS),
+            )
+            return (
+                "degraded" if failures else "ok",
+                f"{failures} failed games (last {PBP_WINDOW_DAYS} days)",
+            )
 
         run.record("pbp", do_pbp)
 

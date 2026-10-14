@@ -14,6 +14,9 @@ from __future__ import annotations
 
 import argparse
 import logging
+from datetime import date
+
+import pandas as pd
 
 from nba_insights.config import current_season
 from nba_insights.errors import EXPECTED_ERRORS
@@ -48,9 +51,18 @@ class _Breaker:
         )
 
 
-def backfill_season(client: NBAClient, season: str, limit: int | None = None) -> int:
-    """Fetch (or confirm cached) PBP and rotations for every game of a season."""
-    game_ids = sorted(client.team_games(season)["GAME_ID"].unique())
+def backfill_season(
+    client: NBAClient,
+    season: str,
+    limit: int | None = None,
+    since: date | None = None,
+) -> int:
+    """Fetch (or confirm cached) PBP and rotations for games on or after ``since``."""
+    games = client.team_games(season)
+    if since is not None:
+        game_dates = pd.to_datetime(games["GAME_DATE"], format="mixed").dt.date
+        games = games[game_dates >= since]
+    game_ids = sorted(games["GAME_ID"].unique())
     if limit:
         game_ids = game_ids[:limit]
     failures = 0
