@@ -12,6 +12,8 @@ the app warm each other.
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -57,7 +59,22 @@ __all__ = [
 
 init_error_tracking()  # optional Sentry; no-op unless SENTRY_DSN is set
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    """Install the season-started check before serving any request.
+
+    get_client() registers it, but routes such as /meta never depend on the
+    client, so on a fresh start they reported the calendar season (an empty
+    new season between October 1 and opening night) until some client-backed
+    route ran. Dependency overrides are honored, so tests keep their fakes.
+    """
+    app.dependency_overrides.get(get_client, get_client)()
+    yield
+
+
 app = FastAPI(
+    lifespan=lifespan,
     title="POSSESSION LAB API",
     version="0.1.0",
     openapi_tags=[
