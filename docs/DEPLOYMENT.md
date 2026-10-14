@@ -105,35 +105,62 @@ Set `POSSESSION_LAB_ALERT_WEBHOOK` to a Slack-compatible incoming-webhook URL
 to also post the alert text. Every run appends one JSON line to
 `data/pipeline.jsonl` (steps, statuses, durations, alerts).
 
-With cron (non-zero exits are mailed by most cron setups):
+**Run it from a dedicated checkout, never a development one.** A scheduled
+job executes whatever is checked out when it fires, and a plain `uv run`
+installs whatever the lockfile on that branch asks for, unattended. Keep a
+clean "runner" checkout of `main`, run it with `--frozen --no-sync`, and point
+it at the data the API serves through `NBA_INSIGHTS_DATA_DIR` and
+`NBA_INSIGHTS_MANIFEST`:
 
-```cron
-0 6 * * * cd /srv/Sports-Analytics && uv run python -m nba_insights.pipeline --pbp
+```bash
+git worktree add --detach ~/possession-lab-runner origin/main   # once
+uv --directory ~/possession-lab-runner sync --frozen
 ```
 
-Or with a systemd timer (`systemctl --user enable --now possession-lab-pipeline.timer`):
+To update the runner later, a deliberate step after reviewing what changed:
 
-```ini
-# ~/.config/systemd/user/possession-lab-pipeline.service
-[Unit]
-Description=POSSESSION LAB nightly pipeline
+```bash
+git -C ~/possession-lab-runner fetch origin
+git -C ~/possession-lab-runner checkout --detach origin/main
+uv --directory ~/possession-lab-runner sync --frozen
+```
 
-[Service]
-Type=oneshot
-WorkingDirectory=/srv/Sports-Analytics
-Environment=POSSESSION_LAB_ALERT_WEBHOOK=https://hooks.slack.com/services/...
-ExecStart=/usr/bin/env uv run python -m nba_insights.pipeline --pbp
+**systemd user timer (recommended; no root).** Templates live in
+[`deploy/systemd/`](../deploy/systemd/); edit the two `NBA_INSIGHTS_*` paths
+in the service to your API checkout, then:
 
-# ~/.config/systemd/user/possession-lab-pipeline.timer
-[Unit]
-Description=Run the POSSESSION LAB pipeline nightly
+```bash
+mkdir -p ~/.config/systemd/user ~/.config/possession-lab ~/possession-lab-backups
+cp deploy/systemd/possession-lab-pipeline.{service,timer} ~/.config/systemd/user/
+chmod 700 ~/.config/possession-lab ~/possession-lab-backups
+install -m 600 /dev/null ~/.config/possession-lab/env   # optional webhook goes here
+systemctl --user daemon-reload
+systemctl --user enable --now possession-lab-pipeline.timer
+loginctl enable-linger "$USER"     # run while logged out
+systemctl --user start --no-block possession-lab-pipeline   # first run now; follow it:
+journalctl --user -u possession-lab-pipeline -f
+```
 
-[Timer]
-OnCalendar=*-*-* 06:00
-Persistent=true
+Notes:
+- `ExecStart` uses the absolute path to `uv`: systemd does not read your
+  shell profile, so `~/.local/bin` is not on its `PATH`.
+- Put `POSSESSION_LAB_ALERT_WEBHOOK=...` in `~/.config/possession-lab/env`
+  (mode 600), never in the unit file or the repository; anyone holding the
+  URL can post to the channel.
+- Keep backups on a private Linux path. They include the cache, which holds
+  scraped pages that must not be redistributed; under WSL, `/mnt/c` ignores
+  Linux permissions and may be synced by OneDrive.
+- **WSL:** the timer only fires while the WSL VM is running, and Windows stops
+  it when idle. `Persistent=true` runs a missed job at the next start, and
+  the freshness check (below) flags anything over 36 hours.
+- A weekly retrain rewrites the tracked `models/manifest.json` in the API
+  checkout; commit that change through a PR.
 
-[Install]
-WantedBy=timers.target
+Or with cron, using the same runner and flags (non-zero exits are mailed by
+most cron setups):
+
+```cron
+0 6 * * * cd ~/possession-lab-runner && NBA_INSIGHTS_DATA_DIR=/srv/Sports-Analytics/data NBA_INSIGHTS_MANIFEST=/srv/Sports-Analytics/models/manifest.json ~/.local/bin/uv run --frozen --no-sync python -m nba_insights.pipeline --pbp
 ```
 
 If the API runs on another host, sync the cache afterwards (see the warmed-cache

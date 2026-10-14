@@ -1,0 +1,22 @@
+# Nightly POSSESSION LAB pipeline as a systemd *user* service (no root).
+# Install: see docs/DEPLOYMENT.md#scheduling-the-nightly-pipeline.
+#
+# It runs from a dedicated clean checkout of main (the "runner"), never from a
+# development checkout, and with --no-sync so a run never installs packages:
+# code and dependencies change only when you update the runner on purpose.
+# The two NBA_INSIGHTS_* paths point it at the data the API serves.
+[Unit]
+Description=POSSESSION LAB nightly pipeline
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/possession-lab-runner
+# EDIT: the API's data directory and its tracked model manifest.
+Environment=NBA_INSIGHTS_DATA_DIR=%h/Sports-Analytics/data
+Environment=NBA_INSIGHTS_MANIFEST=%h/Sports-Analytics/models/manifest.json
+# Optional secrets (POSSESSION_LAB_ALERT_WEBHOOK=...), chmod 600; "-" = may be absent.
+EnvironmentFile=-%h/.config/possession-lab/env
+ExecStart=%h/.local/bin/uv run --frozen --no-sync python -m nba_insights.pipeline --pbp --backup %h/possession-lab-backups
+NoNewPrivileges=yes
+Nice=10
+IOSchedulingClass=idle
