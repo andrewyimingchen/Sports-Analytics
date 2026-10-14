@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { deepValue, escapeHTML, fmt, money } from "../../src/nba_insights/api/static/core.js";
-import { dataTable } from "../../src/nba_insights/api/static/render.js";
+import { dataTable, degradedNotice, seasonNotice } from "../../src/nba_insights/api/static/render.js";
 import {
   SERIES,
   SHAPES,
@@ -76,4 +76,33 @@ test("clip truncates long labels on narrow charts only", () => {
   assert.equal(clip(400)(name).length, 14);
   assert.equal(clip(900)(name), name);
   assert.equal(clip(400)("Jokic"), "Jokic");
+});
+
+test("degradedNotice groups omitted sections by reason", () => {
+  assert.equal(degradedNotice([]), "");
+  assert.equal(degradedNotice(undefined), "");
+  const html = degradedNotice([
+    { section: "lineups", reason: "upstream_unavailable" },
+    { section: "on_off", reason: "upstream_unavailable" },
+    { section: "draft", reason: "data_unavailable" },
+  ]);
+  assert.match(html, /role="status"/);
+  assert.match(html, /Lineups, On\/off impact: stats\.nba\.com did not respond/);
+  assert.match(html, /Draft pedigree: not available for this sample yet/);
+});
+
+test("degradedNotice collapses repeated per-player sections and escapes", () => {
+  const html = degradedNotice([
+    { section: "shot_quality:1", reason: "upstream_unavailable" },
+    { section: "shot_quality:2", reason: "upstream_unavailable" },
+    { section: "<b>odd</b>", reason: "mystery" },
+  ]);
+  assert.equal(html.match(/Shot quality/g).length, 1);
+  assert.match(html, /&lt;b&gt;odd&lt;\/b&gt;: unavailable right now/);
+});
+
+test("seasonNotice only appears when the season differs", () => {
+  assert.equal(seasonNotice("2026-27", "2026-27", "why"), "");
+  assert.equal(seasonNotice(undefined, "2026-27", "why"), "");
+  assert.match(seasonNotice("2025-26", "2026-27", "games: reason"), /Showing 2025-26<\/b> games: reason/);
 });

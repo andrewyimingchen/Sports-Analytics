@@ -1,6 +1,6 @@
 // Player search and profile: career, percentiles, shots, splits, impact.
 import { $, api, deepValue, escapeHTML, fmt, money } from "../core.js";
-import { dataTable } from "../render.js";
+import { dataTable, degradedNotice } from "../render.js";
 import { registerDeepLink, showPage } from "../router.js";
 import {
   careerTrendPlot,
@@ -177,7 +177,7 @@ async function loadProfileDeep(id, name, season, seasonType) {
   const quality = shots?.quality || {}, breakdown = shots?.breakdown || [];
   target.innerHTML = `
     <section class="deep-panel"><div class="subhead"><h2>Scouting context</h2><span>${escapeHTML(insights?.season || season)} · ${escapeHTML(insights?.position_group || "League")}</span></div>
-      ${insights?.scouting_take ? `<div class="scouting-card">${escapeHTML(insights.scouting_take)}</div>` : '<p class="analytics-note">Scouting context is unavailable for this sample.</p>'}
+      ${degradedNotice(insights?.degraded)}${insights?.scouting_take ? `<div class="scouting-card">${escapeHTML(insights.scouting_take)}</div>` : '<p class="analytics-note">Scouting context is unavailable for this sample.</p>'}
       <div class="context-grid">
         <div class="context-tile"><b>${ratings.NET_RATING == null ? "—" : `${Number(ratings.NET_RATING)>=0?"+":""}${fmt(ratings.NET_RATING)}`}</b><span>Net rating</span></div>
         <div class="context-tile"><b>${ratings.CLUTCH_NET_RATING == null ? "—" : `${Number(ratings.CLUTCH_NET_RATING)>=0?"+":""}${fmt(ratings.CLUTCH_NET_RATING)}`}</b><span>Clutch net</span></div>
@@ -198,7 +198,7 @@ async function loadProfileDeep(id, name, season, seasonType) {
     <section class="deep-panel"><div class="subhead"><h2>Situational splits</h2><span>${escapeHTML(season)}</span></div>
       <div class="profile-controls"><label>Split by<select id="split-mode"><option value="home_away">Home / away</option><option value="month">Month</option><option value="rest">Rest</option><option value="opponent">Opponent</option></select></label></div><div id="split-viz"></div>
     </section>
-    <section class="deep-panel"><div class="subhead"><h2>Contract & salary</h2><span>LOCAL-ONLY DATA</span></div>
+    <section class="deep-panel"><div class="subhead"><h2>Contract & salary</h2><span>LOCAL-ONLY DATA</span></div>${degradedNotice(contract?.degraded)}
       ${contract ? `<div class="context-grid"><div class="context-tile"><b>${money(Object.values(contract.salaries)[0])}</b><span>Current salary</span></div><div class="context-tile"><b>${money(Object.values(contract.salaries).reduce((sum,value)=>sum+Number(value),0))}</b><span>Committed total</span></div><div class="context-tile"><b>${money(contract.guaranteed)}</b><span>Guaranteed</span></div></div><div style="margin-top:13px">${Object.entries(contract.salaries).map(([year,value]) => `<div class="contract-row"><b>${escapeHTML(year)}</b><span>${money(value)}</span><span></span><span></span></div>`).join("")}</div><p class="analytics-note">Scraped weekly for personal use and served only to the local machine.</p>` : '<p class="analytics-note">No listed contract, or this request is not coming from the local machine.</p>'}
     </section>`;
   $("shot-mode")?.addEventListener("change", event => { $("shot-viz").innerHTML = shotCourt(shots,event.target.value); });
