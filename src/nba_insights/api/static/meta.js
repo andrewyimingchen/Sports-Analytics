@@ -2,10 +2,21 @@
 import { $, api, escapeHTML } from "./core.js";
 
 let metaData = null;
+let metaRequest = null;
 
-/** The server's season list and capabilities, fetched once. */
-export async function loadMeta(){
-  if(metaData)return metaData;
+/** The server's season list and capabilities, fetched once (concurrent callers share it). */
+export function loadMeta(){
+  if(!metaRequest){
+    metaRequest=fetchMeta().catch(error=>{
+      metaRequest=null; // let the next caller retry
+      updateConnectionStatus(true);
+      throw error;
+    });
+  }
+  return metaRequest;
+}
+
+async function fetchMeta(){
   metaData=await api("/meta");
   const options=metaData.seasons.map(season=>`<option value="${escapeHTML(season)}">${escapeHTML(season)}</option>`).join("");
   ["pulse-season","explore-season","games-season","tracking-season"].forEach(id=>{if($(id))$(id).innerHTML=options;});
@@ -21,15 +32,17 @@ export async function loadMeta(){
   return metaData;
 }
 
-export function updateConnectionStatus(){
+export function updateConnectionStatus(failed=false){
   if(!navigator.onLine){
     $("app-status").innerHTML='<i class="live-dot offline"></i> Offline · showing saved data when available';
   }else if(metaData){
     $("app-status").innerHTML=`<i class="live-dot"></i> ${escapeHTML(metaData.current_season)} data available`;
+  }else if(failed){
+    $("app-status").innerHTML='<i class="live-dot offline"></i> League data unavailable · retrying on next view';
   }
 }
-window.addEventListener("online",updateConnectionStatus);
-window.addEventListener("offline",updateConnectionStatus);
+window.addEventListener("online",()=>{updateConnectionStatus();if(!metaData)loadMeta().catch(()=>{});});
+window.addEventListener("offline",()=>updateConnectionStatus());
 
 let teamOptionsCache = null;
 export async function loadTeamOptions(){
