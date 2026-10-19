@@ -3,7 +3,7 @@
 # Mount a warmed cache and model artifacts at /app/data. The image never copies
 # local data into its build context; see .dockerignore and docs/DEPLOYMENT.md.
 
-FROM ghcr.io/astral-sh/uv:0.13.0 AS uv
+FROM ghcr.io/astral-sh/uv:0.13.1 AS uv
 FROM python:3.14-slim-bookworm
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
