@@ -1,0 +1,76 @@
+name: Claude review
+
+# AI review on every PR (layer 2 of the review setup; see REVIEW.md).
+# Advisory: findings are posted as comments and this job is not a required
+# check, so a missing secret or an API outage never blocks a merge.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    # fork and Dependabot PRs get no secrets on pull_request; skip drafts too
+    if: >-
+      !github.event.pull_request.draft &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          # subscription token from `claude setup-token`; to use an API key
+          # instead, swap this for anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          use_sticky_comment: true
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+            BASE: origin/${{ github.event.pull_request.base.ref }}
+            EVENT: ${{ github.event.action }}
+
+            You are reviewing this pull request. The PR branch is checked out
+            in the working directory with full history.
+
+            1. Read REVIEW.md and AGENTS.md first. REVIEW.md defines what
+               counts as a finding, what to skip, the nit cap, severity tags,
+               and the summary format. Follow it exactly.
+            2. Read the PR title and body (`gh pr view`) for the stated intent,
+               and the diff (`gh pr diff`). Read surrounding code as needed;
+               trace calls rather than guessing from names.
+            3. If EVENT is "synchronize" and an earlier Claude review comment
+               exists on this PR, review only the commits pushed since that
+               review, and do not repeat findings that were already posted.
+            4. Hunt for bugs in the diff: correctness, the failure modes in
+               REVIEW.md, security, and missing tests for behaviour changes.
+            5. Verify every candidate finding before posting. Re-read the
+               code and try to disprove it: find the guard, test, or caller
+               that makes it a non-issue. Drop anything you cannot support
+               with a file, line, and quoted code. Drop style-only findings.
+            6. Post each surviving finding as an inline comment with
+               `mcp__github_inline_comment__create_inline_comment`, starting
+               with its tag (**important**, **nit**, or **pre-existing**),
+               then the problem, the concrete failure scenario, and a fix.
+            7. Post one summary with `gh pr comment`, starting with the count
+               ("1 important, 2 nits") or "No issues found", most severe
+               first, one line per finding. Nothing else.
+
+            Only post GitHub comments; do not write review text as messages.
+            Do not edit files, commit, or push.
+          claude_args: |
+            --max-turns 60
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(git log:*),Bash(git diff:*),Bash(git show:*),Bash(git blame:*),Read,Glob,Grep"

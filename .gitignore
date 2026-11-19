@@ -39,3 +39,6 @@ node_modules/
 
 # Visual-baseline comparison output (scripts/visual-baselines.sh)
 test-results/
+
+# Claude Code agent worktrees (local checkouts of other branches)
+.claude/worktrees/
