@@ -160,6 +160,12 @@ def decode_polymarket(events: list[dict]) -> pd.DataFrame:
     return _frame(rows)
 
 
+def _stamped(prices: pd.DataFrame) -> pd.DataFrame:
+    """Record when prices were fetched: the cache serves its last good copy
+    when a refresh fails, and a stale quote must not pass as a fresh one."""
+    return prices.assign(FETCHED_AT=pd.Timestamp.now("UTC"))
+
+
 def _get(url: str, params: dict) -> Any:
     import requests
 
@@ -181,7 +187,7 @@ def fetch_kalshi_nba() -> pd.DataFrame:
         cursor = page.get("cursor") or ""
         if not cursor:
             break
-    return decode_kalshi(markets)
+    return _stamped(decode_kalshi(markets))
 
 
 def polymarket_series_slug(season: str) -> str:
@@ -208,4 +214,4 @@ def fetch_polymarket_nba(season: str) -> pd.DataFrame:
         events.extend(batch)
         if len(batch) < _PAGE:
             break
-    return decode_polymarket(events)
+    return _stamped(decode_polymarket(events))

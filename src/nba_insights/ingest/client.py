@@ -544,7 +544,7 @@ class NBAClient:
     def polymarket_nba_games(self, season: str | None = None) -> pd.DataFrame:
         """Open Polymarket NBA game prices for *season*, one row per game.
         Personal research only -- never serve through the public API/PWA."""
-        season = season or current_season()
+        season = season or calendar_season()
         return self._cached(
             f"markets/polymarket/nba/{season}",
             lambda: fetch_polymarket_nba(season),
@@ -554,7 +554,7 @@ class NBAClient:
     def injury_report_index(self, season: str | None = None) -> pd.DataFrame:
         """Today's official injury-report links (URL, REPORT_AT in US Eastern).
         Scraped: personal use only, never the public API/PWA (see ingest.injuries)."""
-        season = season or current_season()
+        season = season or calendar_season()
         return self._cached(
             f"injuries/index/{season}",
             lambda: fetch_report_index(season),

@@ -181,25 +181,44 @@ def test_market_scorecard_clv_and_roi_on_model_side():
 
 
 class FakeClient:
-    def __init__(self, cache: Cache, kalshi_fails: bool = False) -> None:
+    """Serves fixed prices stamped as fetched at *fetched_at* (None: now)."""
+
+    def __init__(
+        self,
+        cache: Cache,
+        kalshi_fails: bool = False,
+        fetched_at: pd.Timestamp | None = None,
+        kalshi_fetched_at: pd.Timestamp | None = None,
+    ) -> None:
         self.cache = cache
         self.kalshi_fails = kalshi_fails
+        self.fetched_at = fetched_at
+        self.kalshi_fetched_at = kalshi_fetched_at
+        self.seasons: list[str | None] = []
+
+    def _stamp(self, prices: pd.DataFrame, at: pd.Timestamp | None) -> pd.DataFrame:
+        return prices.assign(FETCHED_AT=at or self.fetched_at or pd.Timestamp.now("UTC"))
 
     def kalshi_nba_games(self) -> pd.DataFrame:
         if self.kalshi_fails:
             from nba_insights.errors import UpstreamError
 
             raise UpstreamError("kalshi down")
-        return decode_kalshi([kalshi_market("MEM", "0.66", "0.67")])
+        prices = decode_kalshi([kalshi_market("MEM", "0.66", "0.67")])
+        return self._stamp(prices, self.kalshi_fetched_at)
 
     def polymarket_nba_games(self, season: str | None = None) -> pd.DataFrame:
-        return decode_polymarket([polymarket_event(["Warriors", "Grizzlies"], 0.33, 0.34)])
+        self.seasons.append(season)
+        prices = decode_polymarket([polymarket_event(["Warriors", "Grizzlies"], 0.33, 0.34)])
+        return self._stamp(prices, None)
 
     def schedule(self, season: str | None = None) -> pd.DataFrame:
+        self.seasons.append(season)
         return make_schedule()
 
 
-def test_take_snapshot_appends_and_survives_one_exchange_failing(tmp_path, monkeypatch):
+@pytest.fixture
+def fake_model(monkeypatch):
     seen_missing = []
 
     def fake_probabilities(client, rows, missing=None):
@@ -209,14 +228,20 @@ def test_take_snapshot_appends_and_survives_one_exchange_failing(tmp_path, monke
     monkeypatch.setattr(tracker, "model_probabilities", fake_probabilities)
     injuries = {("2026-11-19", "GSW", "MEM"): (10.0, 40.0)}
     monkeypatch.setattr(tracker, "injury_minutes", lambda client: injuries)
+    return seen_missing, injuries
+
+
+def test_take_snapshot_appends_and_survives_one_exchange_failing(tmp_path, fake_model):
+    seen_missing, injuries = fake_model
     cache = Cache(tmp_path / "cache.sqlite3")
     now = pd.Timestamp("2026-11-20T00:30Z")
 
-    recorded, failures = tracker.take_snapshot(FakeClient(cache), now=now)
+    recorded, failures = tracker.take_snapshot(FakeClient(cache, fetched_at=now), now=now)
     assert (recorded, failures) == (2, 0)
 
     later = pd.Timestamp("2026-11-20T00:45Z")
-    recorded, failures = tracker.take_snapshot(FakeClient(cache, kalshi_fails=True), now=later)
+    client = FakeClient(cache, kalshi_fails=True, fetched_at=later)
+    recorded, failures = tracker.take_snapshot(client, now=later)
     assert (recorded, failures) == (1, 1)
 
     log = tracker.load_snapshots(FakeClient(cache))
@@ -225,6 +250,44 @@ def test_take_snapshot_appends_and_survives_one_exchange_failing(tmp_path, monke
     assert (log["MODEL_HOME_PROB"] == 0.6).all()
     assert (log["MODEL_HOME_PROB_INJ"] == 0.55).all()
     assert seen_missing == [injuries, injuries]
+
+
+def test_take_snapshot_skips_stale_fallback_prices(tmp_path, fake_model):
+    # Kalshi's refresh failed and the cache served its 18:00 copy at 19:45:
+    # recording it would pass an old quote off as the closing line
+    cache = Cache(tmp_path / "cache.sqlite3")
+    now = pd.Timestamp("2026-11-20T00:45Z")
+    client = FakeClient(cache, fetched_at=now, kalshi_fetched_at=pd.Timestamp("2026-11-19T23:00Z"))
+    recorded, failures = tracker.take_snapshot(client, now=now)
+    assert (recorded, failures) == (1, 1)
+    assert tracker.load_snapshots(client)["SOURCE"].tolist() == ["polymarket"]
+
+
+def test_is_fresh_requires_a_fetch_stamp():
+    now = pd.Timestamp("2026-11-20T00:45Z")
+    prices = decode_kalshi([kalshi_market("MEM", "0.66", "0.67")])
+    assert not tracker.is_fresh(prices, now)
+    assert tracker.is_fresh(prices.assign(FETCHED_AT=now - pd.Timedelta(minutes=9)), now)
+    assert not tracker.is_fresh(prices.assign(FETCHED_AT=now - pd.Timedelta(minutes=11)), now)
+
+
+def test_take_snapshot_uses_calendar_season_before_opening_night(tmp_path, fake_model, monkeypatch):
+    # Oct 20: the new season hasn't tipped off, so current_season() is still
+    # 2025-26 -- but opening-night prices belong to 2026-27
+    from datetime import date
+
+    from nba_insights import config
+
+    monkeypatch.setattr(config, "_today", lambda: date(2026, 10, 20))
+    config.set_season_started_check(lambda season: False)
+    assert config.current_season() == "2025-26"
+
+    cache = Cache(tmp_path / "cache.sqlite3")
+    now = pd.Timestamp("2026-11-20T00:30Z")
+    client = FakeClient(cache, fetched_at=now)
+    tracker.take_snapshot(client, now=now)
+    assert set(client.seasons) == {"2026-27"}
+    assert len(tracker.load_snapshots(client, "2026-27")) == 2
 
 
 def test_opening_closing_takes_whole_rows_not_last_non_null_values():

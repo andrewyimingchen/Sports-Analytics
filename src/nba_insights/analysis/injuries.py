@@ -53,7 +53,10 @@ def injured_minutes(
     if listed.empty:
         return pd.DataFrame(columns=[*columns, "MISSING_MIN"])
 
-    current = player_games.copy()
+    # opening night: the new season has no player games yet
+    current = player_games.reindex(
+        columns=["PLAYER_ID", "PLAYER_NAME", "TEAM_ABBREVIATION", "GAME_ID", "MIN"]
+    )
     current["MIN"] = pd.to_numeric(current["MIN"], errors="coerce").fillna(0)
     names = pd.concat(
         [

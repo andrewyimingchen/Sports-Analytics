@@ -239,3 +239,11 @@ def test_injured_minutes_with_no_listed_players_is_empty():
     players = injured_minutes(pending, current, prior)
     assert players.empty
     assert team_missing_minutes(players).empty
+
+
+def test_injured_minutes_on_opening_night_uses_prior_only():
+    _, prior = make_games()
+    report = report_rows(("GSW", "Stephen Curry", "Out"))
+    players = injured_minutes(report, pd.DataFrame(), prior).set_index("PLAYER_NAME")
+    # no games yet: (0 + 32 * 20) / (0 + 20)
+    assert players.loc["Stephen Curry", "EXP_MIN"] == pytest.approx(32.0)

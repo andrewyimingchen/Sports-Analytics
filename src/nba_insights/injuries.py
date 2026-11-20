@@ -25,7 +25,7 @@ from nba_insights.analysis.injuries import (
     latest_report,
     team_missing_minutes,
 )
-from nba_insights.config import current_season, previous_season
+from nba_insights.config import calendar_season, previous_season
 from nba_insights.errors import EXPECTED_ERRORS, reason_for
 from nba_insights.ingest import NBAClient, serving_client
 
@@ -38,7 +38,7 @@ def log_key(season: str) -> str:
 
 def load_injury_log(client: NBAClient, season: str | None = None) -> pd.DataFrame:
     """Every logged report row for *season* (empty frame if none yet)."""
-    stored = client.cache.get(log_key(season or current_season()))
+    stored = client.cache.get(log_key(season or calendar_season()))
     return pd.DataFrame() if stored is None else stored
 
 
@@ -49,7 +49,7 @@ def update_injuries(client: NBAClient, season: str | None = None) -> pd.DataFram
     index/report fetch failed -- logged, not raised, so callers degrade to
     no injury information).
     """
-    season = season or current_season()
+    season = season or calendar_season()
     log = load_injury_log(client, season)
     try:
         links = client.injury_report_index(season)
@@ -69,7 +69,7 @@ def update_injuries(client: NBAClient, season: str | None = None) -> pd.DataFram
 
 def players_out(client: NBAClient, report: pd.DataFrame) -> pd.DataFrame:
     """Per-player expected and missing minutes for *report* (see analysis)."""
-    season = current_season()
+    season = calendar_season()
     return injured_minutes(
         report,
         client.player_games(season),

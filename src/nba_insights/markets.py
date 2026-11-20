@@ -34,11 +34,14 @@ from nba_insights.analysis.markets import (
     opening_closing,
     schedule_games,
 )
-from nba_insights.config import current_season
+from nba_insights.config import calendar_season
 from nba_insights.errors import EXPECTED_ERRORS, reason_for
 from nba_insights.ingest import NBAClient, serving_client
 
 logger = logging.getLogger(__name__)
+
+# older than the client's 5-minute price cache allows for: a stale fallback
+MAX_PRICE_AGE = pd.Timedelta(minutes=10)
 
 # a missing/unreadable model artifact costs only the model column
 _MODEL_ERRORS: tuple[type[BaseException], ...] = (*EXPECTED_ERRORS, OSError)
@@ -50,7 +53,7 @@ def snapshot_key(season: str) -> str:
 
 def load_snapshots(client: NBAClient, season: str | None = None) -> pd.DataFrame:
     """Every recorded snapshot row for *season* (empty frame if none yet)."""
-    stored = client.cache.get(snapshot_key(season or current_season()))
+    stored = client.cache.get(snapshot_key(season or calendar_season()))
     if stored is None:
         return pd.DataFrame(columns=SNAPSHOT_COLUMNS)
     return stored
@@ -121,6 +124,13 @@ def injury_minutes(client: NBAClient) -> dict[tuple[str, str, str], tuple[float,
         return {}
 
 
+def is_fresh(prices: pd.DataFrame, now: pd.Timestamp) -> bool:
+    """Whether *prices* came from a fetch within :data:`MAX_PRICE_AGE`."""
+    if "FETCHED_AT" not in prices.columns or prices.empty:
+        return False
+    return bool(now - prices["FETCHED_AT"].max() <= MAX_PRICE_AGE)
+
+
 def take_snapshot(client: NBAClient, now: pd.Timestamp | None = None) -> tuple[int, int]:
     """Append one snapshot of every upcoming game's prices to the log.
 
@@ -128,17 +138,26 @@ def take_snapshot(client: NBAClient, now: pd.Timestamp | None = None) -> tuple[i
     logged and skipped so the other one is still recorded.
     """
     now = now or pd.Timestamp.now("UTC")
-    season = current_season()
+    # the calendar season, not current_season(): that one stays on last
+    # season until opening night has a result, which would miss the opener
+    season = calendar_season()
     frames, failures = [], 0
     for name, fetch in (
         ("kalshi", client.kalshi_nba_games),
         ("polymarket", lambda: client.polymarket_nba_games(season)),
     ):
         try:
-            frames.append(fetch())
+            prices = fetch()
         except EXPECTED_ERRORS as error:
             failures += 1
             logger.warning("%s prices unavailable: %s", name, reason_for(error))
+            continue
+        if not is_fresh(prices, now):
+            # a failed refresh served the cache's last good copy
+            failures += 1
+            logger.warning("%s prices are stale; skipping this snapshot", name)
+            continue
+        frames.append(prices)
     if not frames:
         return 0, failures
 
@@ -165,7 +184,7 @@ def report(client: NBAClient, season: str | None = None, edge: float = 0.03) -> 
     One row per (model column, exchange): MODEL is full strength, MODEL_INJ
     injury-adjusted (only games the injury report covered).
     """
-    season = season or current_season()
+    season = season or calendar_season()
     snapshots = load_snapshots(client, season)
     if snapshots.empty:
         return pd.DataFrame()
