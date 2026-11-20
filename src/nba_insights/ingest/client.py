@@ -551,14 +551,15 @@ class NBAClient:
             ttl=MARKET_PRICES_TTL,
         )
 
-    def injury_report_index(self, season: str | None = None) -> pd.DataFrame:
+    def injury_report_index(
+        self, season: str | None = None, max_age: timedelta = INJURY_INDEX_TTL
+    ) -> pd.DataFrame:
         """Today's official injury-report links (URL, REPORT_AT in US Eastern).
-        Scraped: personal use only, never the public API/PWA (see ingest.injuries)."""
+        Scraped: personal use only, never the public API/PWA (see ingest.injuries).
+        The tracker passes ``max_age=timedelta(0)`` at its scheduled checks."""
         season = season or calendar_season()
         return self._cached(
-            f"injuries/index/{season}",
-            lambda: fetch_report_index(season),
-            ttl=INJURY_INDEX_TTL,
+            injury_index_key(season), lambda: fetch_report_index(season), ttl=max_age
         )
 
     def injury_report(self, url: str) -> pd.DataFrame:
@@ -631,6 +632,11 @@ class NBAClient:
         raise UpstreamError(
             f"fetch {key or '<unkeyed>'} failed after {self.retries} attempts"
         ) from last_error
+
+
+def injury_index_key(season: str) -> str:
+    """Cache key of the injury-report index; its fetch time is the last check."""
+    return f"injuries/index/{season}"
 
 
 def serving_client(**kwargs: Any) -> NBAClient:

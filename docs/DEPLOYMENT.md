@@ -183,10 +183,12 @@ systemctl --user enable --now possession-lab-markets.timer
 uv run python -m nba_insights.markets report     # once games have finished
 ```
 
-Each snapshot also checks the official NBA injury report index (cached 30
-minutes) and logs any new report (one PDF each, cached forever) under
-`injuries/log/<season>`; the injury-adjusted model column comes from the
-latest one. Scraped under the CLAUDE.md guardrails: personal use only.
+On game days the snapshot also checks the official NBA injury report three
+times -- 10:00 ET, 15:00 ET, and 45 minutes before the first tip-off -- and
+logs any new report (one PDF each, cached forever) under
+`injuries/log/<season>`: about six requests a day. Other snapshots reuse the
+latest logged report for the injury-adjusted model column. Scraped under the
+CLAUDE.md guardrails: personal use only.
 
 The timer snapshots every 15 minutes from 09:00 to 23:45 local time, so a
 game's "closing" line is at most ~15 minutes before tip-off. The model column

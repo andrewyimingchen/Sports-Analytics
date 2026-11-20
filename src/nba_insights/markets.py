@@ -106,16 +106,28 @@ def model_probabilities(
     return probs
 
 
-def injury_minutes(client: NBAClient) -> dict[tuple[str, str, str], tuple[float, float]]:
+def first_tip_today(games: pd.DataFrame, now: pd.Timestamp) -> pd.Timestamp | None:
+    """Earliest tip-off on today's (US Eastern) slate, or None on an off day."""
+    from nba_insights.analysis.injuries import EASTERN
+
+    today = now.tz_convert(EASTERN).strftime("%Y-%m-%d")
+    tips = games.loc[games["GAME_DATE"] == today, "TIP_UTC"]
+    return None if tips.empty else tips.min()
+
+
+def injury_minutes(
+    client: NBAClient, now: pd.Timestamp, first_tip: pd.Timestamp | None
+) -> dict[tuple[str, str, str], tuple[float, float]]:
     """Expected minutes out per reported game from the latest injury report.
 
-    Any failure (report, game logs) degrades to {} -- no injury column --
-    rather than costing the price snapshot.
+    Checks for a new report only at the scheduled checkpoints (see
+    nba_insights.injuries). Any failure (report, game logs) degrades to {}
+    -- no injury column -- rather than costing the price snapshot.
     """
     from nba_insights.injuries import game_missing_minutes, players_out, update_injuries
 
     try:
-        report = update_injuries(client)
+        report = update_injuries(client, now=now, first_tip=first_tip)
         if report.empty:
             return {}
         return game_missing_minutes(report, players_out(client, report))
@@ -167,7 +179,7 @@ def take_snapshot(client: NBAClient, now: pd.Timestamp | None = None) -> tuple[i
         logger.info("no upcoming games with prices")
         return 0, failures
     rows[["MODEL_HOME_PROB", "MODEL_HOME_PROB_INJ"]] = model_probabilities(
-        client, rows, injury_minutes(client)
+        client, rows, injury_minutes(client, now, first_tip_today(games, now))
     )
     rows = rows[SNAPSHOT_COLUMNS]
 

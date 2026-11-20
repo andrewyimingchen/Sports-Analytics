@@ -25,6 +25,36 @@ from nba_insights.ml.features import prior_minute_rates
 STATUS_WEIGHTS = {"Out": 1.0, "Doubtful": 1.0, "Questionable": 0.5}
 MAX_MISSING_MIN = 240.0  # the model input's valid range per team
 
+# The tracker checks for a new report three times on game days -- morning,
+# mid-afternoon, and shortly before the first tip-off (the report the market
+# closes on) -- instead of on every 15-minute snapshot, keeping scrape volume
+# to a handful of requests a day.
+EASTERN = "America/New_York"
+CHECK_TIMES_ET = ("10:00", "15:00")
+PRE_TIP_LEAD = pd.Timedelta(minutes=45)
+
+
+def injury_checkpoints(now: pd.Timestamp, first_tip: pd.Timestamp | None) -> list[pd.Timestamp]:
+    """Today's (US Eastern) report check times, in UTC, earliest first.
+
+    Empty on a day without games (*first_tip* None): no report to read.
+    """
+    if first_tip is None or pd.isna(first_tip):
+        return []
+    day = now.tz_convert(EASTERN).strftime("%Y-%m-%d")
+    fixed = [pd.Timestamp(f"{day} {hhmm}", tz=EASTERN).tz_convert("UTC") for hhmm in CHECK_TIMES_ET]
+    return sorted([*fixed, first_tip - PRE_TIP_LEAD])
+
+
+def injury_check_due(
+    now: pd.Timestamp, last_checked: pd.Timestamp | None, first_tip: pd.Timestamp | None
+) -> bool:
+    """Whether a checkpoint has passed since the report index was last checked."""
+    passed = [c for c in injury_checkpoints(now, first_tip) if c <= now]
+    if not passed:
+        return False
+    return last_checked is None or last_checked < passed[-1]
+
 
 def latest_report(log: pd.DataFrame) -> pd.DataFrame:
     """Rows of the most recent report in an injury log."""

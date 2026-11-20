@@ -2,12 +2,16 @@
 
     uv run python -m nba_insights.injuries          # fetch latest, show by team
 
-Each run checks the league's index page (cached 30 minutes) and, if a newer
-report is out, fetches and parses it (cached forever: a published report
-never changes) and appends its rows to the season's injury log in the cache
-database (``injuries/log/<season>``), so the log is backed up with the rest.
-The market tracker calls :func:`update_injuries` on every snapshot, which
-keeps both on the same timer.
+Each check reads the league's index page and, if a newer report is out,
+fetches and parses it (cached forever: a published report never changes) and
+appends its rows to the season's injury log in the cache database
+(``injuries/log/<season>``), so the log is backed up with the rest.
+
+The market tracker calls :func:`update_injuries` on every snapshot, but it
+only checks the index three times on game days: 10:00 ET, 15:00 ET, and 45
+minutes before the first tip-off (about six requests a day). Between
+checks, snapshots reuse the latest logged report. Running this CLI always
+checks (reusing an index fetched in the last 30 minutes).
 
 Scraped under the CLAUDE.md guardrails (owner decision 2026-11-19): personal
 and educational use only; never served through the public API/PWA.
@@ -17,19 +21,25 @@ from __future__ import annotations
 
 import argparse
 import logging
+from datetime import timedelta
 
 import pandas as pd
 
 from nba_insights.analysis.injuries import (
     injured_minutes,
+    injury_check_due,
     latest_report,
     team_missing_minutes,
 )
 from nba_insights.config import calendar_season, previous_season
 from nba_insights.errors import EXPECTED_ERRORS, reason_for
 from nba_insights.ingest import NBAClient, serving_client
+from nba_insights.ingest.client import injury_index_key
 
 logger = logging.getLogger(__name__)
+
+# manual CLI runs reuse an index fetched in the last 30 minutes
+INJURY_INDEX_TTL_MANUAL = timedelta(minutes=30)
 
 
 def log_key(season: str) -> str:
@@ -42,8 +52,26 @@ def load_injury_log(client: NBAClient, season: str | None = None) -> pd.DataFram
     return pd.DataFrame() if stored is None else stored
 
 
-def update_injuries(client: NBAClient, season: str | None = None) -> pd.DataFrame:
+def last_checked(client: NBAClient, season: str) -> pd.Timestamp | None:
+    """When the report index was last fetched (None if never)."""
+    info = client.cache.entry_info(injury_index_key(season))
+    return None if info is None else pd.Timestamp(info["fetched_at"]).tz_convert("UTC")
+
+
+def update_injuries(
+    client: NBAClient,
+    season: str | None = None,
+    *,
+    force: bool = False,
+    now: pd.Timestamp | None = None,
+    first_tip: pd.Timestamp | None = None,
+) -> pd.DataFrame:
     """Log the newest report if it isn't logged yet; return the latest report.
+
+    Unless *force*, the index is only checked when a scheduled checkpoint
+    (see :func:`~nba_insights.analysis.injuries.injury_check_due`; needs
+    today's *first_tip*) has passed since the last check; otherwise the
+    latest logged report is returned without touching the network.
 
     Returns an empty frame when no report is available (off days, or the
     index/report fetch failed -- logged, not raised, so callers degrade to
@@ -51,8 +79,15 @@ def update_injuries(client: NBAClient, season: str | None = None) -> pd.DataFram
     """
     season = season or calendar_season()
     log = load_injury_log(client, season)
+    if force:
+        max_age = INJURY_INDEX_TTL_MANUAL
+    else:
+        now = now or pd.Timestamp.now("UTC")
+        if not injury_check_due(now, last_checked(client, season), first_tip):
+            return latest_report(log)
+        max_age = timedelta(0)  # a checkpoint passed: look now
     try:
-        links = client.injury_report_index(season)
+        links = client.injury_report_index(season, max_age=max_age)
         newest = links.iloc[-1]
         if log.empty or newest["REPORT_AT"] > log["REPORT_AT"].max():
             report = client.injury_report(newest["URL"]).copy()
@@ -110,7 +145,7 @@ def main() -> None:
     args = parser.parse_args()
 
     client = serving_client()
-    report = update_injuries(client)
+    report = update_injuries(client, force=True)
     if report.empty:
         print("no injury report available")
         return

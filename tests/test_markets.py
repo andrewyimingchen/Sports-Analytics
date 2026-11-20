@@ -227,7 +227,7 @@ def fake_model(monkeypatch):
 
     monkeypatch.setattr(tracker, "model_probabilities", fake_probabilities)
     injuries = {("2026-11-19", "GSW", "MEM"): (10.0, 40.0)}
-    monkeypatch.setattr(tracker, "injury_minutes", lambda client: injuries)
+    monkeypatch.setattr(tracker, "injury_minutes", lambda client, now, first_tip: injuries)
     return seen_missing, injuries
 
 
@@ -326,3 +326,12 @@ def test_market_scorecard_injury_model_scores_only_covered_games():
 
     uncovered = lines.assign(CLOSE_MODEL_INJ=float("nan"))
     assert market_scorecard(uncovered, games, model="MODEL_INJ").empty
+
+
+def test_first_tip_today_uses_the_eastern_slate():
+    games = schedule_games(make_schedule())
+    # 19:30 ET on Nov 19 is 00:30Z on Nov 20: still the Nov 19 slate
+    assert tracker.first_tip_today(games, pd.Timestamp("2026-11-20T00:30Z")) == pd.Timestamp(
+        "2026-11-20T01:00Z"
+    )
+    assert tracker.first_tip_today(games, pd.Timestamp("2026-11-21T18:00Z")) is None

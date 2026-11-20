@@ -8,6 +8,8 @@ import pytest
 from nba_insights import injuries as feed
 from nba_insights.analysis.injuries import (
     injured_minutes,
+    injury_check_due,
+    injury_checkpoints,
     latest_report,
     team_missing_minutes,
 )
@@ -203,8 +205,12 @@ class FakeClient:
         self.cache = cache
         self.links = links
         self.fetched: list[str] = []
+        self.index_calls = 0
 
-    def injury_report_index(self, season: str | None = None) -> pd.DataFrame:
+    def injury_report_index(self, season: str | None = None, max_age=None) -> pd.DataFrame:
+        self.index_calls += 1
+        # mimic the cache recording this check's fetch time
+        self.cache.put("injuries/index/2025-26", self.links)
         return self.links
 
     def injury_report(self, url: str) -> pd.DataFrame:
@@ -217,8 +223,8 @@ def test_update_injuries_logs_each_report_once(tmp_path):
     links = pd.DataFrame({"URL": ["a.pdf"], "REPORT_AT": [pd.Timestamp("2026-11-19 19:00")]})
     client = FakeClient(cache, links)
 
-    first = feed.update_injuries(client)
-    again = feed.update_injuries(client)
+    first = feed.update_injuries(client, force=True)
+    again = feed.update_injuries(client, force=True)
     assert client.fetched == ["a.pdf"]
     assert len(first) == len(again) == 1
 
@@ -226,7 +232,7 @@ def test_update_injuries_logs_each_report_once(tmp_path):
         [links, pd.DataFrame({"URL": ["b.pdf"], "REPORT_AT": [pd.Timestamp("2026-11-19 19:15")]})],
         ignore_index=True,
     )
-    latest = feed.update_injuries(client)
+    latest = feed.update_injuries(client, force=True)
     assert client.fetched == ["a.pdf", "b.pdf"]
     assert (latest["REPORT_AT"] == pd.Timestamp("2026-11-19 19:15")).all()
     assert len(feed.load_injury_log(client)) == 2
@@ -247,3 +253,56 @@ def test_injured_minutes_on_opening_night_uses_prior_only():
     players = injured_minutes(report, pd.DataFrame(), prior).set_index("PLAYER_NAME")
     # no games yet: (0 + 32 * 20) / (0 + 20)
     assert players.loc["Stephen Curry", "EXP_MIN"] == pytest.approx(32.0)
+
+
+# 2026-11-19 (EST, UTC-5): first tip 8:00 PM ET = 01:00Z next day
+FIRST_TIP = pd.Timestamp("2026-11-20T01:00Z")
+
+
+def utc(et: str) -> pd.Timestamp:
+    return pd.Timestamp(f"2026-11-19 {et}", tz="America/New_York").tz_convert("UTC")
+
+
+def test_injury_checkpoints_are_morning_afternoon_and_pre_tip():
+    points = injury_checkpoints(utc("12:00"), FIRST_TIP)
+    assert points == [utc("10:00"), utc("15:00"), utc("19:15")]
+    assert injury_checkpoints(utc("12:00"), None) == []
+
+
+def test_injury_check_due_once_per_checkpoint():
+    assert not injury_check_due(utc("09:45"), None, FIRST_TIP)  # before the first
+    assert injury_check_due(utc("10:05"), None, FIRST_TIP)
+    assert not injury_check_due(utc("10:20"), utc("10:05"), FIRST_TIP)
+    assert not injury_check_due(utc("14:59"), utc("10:05"), FIRST_TIP)
+    assert injury_check_due(utc("15:00"), utc("10:05"), FIRST_TIP)
+    assert injury_check_due(utc("19:15"), utc("15:00"), FIRST_TIP)
+    assert not injury_check_due(utc("21:00"), utc("19:15"), FIRST_TIP)
+    # yesterday's check doesn't count for today
+    assert injury_check_due(utc("10:00"), utc("10:00") - pd.Timedelta(days=1), FIRST_TIP)
+    # off day: never
+    assert not injury_check_due(utc("15:00"), None, None)
+
+
+def test_update_injuries_only_touches_the_network_at_checkpoints(tmp_path):
+    times = {"now": utc("09:30")}
+    # the cache's clock stamps each index fetch: that is the "last checked" time
+    cache = Cache(tmp_path / "cache.sqlite3", now=lambda: times["now"].to_pydatetime())
+    links = pd.DataFrame({"URL": ["a.pdf"], "REPORT_AT": [pd.Timestamp("2026-11-19 09:45")]})
+    client = FakeClient(cache, links)
+
+    assert feed.update_injuries(client, now=times["now"], first_tip=FIRST_TIP).empty
+    assert client.index_calls == 0
+
+    times["now"] = utc("10:05")
+    report = feed.update_injuries(client, now=times["now"], first_tip=FIRST_TIP)
+    assert client.index_calls == 1 and client.fetched == ["a.pdf"]
+    assert len(report) == 1
+
+    times["now"] = utc("10:20")  # next snapshot: reuse the logged report
+    again = feed.update_injuries(client, now=times["now"], first_tip=FIRST_TIP)
+    assert client.index_calls == 1
+    assert again.equals(report)
+
+    times["now"] = utc("15:02")
+    feed.update_injuries(client, now=times["now"], first_tip=FIRST_TIP)
+    assert client.index_calls == 2
