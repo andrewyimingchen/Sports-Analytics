@@ -49,6 +49,8 @@ from nba_insights.config import (
 )
 from nba_insights.errors import UpstreamError
 from nba_insights.ingest.darko import fetch_darko
+from nba_insights.ingest.injuries import fetch_injury_report, fetch_report_index
+from nba_insights.ingest.markets import fetch_kalshi_nba, fetch_polymarket_nba
 from nba_insights.ingest.salaries import fetch_career_salaries, fetch_contracts
 from nba_insights.store import Cache
 
@@ -65,6 +67,11 @@ CURRENT_SEASON_TTL = timedelta(hours=24)
 # volume at the guardrailed minimum (one page/week — see ingest.salaries)
 CONTRACTS_TTL = timedelta(days=7)
 CAREER_SALARY_TTL = timedelta(days=30)
+# exchange prices move by the minute; the cache only dedupes back-to-back runs
+MARKET_PRICES_TTL = timedelta(minutes=5)
+# the league posts an injury report every 15 minutes on game days; checking
+# the index at most every 30 keeps scrape volume at the guardrailed minimum
+INJURY_INDEX_TTL = timedelta(minutes=30)
 
 
 def _type_suffix(season_type: str) -> str:
@@ -528,6 +535,36 @@ class NBAClient:
         active player. Not a stats.nba.com endpoint, but fetched through
         the same cache/rate limiter so the app stays offline-friendly."""
         return self._cached("darko/dpm", fetch_darko, ttl=CURRENT_SEASON_TTL)
+
+    def kalshi_nba_games(self) -> pd.DataFrame:
+        """Open Kalshi NBA game-winner prices, one row per game (home price).
+        Personal research only -- never serve through the public API/PWA."""
+        return self._cached("markets/kalshi/nba", fetch_kalshi_nba, ttl=MARKET_PRICES_TTL)
+
+    def polymarket_nba_games(self, season: str | None = None) -> pd.DataFrame:
+        """Open Polymarket NBA game prices for *season*, one row per game.
+        Personal research only -- never serve through the public API/PWA."""
+        season = season or current_season()
+        return self._cached(
+            f"markets/polymarket/nba/{season}",
+            lambda: fetch_polymarket_nba(season),
+            ttl=MARKET_PRICES_TTL,
+        )
+
+    def injury_report_index(self, season: str | None = None) -> pd.DataFrame:
+        """Today's official injury-report links (URL, REPORT_AT in US Eastern).
+        Scraped: personal use only, never the public API/PWA (see ingest.injuries)."""
+        season = season or current_season()
+        return self._cached(
+            f"injuries/index/{season}",
+            lambda: fetch_report_index(season),
+            ttl=INJURY_INDEX_TTL,
+        )
+
+    def injury_report(self, url: str) -> pd.DataFrame:
+        """One official injury report, parsed; a published report never changes."""
+        name = url.rsplit("/", 1)[-1].removesuffix(".pdf")
+        return self._cached(f"injuries/report/{name}", lambda: fetch_injury_report(url), ttl=None)
 
     # -- plumbing ---------------------------------------------------------------
 

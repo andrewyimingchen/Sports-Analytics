@@ -166,6 +166,34 @@ most cron setups):
 If the API runs on another host, sync the cache afterwards (see the warmed-cache
 workflow above) and copy `data/models/` so `/methodology/drift` stays current.
 
+### Tracking exchange prices
+
+`nba_insights.markets` records Kalshi and Polymarket game-winner prices next
+to the outcome model's probability, so the model can be scored against the
+market (`report`: log loss/Brier vs the closing price, line movement toward
+the model, and flat-bet ROI at the closing ask, fees excluded). Both
+exchanges' read-only APIs need no account. The prices are personal research
+data: they stay in the cache, the CLI, and the internal console, never the
+public API/PWA.
+
+```bash
+cp deploy/systemd/possession-lab-markets.{service,timer} ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now possession-lab-markets.timer
+uv run python -m nba_insights.markets report     # once games have finished
+```
+
+Each snapshot also checks the official NBA injury report index (cached 30
+minutes) and logs any new report (one PDF each, cached forever) under
+`injuries/log/<season>`; the injury-adjusted model column comes from the
+latest one. Scraped under the CLAUDE.md guardrails: personal use only.
+
+The timer snapshots every 15 minutes from 09:00 to 23:45 local time, so a
+game's "closing" line is at most ~15 minutes before tip-off. The model column
+uses full-strength rosters, exactly what `/predict/game` serves. Results come
+from the season schedule, which refreshes daily, so a night's games enter the
+report after the next pipeline run.
+
 ## Monitoring and backups
 
 **Error tracking (optional).** Set `SENTRY_DSN` and the API reports

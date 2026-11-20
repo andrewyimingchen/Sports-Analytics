@@ -353,6 +353,27 @@ root so it fills the same `data/` directory the app reads:
 See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#scheduling-the-nightly-pipeline)
 for a systemd timer, alert webhooks, and the run log.
 
+To score the outcome model against prediction-market prices, snapshot Kalshi
+and Polymarket game-winner prices through the day (a systemd timer is
+provided) and read the scorecard once games finish. Prices are personal
+research data and never reach the public API/PWA:
+
+```bash
+uv run python -m nba_insights.markets snapshot   # record upcoming games' prices
+uv run python -m nba_insights.markets report     # model vs closing price
+```
+
+Each snapshot also logs the latest official NBA injury report and records an
+injury-adjusted model probability beside the full-strength one, so `report`
+scores both. To read the current report by team (expected minutes out per
+listed player):
+
+```bash
+uv run python -m nba_insights.injuries
+```
+
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#tracking-exchange-prices).
+
 ## Deployment
 
 Local-first by design — stats.nba.com blocks most datacenter IPs, so remote
