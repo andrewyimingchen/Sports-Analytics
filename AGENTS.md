@@ -40,6 +40,8 @@ See README.md for details.
   `Cache.get_or_fetch`), personal/educational use only, and scraped data must
   never be exposed through the public API/PWA or redistributed. Licensed
   providers (e.g. BALLDONTLIE) remain the path for anything commercial.
+  The official NBA injury report PDFs (`nba_insights.injuries`) are covered
+  by the same decision and guardrails (owner decision, 2026-11-19).
 
 ## Non-Interactive Shell Commands
 

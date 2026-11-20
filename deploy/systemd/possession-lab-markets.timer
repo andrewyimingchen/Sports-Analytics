@@ -1,0 +1,13 @@
+# Snapshots exchange prices every 15 minutes from 09:00 to 23:45 local time,
+# covering every NBA tip-off window (US time zones). A game's last snapshot
+# before tip-off is its "closing" line, so finer spacing tightens the close.
+# No Persistent=: a missed snapshot is simply gone, not worth replaying.
+[Unit]
+Description=Snapshot NBA exchange prices every 15 minutes
+
+[Timer]
+OnCalendar=*-*-* 09..23:00/15
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target
