@@ -196,6 +196,30 @@ uses full-strength rosters, exactly what `/predict/game` serves. Results come
 from the season schedule, which refreshes daily, so a night's games enter the
 report after the next pipeline run.
 
+#### Game-day Obsidian note
+
+After each snapshot the service runs `markets note`, which writes the day's
+slate into a local Obsidian vault as `<vault>/NBA/<date> NBA Slate.md`:
+market vs model (full strength and injury-adjusted) per game, the injury
+report's notable absences, and a parlay check that says to skip parlays until
+the model has beaten the closing price over at least 100 tracked games. It is
+a no-op unless the vault is configured:
+
+```bash
+echo 'POSSESSION_LAB_OBSIDIAN_VAULT=/mnt/c/Users/<you>/Documents/Obsidian Vault' \
+  >> ~/.config/possession-lab/env
+uv run python -m nba_insights.markets note --vault "<vault>" --date 2026-11-20  # one-off
+```
+
+Today's note is rewritten only when an injury-report checkpoint has passed
+since its last write (three times a game day); once the nightly schedule
+refresh has the previous game day's results, that note is rewritten once more
+with closing lines and results and marked `final: true`. Rewrites replace
+only the frontmatter and the block between the `%% possession-lab:start %%`
+/ `%% possession-lab:end %%` markers, so notes written below it are kept.
+The note holds prices and scraped injury data, so keep the vault private
+(the same guardrails as the cache).
+
 ## Monitoring and backups
 
 **Error tracking (optional).** Set `SENTRY_DSN` and the API reports

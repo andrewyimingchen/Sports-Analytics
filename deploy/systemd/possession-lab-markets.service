@@ -2,7 +2,10 @@
 # Install alongside the pipeline: see docs/DEPLOYMENT.md#tracking-exchange-prices.
 #
 # Same runner checkout and --no-sync rule as possession-lab-pipeline.service.
-# Each run appends one price row per exchange per upcoming game to the cache.
+# Each run appends one price row per exchange per upcoming game to the cache,
+# then (optional) refreshes the game-day Obsidian note when one is due: set
+# POSSESSION_LAB_OBSIDIAN_VAULT in the EnvironmentFile to enable it. The "-"
+# keeps a note failure (or an unset vault) from failing the snapshot unit.
 [Unit]
 Description=POSSESSION LAB exchange price snapshot
 
@@ -11,6 +14,8 @@ Type=oneshot
 WorkingDirectory=%h/possession-lab-runner
 # EDIT: the API's data directory (the snapshot log lives in its cache).
 Environment=NBA_INSIGHTS_DATA_DIR=%h/Sports-Analytics/data
+EnvironmentFile=-%h/.config/possession-lab/env
 ExecStart=%h/.local/bin/uv run --frozen --no-sync python -m nba_insights.markets snapshot
+ExecStart=-%h/.local/bin/uv run --frozen --no-sync python -m nba_insights.markets note
 NoNewPrivileges=yes
 Nice=10

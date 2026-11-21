@@ -361,6 +361,7 @@ research data and never reach the public API/PWA:
 ```bash
 uv run python -m nba_insights.markets snapshot   # record upcoming games' prices
 uv run python -m nba_insights.markets report     # model vs closing price
+uv run python -m nba_insights.markets note --vault <dir>  # Obsidian game-day note
 ```
 
 Each snapshot also logs the latest official NBA injury report and records an
