@@ -63,6 +63,34 @@ logger = logging.getLogger(__name__)
 _FETCH_ERRORS = (requests.RequestException, OSError, ValueError, KeyError, IndexError)
 
 CURRENT_SEASON_TTL = timedelta(hours=24)
+# tip-off to final whistle, with room for overtime and delays
+GAME_LENGTH = timedelta(hours=3)
+
+
+def schedule_results_due(
+    schedule: pd.DataFrame, fetched_at: datetime, now: datetime
+) -> datetime | None:
+    """When a cached schedule stopped being good enough, or None if it still is.
+
+    A schedule fetched while games were unfinished is missing their
+    results; under the plain 24-hour TTL a fetch during the evening's games
+    still looked fresh to the next morning's pipeline, so results arrived a
+    day late. This returns the latest expected end (tip-off plus
+    :data:`GAME_LENGTH`) among games that weren't final when fetched and
+    have ended since, so the entry is refetched once. Only ends after
+    *fetched_at* count, so a postponed game can't force a refetch forever.
+    """
+    if schedule.empty or not {"gameStatus", "gameDateTimeUTC"} <= set(schedule.columns):
+        return None
+    ends = pd.to_datetime(schedule["gameDateTimeUTC"], utc=True, errors="coerce") + GAME_LENGTH
+    due = ends[
+        (schedule["gameStatus"] != 3)
+        & (ends > pd.Timestamp(fetched_at))
+        & (ends <= pd.Timestamp(now))
+    ]
+    return None if due.empty else due.max().to_pydatetime()
+
+
 # contracts change rarely outside July; a weekly refresh keeps scrape
 # volume at the guardrailed minimum (one page/week — see ingest.salaries)
 CONTRACTS_TTL = timedelta(days=7)
@@ -402,12 +430,25 @@ class NBAClient:
     def schedule(self, season: str | None = None) -> pd.DataFrame:
         """Full season schedule (all games with dates, tricodes, status)."""
         season = season or current_season()
+        key = f"schedule/{season}"
+        fetched_after = self._season_fetched_after(season)
+        if fetched_after is None:
+            fetched_after = self._schedule_results_due(key)
         return self._cached(
-            f"schedule/{season}",
+            key,
             lambda: scheduleleaguev2.ScheduleLeagueV2(season=season).get_data_frames()[0],
             ttl=self._season_ttl(season),
-            fetched_after=self._season_fetched_after(season),
+            fetched_after=fetched_after,
         )
+
+    def _schedule_results_due(self, key: str) -> datetime | None:
+        """Refetch cutoff for a live season's cached schedule (see below)."""
+        info = self.cache.entry_info(key)
+        cached = self.cache.get(key)
+        if info is None or cached is None:
+            return None
+        fetched_at = datetime.fromisoformat(info["fetched_at"])
+        return schedule_results_due(cached, fetched_at, datetime.now(UTC))
 
     def lineups(self, season: str | None = None) -> pd.DataFrame:
         """5-man lineup advanced stats (total minutes, net rating) for a season."""

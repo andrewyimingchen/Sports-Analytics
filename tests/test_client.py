@@ -156,3 +156,57 @@ def test_player_salary_history_fetches_once_then_reads_cache(tmp_path, monkeypat
     pd.testing.assert_frame_equal(client.player_salary_history(slug), expected)
     pd.testing.assert_frame_equal(client.player_salary_history(slug), expected)
     assert calls == [slug]
+
+
+def schedule_frame(statuses: list[int]) -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "gameStatus": statuses,
+            "gameDateTimeUTC": ["2026-11-22T00:00:00Z", "2026-11-23T00:30:00Z"],
+        }
+    )
+
+
+def test_schedule_fetched_during_games_is_due_once_they_end():
+    from nba_insights.ingest.client import schedule_results_due
+
+    # fetched at 20:09 ET while the 19:30 ET game was live
+    fetched = datetime(2026, 11, 23, 1, 9, tzinfo=UTC)
+    live = schedule_frame([3, 2])
+    morning = datetime(2026, 11, 23, 11, 0, tzinfo=UTC)
+    assert schedule_results_due(live, fetched, morning) == datetime(2026, 11, 23, 3, 30, tzinfo=UTC)
+    # before the game could have ended, the fetch is still good
+    assert schedule_results_due(live, fetched, datetime(2026, 11, 23, 2, tzinfo=UTC)) is None
+    # refetched with the result in: nothing due
+    assert schedule_results_due(schedule_frame([3, 3]), morning, morning) is None
+
+
+def test_postponed_game_does_not_force_refetches():
+    from nba_insights.ingest.client import schedule_results_due
+
+    # the first game never went final, but it ended before this fetch
+    fetched = datetime(2026, 11, 23, 11, 0, tzinfo=UTC)
+    later = datetime(2026, 11, 24, 11, 0, tzinfo=UTC)
+    assert schedule_results_due(schedule_frame([1, 3]), fetched, later) is None
+
+
+def test_schedule_refetches_entry_cached_mid_game(tmp_path, monkeypatch):
+    from nba_insights.config import calendar_season
+    from nba_insights.store import Cache
+
+    fetch_time = [datetime.now(UTC) - pd.Timedelta(hours=5)]
+    cache = Cache(tmp_path / "cache.sqlite3", now=lambda: fetch_time[0])
+    client = NBAClient(cache=cache)
+    season = calendar_season()
+    tip = (fetch_time[0] - pd.Timedelta(minutes=30)).isoformat()
+    cache.put(
+        f"schedule/{season}",
+        pd.DataFrame({"gameStatus": [2], "gameDateTimeUTC": [tip]}),
+    )
+    final = pd.DataFrame({"gameStatus": [3], "gameDateTimeUTC": [tip]})
+    calls = []
+    monkeypatch.setattr(client, "_call", lambda fetch, key="": calls.append(key) or final)
+    fetch_time[0] = datetime.now(UTC)
+    assert client.schedule(season)["gameStatus"].tolist() == [3]
+    assert client.schedule(season)["gameStatus"].tolist() == [3]
+    assert len(calls) == 1
