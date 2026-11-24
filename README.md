@@ -173,7 +173,7 @@ fails if it falls out of date.
 | Player season | `player-season-v1` | stable-roster holdout 2025-26 (241 players) | PTS MAE 2.68; interval covered 82.6% | none recorded |
 | Starting five / game simulator | `lineup-blend-v1` / `matchup-simulator-v1` | no holdout recorded | heuristic blend / distribution diagnostic | — |
 
-Recorded in [`models/manifest.json`](models/manifest.json) (updated 2026-10-13T16:41:42+00:00), including code revision, data cutoffs, source fingerprints, and artifact hashes.
+Recorded in [`models/manifest.json`](models/manifest.json) (updated 2026-11-19T11:01:24+00:00), including code revision, data cutoffs, source fingerprints, and artifact hashes.
 <!-- model-metrics:end -->
 
 After retraining or re-running a backtest, commit the updated manifest and
@@ -352,6 +352,28 @@ root so it fills the same `data/` directory the app reads:
 
 See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#scheduling-the-nightly-pipeline)
 for a systemd timer, alert webhooks, and the run log.
+
+To score the outcome model against prediction-market prices, snapshot Kalshi
+and Polymarket game-winner prices through the day (a systemd timer is
+provided) and read the scorecard once games finish. Prices are personal
+research data and never reach the public API/PWA:
+
+```bash
+uv run python -m nba_insights.markets snapshot   # record upcoming games' prices
+uv run python -m nba_insights.markets report     # model vs closing price
+uv run python -m nba_insights.markets note --vault <dir>  # Obsidian game-day note
+```
+
+Each snapshot also logs the latest official NBA injury report and records an
+injury-adjusted model probability beside the full-strength one, so `report`
+scores both. To read the current report by team (expected minutes out per
+listed player):
+
+```bash
+uv run python -m nba_insights.injuries
+```
+
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#tracking-exchange-prices).
 
 ## Deployment
 

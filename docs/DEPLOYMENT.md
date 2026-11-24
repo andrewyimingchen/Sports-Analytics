@@ -166,6 +166,60 @@ most cron setups):
 If the API runs on another host, sync the cache afterwards (see the warmed-cache
 workflow above) and copy `data/models/` so `/methodology/drift` stays current.
 
+### Tracking exchange prices
+
+`nba_insights.markets` records Kalshi and Polymarket game-winner prices next
+to the outcome model's probability, so the model can be scored against the
+market (`report`: log loss/Brier vs the closing price, line movement toward
+the model, and flat-bet ROI at the closing ask, fees excluded). Both
+exchanges' read-only APIs need no account. The prices are personal research
+data: they stay in the cache, the CLI, and the internal console, never the
+public API/PWA.
+
+```bash
+cp deploy/systemd/possession-lab-markets.{service,timer} ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now possession-lab-markets.timer
+uv run python -m nba_insights.markets report     # once games have finished
+```
+
+On game days the snapshot also checks the official NBA injury report three
+times -- 10:00 ET, 15:00 ET, and 45 minutes before the first tip-off -- and
+logs any new report (one PDF each, cached forever) under
+`injuries/log/<season>`: about six requests a day. Other snapshots reuse the
+latest logged report for the injury-adjusted model column. Scraped under the
+CLAUDE.md guardrails: personal use only.
+
+The timer snapshots every 15 minutes from 09:00 to 23:45 local time, so a
+game's "closing" line is at most ~15 minutes before tip-off. The model column
+uses full-strength rosters, exactly what `/predict/game` serves. Results come
+from the season schedule, which refreshes daily, so a night's games enter the
+report after the next pipeline run.
+
+#### Game-day Obsidian note
+
+After each snapshot the service runs `markets note`, which writes the day's
+slate into a local Obsidian vault as `<vault>/NBA/<date> NBA Slate.md`:
+market vs model (full strength and injury-adjusted) per game, the injury
+report's notable absences, and a parlay check that says to skip parlays until
+the model has beaten the closing price over at least 100 tracked games. It is
+a no-op unless the vault is configured:
+
+```bash
+echo 'POSSESSION_LAB_OBSIDIAN_VAULT=/mnt/c/Users/<you>/Documents/Obsidian Vault' \
+  >> ~/.config/possession-lab/env
+uv run python -m nba_insights.markets note --vault "<vault>" --date 2026-11-20  # one-off
+```
+
+Today's note is rewritten only when an injury-report checkpoint has passed
+since its last write (three times a game day); once the nightly schedule
+refresh has the previous game day's results, that note is rewritten once more
+with closing lines and results and marked `final: true`. Rewrites replace
+only the frontmatter and the block between the `%% possession-lab:start %%`
+/ `%% possession-lab:end %%` markers, so notes written below it are kept.
+The note holds prices and scraped injury data, so keep the vault private
+(the same guardrails as the cache).
+
 ## Monitoring and backups
 
 **Error tracking (optional).** Set `SENTRY_DSN` and the API reports
