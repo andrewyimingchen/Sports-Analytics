@@ -142,23 +142,23 @@
       "artifacts": {
         "metrics.json": {
           "bytes": 1117,
-          "sha256": "a38d2993468437616cfd176fada55543d79be9c77b111d6858b9bca8e4cbb3ff"
+          "sha256": "0ca95a098e286712d7a077a4efcfff6d37ce1ea10d4cdfbebbb2456dcdc7084b"
         },
         "outcome.joblib": {
           "bytes": 2321,
-          "sha256": "91dc2ca5673c9e3c8a75f66c527a6dd20a0932e48fe7bee8681d5e3263152d30"
+          "sha256": "cdb0020ba6625a08d263826cbff2d3a73020288113ec9b58ea4b585f6eed85a1"
         },
         "points.joblib": {
           "bytes": 6277,
-          "sha256": "7ee8fd8dbb8655d719956677e74a6ffcea4a3eee26ef19343333031bf46d7830"
+          "sha256": "f3a8629f596196982d6289817df21fffda2a944ce1333ce98caf5f0a030356c3"
         },
         "win_curve.joblib": {
           "bytes": 32,
-          "sha256": "9aa1d6684e1d9e636c6ac3acb2a9912416b65778f482937caed824e5b200780a"
+          "sha256": "7d1c9d2f6583e7eb558e4d32a6c1d4073ef10188567ffb5bfef59b06e280c96a"
         }
       },
       "code": {
-        "git_commit": "9364ea72fe82b22ad340ffa07296c222592aefa3",
+        "git_commit": "2bc868619a05e06a5a30df57f03413d03ac037da",
         "git_dirty": false,
         "libraries": {
           "joblib": "1.5.3",
@@ -168,7 +168,7 @@
         },
         "package_version": "0.1.0"
       },
-      "command": "python /home/andre/workspace/Sports-Analytics/src/nba_insights/ml/train.py",
+      "command": "python /home/andre/possession-lab-runner/src/nba_insights/pipeline.py --pbp --backup /home/andre/possession-lab-backups",
       "configuration": {
         "elo_warmup_seasons": 2,
         "min_holdout_games": 300,
@@ -332,11 +332,131 @@
         "outcome": "logistic-outcome-v1",
         "player_points": "player-points-v2-statline"
       },
-      "recorded_at": "2026-10-13T16:41:42+00:00",
+      "recorded_at": "2026-11-19T11:01:24+00:00",
       "sources": {
-        "count": 12,
-        "fingerprint": "513d9f56bab8bd64",
+        "count": 74,
+        "fingerprint": "d651e1b611e7b3b6",
         "snapshots": [
+          {
+            "fetched_at": "2026-11-18T11:06:05.394052+00:00",
+            "fingerprint": "958fa6d670e34245",
+            "key": "career_stats/1626164",
+            "rows": 12
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:58.670462+00:00",
+            "fingerprint": "82447e49449679c7",
+            "key": "career_stats/1627734",
+            "rows": 13
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:35.270507+00:00",
+            "fingerprint": "b2d0539566f11d1d",
+            "key": "career_stats/1627750",
+            "rows": 10
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:49.661518+00:00",
+            "fingerprint": "8da36e640c539a6e",
+            "key": "career_stats/1627759",
+            "rows": 11
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:51.460057+00:00",
+            "fingerprint": "ed6f3508a62b00bd",
+            "key": "career_stats/1628973",
+            "rows": 9
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:44.264200+00:00",
+            "fingerprint": "bb37805b5aafa8fe",
+            "key": "career_stats/1629027",
+            "rows": 11
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:37.078481+00:00",
+            "fingerprint": "e8822709e35cf4a6",
+            "key": "career_stats/1629029",
+            "rows": 11
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:56.868056+00:00",
+            "fingerprint": "15c7d69e5094897f",
+            "key": "career_stats/1629628",
+            "rows": 10
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:38.861040+00:00",
+            "fingerprint": "4edb4a2e6d4ccd1c",
+            "key": "career_stats/1630178",
+            "rows": 7
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:46.066187+00:00",
+            "fingerprint": "d081a452534331fe",
+            "key": "career_stats/1630217",
+            "rows": 7
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:31.727752+00:00",
+            "fingerprint": "25a92b9f9283e0c5",
+            "key": "career_stats/1630532",
+            "rows": 6
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:53.218671+00:00",
+            "fingerprint": "42a42a1977f0a58f",
+            "key": "career_stats/1630552",
+            "rows": 6
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:40.663006+00:00",
+            "fingerprint": "5d62b88ffc441c57",
+            "key": "career_stats/1630558",
+            "rows": 8
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:42.463214+00:00",
+            "fingerprint": "69fca2004292b9f7",
+            "key": "career_stats/1630559",
+            "rows": 6
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:55.067936+00:00",
+            "fingerprint": "cdc9c23e0f3dc5c9",
+            "key": "career_stats/1630578",
+            "rows": 6
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:47.858521+00:00",
+            "fingerprint": "08067766212adfa8",
+            "key": "career_stats/1630595",
+            "rows": 6
+          },
+          {
+            "fetched_at": "2026-11-18T11:06:07.279547+00:00",
+            "fingerprint": "891e5af19dea3430",
+            "key": "career_stats/1631095",
+            "rows": 5
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:29.862712+00:00",
+            "fingerprint": "b37e76e7c8bd9cf9",
+            "key": "career_stats/1643411",
+            "rows": 1
+          },
+          {
+            "fetched_at": "2026-11-18T11:06:03.661560+00:00",
+            "fingerprint": "8a841339e9cc353c",
+            "key": "career_stats/203076",
+            "rows": 17
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:33.457745+00:00",
+            "fingerprint": "13a709bfd67c4840",
+            "key": "career_stats/203999",
+            "rows": 12
+          },
           {
             "fetched_at": "2026-07-14T22:34:34.340263+00:00",
             "fingerprint": "01c904a7d47647de",
@@ -398,16 +518,268 @@
             "rows": 2460
           },
           {
-            "fetched_at": "2026-10-12T22:51:31.236616+00:00",
-            "fingerprint": "37d1537319c86547",
+            "fetched_at": "2026-10-14T02:00:11.803374+00:00",
+            "fingerprint": "acc29e5fcdc0f21c",
             "key": "game_finder/T/2025-26",
             "rows": 2460
           },
           {
-            "fetched_at": "2026-10-13T16:41:35.330117+00:00",
-            "fingerprint": "100d815f6124a35a",
+            "fetched_at": "2026-11-18T11:05:28.492205+00:00",
+            "fingerprint": "80fa69c608898af4",
             "key": "game_finder/T/2026-27",
-            "rows": 0
+            "rows": 420
+          },
+          {
+            "fetched_at": "2026-11-18T11:06:06.060856+00:00",
+            "fingerprint": "b4c5d50dd9b8c0f0",
+            "key": "game_log/v2/1626164/2026-27",
+            "rows": 13
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:59.269102+00:00",
+            "fingerprint": "5503bb8bd1129812",
+            "key": "game_log/v2/1627734/2026-27",
+            "rows": 12
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:35.886923+00:00",
+            "fingerprint": "64cc60878bcfdda3",
+            "key": "game_log/v2/1627750/2026-27",
+            "rows": 12
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:50.262336+00:00",
+            "fingerprint": "35a582b9a35ae604",
+            "key": "game_log/v2/1627759/2026-27",
+            "rows": 14
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:52.061110+00:00",
+            "fingerprint": "dc52d172e3cf7cd8",
+            "key": "game_log/v2/1628973/2026-27",
+            "rows": 14
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:44.856578+00:00",
+            "fingerprint": "86f4899fc0aba9e0",
+            "key": "game_log/v2/1629027/2026-27",
+            "rows": 15
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:37.674046+00:00",
+            "fingerprint": "a2698a30eb5bab52",
+            "key": "game_log/v2/1629029/2026-27",
+            "rows": 13
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:57.473257+00:00",
+            "fingerprint": "eca9cb1d2cf40f0b",
+            "key": "game_log/v2/1629628/2026-27",
+            "rows": 14
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:39.503704+00:00",
+            "fingerprint": "eb4ae9bc327a5ca5",
+            "key": "game_log/v2/1630178/2026-27",
+            "rows": 15
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:46.655743+00:00",
+            "fingerprint": "170318942ffa7c3c",
+            "key": "game_log/v2/1630217/2026-27",
+            "rows": 12
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:32.255710+00:00",
+            "fingerprint": "3b6e020232a9aa3a",
+            "key": "game_log/v2/1630532/2026-27",
+            "rows": 13
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:53.876379+00:00",
+            "fingerprint": "a378be7cb4d1ea39",
+            "key": "game_log/v2/1630552/2026-27",
+            "rows": 11
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:41.255174+00:00",
+            "fingerprint": "566c9a439b0e741f",
+            "key": "game_log/v2/1630558/2026-27",
+            "rows": 14
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:43.051999+00:00",
+            "fingerprint": "c818554d8e6bfc5c",
+            "key": "game_log/v2/1630559/2026-27",
+            "rows": 12
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:55.668401+00:00",
+            "fingerprint": "fbab552013caf561",
+            "key": "game_log/v2/1630578/2026-27",
+            "rows": 13
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:48.461922+00:00",
+            "fingerprint": "26f06fbdcd058323",
+            "key": "game_log/v2/1630595/2026-27",
+            "rows": 13
+          },
+          {
+            "fetched_at": "2026-11-18T11:06:07.864790+00:00",
+            "fingerprint": "80a63f5a5e3f7d19",
+            "key": "game_log/v2/1631095/2026-27",
+            "rows": 15
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:30.464005+00:00",
+            "fingerprint": "5663fbd15c7435a3",
+            "key": "game_log/v2/1643411/2026-27",
+            "rows": 13
+          },
+          {
+            "fetched_at": "2026-11-18T11:06:04.261315+00:00",
+            "fingerprint": "38586a72a63aa701",
+            "key": "game_log/v2/203076/2026-27",
+            "rows": 13
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:34.081965+00:00",
+            "fingerprint": "2dfcfe16947f38dc",
+            "key": "game_log/v2/203999/2026-27",
+            "rows": 12
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:28.716171+00:00",
+            "fingerprint": "7c15dd889c4c4f48",
+            "key": "league_player_stats/2026-27/PerGame",
+            "rows": 471
+          },
+          {
+            "fetched_at": "2026-11-18T11:06:06.690851+00:00",
+            "fingerprint": "bd3ca64ecd1fb947",
+            "key": "shot_chart/1626164/2026-27",
+            "rows": 226
+          },
+          {
+            "fetched_at": "2026-11-18T11:06:03.063703+00:00",
+            "fingerprint": "0df046adf0e09933",
+            "key": "shot_chart/1627734/2026-27",
+            "rows": 105
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:36.469526+00:00",
+            "fingerprint": "b5de85ac4c747347",
+            "key": "shot_chart/1627750/2026-27",
+            "rows": 206
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:50.866105+00:00",
+            "fingerprint": "92acf96737b077df",
+            "key": "shot_chart/1627759/2026-27",
+            "rows": 237
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:52.672110+00:00",
+            "fingerprint": "f12045e2102615d6",
+            "key": "shot_chart/1628973/2026-27",
+            "rows": 294
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:45.471306+00:00",
+            "fingerprint": "f7528598681ee9d9",
+            "key": "shot_chart/1629027/2026-27",
+            "rows": 193
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:38.262257+00:00",
+            "fingerprint": "7bd2351dc44295cf",
+            "key": "shot_chart/1629029/2026-27",
+            "rows": 330
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:58.086048+00:00",
+            "fingerprint": "dd01d7745c968298",
+            "key": "shot_chart/1629628/2026-27",
+            "rows": 239
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:40.076703+00:00",
+            "fingerprint": "82be817e99f06825",
+            "key": "shot_chart/1630178/2026-27",
+            "rows": 266
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:47.283075+00:00",
+            "fingerprint": "3ced83ad1973b725",
+            "key": "shot_chart/1630217/2026-27",
+            "rows": 174
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:32.860565+00:00",
+            "fingerprint": "0ca3098fde8dd051",
+            "key": "shot_chart/1630532/2026-27",
+            "rows": 248
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:54.470936+00:00",
+            "fingerprint": "99616bb21fba10b6",
+            "key": "shot_chart/1630552/2026-27",
+            "rows": 177
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:41.859339+00:00",
+            "fingerprint": "fdbe912af6ecd439",
+            "key": "shot_chart/1630558/2026-27",
+            "rows": 173
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:43.654655+00:00",
+            "fingerprint": "0f355268ea9987e9",
+            "key": "shot_chart/1630559/2026-27",
+            "rows": 189
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:56.264134+00:00",
+            "fingerprint": "6de2b95f312f19fc",
+            "key": "shot_chart/1630578/2026-27",
+            "rows": 199
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:49.070660+00:00",
+            "fingerprint": "210a226bc9545625",
+            "key": "shot_chart/1630595/2026-27",
+            "rows": 243
+          },
+          {
+            "fetched_at": "2026-11-18T11:06:08.465991+00:00",
+            "fingerprint": "81e1524c6cb4647a",
+            "key": "shot_chart/1631095/2026-27",
+            "rows": 181
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:31.091283+00:00",
+            "fingerprint": "38dc5df4ff97f5a6",
+            "key": "shot_chart/1643411/2026-27",
+            "rows": 295
+          },
+          {
+            "fetched_at": "2026-11-18T11:06:04.872291+00:00",
+            "fingerprint": "8410def5b660c31f",
+            "key": "shot_chart/203076/2026-27",
+            "rows": 234
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:34.667474+00:00",
+            "fingerprint": "57440ce3c090f78b",
+            "key": "shot_chart/203999/2026-27",
+            "rows": 219
+          },
+          {
+            "fetched_at": "2026-11-18T11:05:29.275136+00:00",
+            "fingerprint": "1ba6c2256ce162bf",
+            "key": "standings/2026-27",
+            "rows": 30
           }
         ],
         "status": "recorded"
@@ -415,5 +787,5 @@
     }
   },
   "schema_version": "model-manifest-v1",
-  "updated_at": "2026-10-13T16:41:42+00:00"
+  "updated_at": "2026-11-19T11:01:24+00:00"
 }
